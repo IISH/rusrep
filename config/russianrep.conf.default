@@ -1,0 +1,13 @@
+dbname = russian_tmp
+maindb = russianrepository
+papersdir = /home/russianroot/public_html/sites/default/files/papers
+webdbname = clio_infra
+dbhost = xx.xx.xx.xxx
+dblogin = login
+dbpassword = password
+path = /home/russianroot/public_html/tmp
+chartdir = /home/russianroot/public_html
+backend = /home/russianroot/cgi-bin
+root = http://node-xxx.dev.socialhistoryservices.org
+scripturl = http://node-xxx.dev.socialhistoryservices.org/cgi-bin/visualize/customdatasets.cgi
+visualizedisabled = yes
