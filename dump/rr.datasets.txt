@@ -1,0 +1,354 @@
+--
+-- PostgreSQL database dump
+--
+
+SET statement_timeout = 0;
+SET client_encoding = 'SQL_ASCII';
+SET standard_conforming_strings = off;
+SET check_function_bodies = false;
+SET client_min_messages = warning;
+SET escape_string_warning = off;
+
+--
+-- Name: datasets; Type: SCHEMA; Schema: -; Owner: clioweb
+--
+
+DROP SCHEMA datasets CASCADE;
+CREATE SCHEMA datasets;
+
+
+ALTER SCHEMA datasets OWNER TO clioweb;
+
+SET search_path = datasets, pg_catalog;
+
+SET default_tablespace = '';
+
+SET default_with_oids = false;
+
+--
+-- Name: regions; Type: TABLE; Schema: datasets; Owner: clioweb; Tablespace: 
+--
+
+CREATE SEQUENCE region_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
+    CACHE 1;
+
+ALTER TABLE datasets.region_id_seq OWNER TO clioweb;
+
+CREATE TABLE regions (
+    region_id integer DEFAULT nextval('region_id_seq'::regclass) NOT NULL,
+    region_name character varying(156) NOT NULL,
+    region_description character varying(256) NOT NULL,
+    region_code character varying(20) NOT NULL,
+    region_ord bigint NOT NULL,
+    active integer NOT NULL
+);
+
+
+ALTER TABLE datasets.regions OWNER TO clioweb;
+
+--
+-- Name: dataset_id_seq; Type: SEQUENCE; Schema: datasets; Owner: clioweb
+--
+
+CREATE SEQUENCE dataset_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
+    CACHE 1;
+
+
+ALTER TABLE datasets.dataset_id_seq OWNER TO clioweb;
+
+--
+-- Name: datasets; Type: TABLE; Schema: datasets; Owner: clioweb; Tablespace: 
+--
+
+CREATE TABLE datasets (
+    dataset_id integer DEFAULT nextval('dataset_id_seq'::regclass) NOT NULL,
+    revision double precision DEFAULT 0 NOT NULL,
+    dataset_name character varying(64) NOT NULL,
+    dataset_description character varying(256) NOT NULL,
+    create_date timestamp with time zone DEFAULT now() NOT NULL,
+    edit_date timestamp with time zone DEFAULT now() NOT NULL,
+    topic_id integer NOT NULL,
+    indicator_id integer NOT NULL,
+    author character varying(255) NOT NULL,
+    provider_id integer DEFAULT 0,
+    total integer DEFAULT 0,
+    scales character(100) DEFAULT ''::bpchar
+);
+
+
+ALTER TABLE datasets.datasets OWNER TO clioweb;
+
+--
+-- Name: indicator_id_seq; Type: SEQUENCE; Schema: datasets; Owner: clioweb
+--
+
+CREATE SEQUENCE indicator_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
+    CACHE 1;
+
+
+ALTER TABLE datasets.indicator_id_seq OWNER TO clioweb;
+
+--
+-- Name: indicator_values; Type: TABLE; Schema: datasets; Owner: clioweb; Tablespace: 
+--
+
+CREATE TABLE indicator_values (
+    id integer DEFAULT nextval('indicator_id_seq'::regclass) NOT NULL,
+    ind_id integer DEFAULT 0 NOT NULL,
+    year_id integer DEFAULT 0 NOT NULL,
+    country_id integer DEFAULT 0 NOT NULL,
+    region_id integer DEFAULT 0 NOT NULL,
+    dataset_id integer DEFAULT 0 NOT NULL,
+    ind_value_int bigint DEFAULT 0 NOT NULL,
+    ind_value_float double precision DEFAULT 0 NOT NULL
+);
+
+
+ALTER TABLE datasets.indicator_values OWNER TO clioweb;
+
+--
+-- Name: indicators; Type: TABLE; Schema: datasets; Owner: clioweb; Tablespace: 
+--
+
+CREATE TABLE indicators (
+    indicator_id integer NOT NULL,
+    indicator_name character varying(256) NOT NULL,
+    indicator_description character varying(256) NOT NULL
+);
+
+
+ALTER TABLE datasets.indicators OWNER TO clioweb;
+
+--
+-- Name: indicatorval_id_seq; Type: SEQUENCE; Schema: datasets; Owner: clioweb
+--
+
+CREATE SEQUENCE indicatorval_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
+    CACHE 1;
+
+
+ALTER TABLE datasets.indicatorval_id_seq OWNER TO clioweb;
+
+--
+-- Name: providers_id_seq; Type: SEQUENCE; Schema: datasets; Owner: clioweb
+--
+
+CREATE SEQUENCE providers_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
+    CACHE 1;
+
+
+ALTER TABLE datasets.providers_id_seq OWNER TO clioweb;
+
+--
+-- Name: providers; Type: TABLE; Schema: datasets; Owner: clioweb; Tablespace: 
+--
+
+CREATE TABLE providers (
+    provider_id integer DEFAULT nextval('providers_id_seq'::regclass) NOT NULL,
+    provider_name character varying(56) NOT NULL,
+    provider_description character varying(256) NOT NULL
+);
+
+
+ALTER TABLE datasets.providers OWNER TO clioweb;
+
+--
+-- Name: regions; Type: TABLE; Schema: datasets; Owner: clioweb; Tablespace: 
+--
+
+CREATE TABLE region_alias (
+    region_id integer DEFAULT 0 NOT NULL,
+    region_name character varying(56) NOT NULL,
+    region_description character varying(256) NOT NULL,
+    region_root integer DEFAULT 0 NOT NULL
+);
+
+
+ALTER TABLE datasets.region_alias OWNER TO clioweb;
+
+--
+-- Name: topics_id_seq; Type: SEQUENCE; Schema: datasets; Owner: clioweb
+--
+
+CREATE SEQUENCE topics_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
+    CACHE 1;
+
+
+ALTER TABLE datasets.topics_id_seq OWNER TO clioweb;
+
+--
+-- Name: topics; Type: TABLE; Schema: datasets; Owner: clioweb; Tablespace: 
+--
+
+CREATE TABLE topics (
+    topic_id integer DEFAULT nextval('topics_id_seq'::regclass) NOT NULL,
+    datatype character varying(6) NOT NULL,
+    topic_name character varying(56) NOT NULL,
+    description character varying(256) NOT NULL,
+    topic_root integer DEFAULT 0 NOT NULL
+);
+
+
+ALTER TABLE datasets.topics OWNER TO clioweb;
+
+--
+-- Name: histclasses; Type: TABLE; Schema: datasets; Owner: clioweb; Tablespace:
+--
+
+CREATE SEQUENCE histclass_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
+    CACHE 1;
+
+ALTER TABLE datasets.histclass_id_seq OWNER TO clioweb;
+
+CREATE TABLE histclasses (
+    histclass_id integer DEFAULT nextval('histclass_id_seq'::regclass) NOT NULL,
+    topic integer DEFAULT 0 NOT NULL,
+    datatype character varying(20) NOT NULL,
+    histclass1 character varying(256) NOT NULL,
+    histclass2 character varying(256) NOT NULL,
+    histclass3 character varying(256) NOT NULL,
+    histclass_root integer DEFAULT 0 NOT NULL,
+    level integer DEFAULT 0 NOT NULL,
+    index bigint DEFAULT 0 NOT NULL
+);
+
+
+ALTER TABLE datasets.histclasses OWNER TO clioweb;
+ALTER TABLE datasets.topics OWNER TO clioweb;
+
+--
+-- Name: years_id_seq; Type: SEQUENCE; Schema: datasets; Owner: clioweb
+--
+
+CREATE SEQUENCE years_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
+    CACHE 1;
+
+
+ALTER TABLE datasets.years_id_seq OWNER TO clioweb;
+
+--
+-- Name: years; Type: TABLE; Schema: datasets; Owner: clioweb; Tablespace: 
+--
+
+CREATE TABLE years (
+    year_id integer DEFAULT nextval('years_id_seq'::regclass) NOT NULL,
+    year_value integer DEFAULT 0 NOT NULL
+);
+
+
+ALTER TABLE datasets.years OWNER TO clioweb;
+
+
+--
+-- Name: idx_dataset; Type: INDEX; Schema: datasets; Owner: clioweb; Tablespace: 
+--
+
+CREATE INDEX idx_dataset ON datasets USING btree (dataset_id);
+
+
+--
+-- Name: idx_indicators; Type: INDEX; Schema: datasets; Owner: clioweb; Tablespace: 
+--
+
+CREATE INDEX idx_indicators ON indicators USING btree (indicator_id);
+
+
+--
+-- Name: idx_regions; Type: INDEX; Schema: datasets; Owner: clioweb; Tablespace: 
+--
+
+CREATE INDEX idx_regions ON regions USING btree (region_id);
+
+
+--
+-- Name: idx_topics; Type: INDEX; Schema: datasets; Owner: clioweb; Tablespace: 
+--
+
+CREATE INDEX idx_topics ON topics USING btree (topic_id);
+
+
+--
+-- Name: idx_years; Type: INDEX; Schema: datasets; Owner: clioweb; Tablespace: 
+--
+
+CREATE INDEX idx_years ON years USING btree (year_id);
+
+
+--
+-- Name: indicator_cidx; Type: INDEX; Schema: datasets; Owner: clioweb; Tablespace: 
+--
+
+CREATE INDEX indicator_cidx ON indicator_values USING btree (country_id);
+
+
+--
+-- Name: indicator_didx; Type: INDEX; Schema: datasets; Owner: clioweb; Tablespace: 
+--
+
+CREATE INDEX indicator_didx ON indicator_values USING btree (dataset_id);
+
+
+--
+-- Name: indicator_iidx; Type: INDEX; Schema: datasets; Owner: clioweb; Tablespace: 
+--
+
+CREATE INDEX indicator_iidx ON indicator_values USING btree (ind_id);
+
+
+--
+-- Name: indicator_ridx; Type: INDEX; Schema: datasets; Owner: clioweb; Tablespace: 
+--
+
+CREATE INDEX indicator_ridx ON indicator_values USING btree (region_id);
+
+
+--
+-- Name: indicator_vidx; Type: INDEX; Schema: datasets; Owner: clioweb; Tablespace: 
+--
+
+CREATE INDEX indicator_vidx ON indicator_values USING btree (id);
+
+
+--
+-- Name: indicator_yidx; Type: INDEX; Schema: datasets; Owner: clioweb; Tablespace: 
+--
+
+CREATE INDEX indicator_yidx ON indicator_values USING btree (year_id);
+
+
+--
+-- PostgreSQL database dump complete
+--
+
