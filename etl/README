@@ -1,0 +1,7 @@
+Extract, Load and Trasform processes
+
+Usage:
+convertor.pl /datasets/Revised.datasets
+
+Output:
+SQL files with structure and instructions how to load Excel files into stage area
