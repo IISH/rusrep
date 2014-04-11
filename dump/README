@@ -1,0 +1,10 @@
+Create schema datasets with all tables for tables, historical classes and values
+
+Usage:
+psql -U user -h host russian_repository -f ./rr.datasets.txt
+
+Add extra indexes for important tables
+psql -U user -h host russian_repository -f ./indexes.sql
+
+Upload data from staging area to russianrepository
+psql -U user -h host russian_repository -f ./insert_data.sql
