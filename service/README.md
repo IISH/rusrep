@@ -8,10 +8,27 @@ http://node-146.dev.socialhistoryservices.org/service
 Description of the service
 
 2. http://node-146.dev.socialhistoryservices.org/service/regions
-List of regions
+Get list of regions. Variables:
+- region_id
+- region_name
+- region_description 
+- region_code
+- region_ord 
+- active
+- region_year
+
+Example:
+http://node-146.dev.socialhistoryservices.org/service/regions?region_id=2
 
 3. http://node-146.dev.socialhistoryservices.org/service/topics
-List of topics
+Get list of topics. Variables are:
+- topic_id
+- datatype
+- topic_name
+- topic_root
+
+Example:
+http://node-146.dev.socialhistoryservices.org/service/topics?topic_root=6
 
 4. http://node-146.dev.socialhistoryservices.org/service/data
 Data query node
