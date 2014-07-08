@@ -15,7 +15,7 @@ import getopt
 
 def connect():
     	# Define connection to Russian Repository database
-    	conn_string = "host='10.24.63.148' dbname='russian_pilot1' user='clioweb' password='clio-dev-911'"
+    	conn_string = "host='xx.xx.xx.xxx' dbname='russian_pilot1' user='clioweb' password='pass-xxx'"
 
     	# get a connection, if a connect cannot be made an exception will be raised here
     	conn = psycopg2.connect(conn_string)

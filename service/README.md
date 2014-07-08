@@ -22,7 +22,7 @@ The list of historical classes
 6. http://node-146.dev.socialhistoryservices.org/service/years
 The list of years
 
-7. API with poligon points to visualize historical maps:
-http://node-146.dev.socialhistoryservices.org/service/maps
+7. http://node-146.dev.socialhistoryservices.org/service/maps
+API with poligon points to visualize historical maps
 
 Note: regions and historical classes are in russian so service will produce unicode output.
