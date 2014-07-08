@@ -12,3 +12,27 @@ Participating institutions are:
 - Interdisciplinary Centre for Studies in History, Economy and Society (ICSHES)
 - International Institute of Social History (Royal Netherlands Academy of Arts and Sciences), Amsterdam, Netherlands
 - New Economic School, Moscow, Russia (NES)
+
+Dependencies:
+PostgreSQL 8.4-9.3
+Apache2
+
+Perl modules:
+DBI
+S
+
+Python modules (installation with pip manager):
+	flask web framework
+	http
+	json
+	urllib2
+	glob
+	csv
+	xlwt
+	os
+	sys
+	psycopg2
+	psycopg2.extras
+	pprint
+	collections
+	getopt
