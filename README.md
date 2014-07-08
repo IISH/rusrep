@@ -36,11 +36,13 @@ Python modules (installation with pip manager):
 	getopt
 
 Apache configuration:
-Extend /etc/apache2/apache.conf with lines
+	Extend /etc/apache2/apache.conf with lines
+
 	WSGIScriptAlias /service /home/clio-infra/public_html/service/api.wsgi
 	WSGIDaemonProcess service user=clio-infra group=clio-infra processes=1 threads=5
 
-Add this instructions to node-xxx file:
+	Add this instructions to node-xxx file:
+
     	<Directory /home/clio-infra/public_html/service>
         WSGIProcessGroup service
         WSGIApplicationGroup service
