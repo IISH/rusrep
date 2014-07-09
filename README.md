@@ -15,10 +15,8 @@ Participating institutions are:
 
 Dependencies:
 PostgreSQL 8.4-9.3
-<p>
 Apache2
-Configuration file: /etc/apache2/rusrep.config
-</p>
+Config file: /etc/apache2/rusrep.config
 
 Perl modules: DBI Getopt::Long JSON JSON::XS
 
