@@ -12,8 +12,15 @@ import psycopg2.extras
 import pprint
 import collections
 import getopt
+import ConfigParser
 
 def connect():
+        cparser = ConfigParser.RawConfigParser()
+        cpath = "/etc/apache2/rusrep.config"
+        cparser.read(cpath)
+
+	conn_string = "host='%s' dbname='%s' user='%s' password='%s'" % (cparser.get('config', 'dbhost'), cparser.get('config', 'dbname'), cparser.get('config', 'dblogin'), cparser.get('config', 'dbpassword'))
+
     	# Define connection to Russian Repository database
     	conn_string = "host='xx.xx.xx.xxx' dbname='russian_pilot1' user='clioweb' password='pass-xxx'"
 
@@ -25,6 +32,24 @@ def connect():
 
     	#(row_count, dataset) = load_regions(cursor, year, datatype, region, debug)
 	return cursor
+
+def json_generator(jsondataname, sqlnames, data):
+        jsonlist = []
+        jsonhash = {}
+        
+        for valuestr in data:    
+            datakeys = {}
+            for i in range(len(valuestr)):
+               name = sqlnames[i]
+               value = valuestr[i]
+               datakeys[name] = value
+               #print "%s %s", (name, value)
+            jsonlist.append(datakeys)
+        
+        jsonhash[jsondataname] = jsonlist;
+        json_string = json.dumps(jsonhash, encoding="utf-8", sort_keys=True, indent=4)
+
+        return json_string
 
 def load_years(cursor):
         data = {}
