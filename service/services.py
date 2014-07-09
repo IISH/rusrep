@@ -21,9 +21,6 @@ def connect():
 
 	conn_string = "host='%s' dbname='%s' user='%s' password='%s'" % (cparser.get('config', 'dbhost'), cparser.get('config', 'dbname'), cparser.get('config', 'dblogin'), cparser.get('config', 'dbpassword'))
 
-    	# Define connection to Russian Repository database
-    	conn_string = "host='xx.xx.xx.xxx' dbname='russian_pilot1' user='clioweb' password='pass-xxx'"
-
     	# get a connection, if a connect cannot be made an exception will be raised here
     	conn = psycopg2.connect(conn_string)
 
@@ -86,9 +83,10 @@ def load_topics(cursor):
 
         # retrieve the records from the database
         data = cursor.fetchall()
-        json_string = json.dumps(data, encoding="utf-8")
-
-        return json_string
+        sqlnames = [desc[0] for desc in cursor.description]
+        jsondata = json_generator('topics', sqlnames, data)
+        
+        return jsondata
 
 def load_regions(cursor):
         data = {}
