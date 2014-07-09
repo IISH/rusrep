@@ -10,6 +10,7 @@ import psycopg2.extras
 import pprint
 import collections
 import getopt
+import ConfigParser
 
 # Reading parameters
 def read_params():
@@ -47,8 +48,13 @@ def read_params():
         return (year, datatype, region, filename, path, debug)
 
 def load_data(year, datatype, region, debug):
-        #Define connection to products database
-        conn_string = "host='10.24.63.148' dbname='russian_pilot1' user='clioweb' password='clio-dev-911'"
+
+        cparser = ConfigParser.RawConfigParser()
+        cpath = "/etc/apache2/rusrep.config"
+        cparser.read(cpath)
+
+        conn_string = "host='%s' dbname='%s' user='%s' password='%s'" % (cparser.get('config', 'dbhost'), cparser.get('config', 'dbname'), cparser.get('config', 'dblogin'), cparser.get('config', 'dbpassword'))
+
         # products will be loaded in tulips
         data = {}
 
