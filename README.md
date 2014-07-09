@@ -15,9 +15,12 @@ Participating institutions are:
 
 Dependencies:
 PostgreSQL 8.4-9.3
+<p>
 Apache2
+Configuration file: /etc/apache2/rusrep.config
+</p>
 
-Perl modules: DBI Getopt::Long
+Perl modules: DBI Getopt::Long JSON JSON::XS
 
 Python modules (installation with pip manager):
 	flask web framework
