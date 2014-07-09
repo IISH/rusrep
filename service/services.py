@@ -30,7 +30,8 @@ def connect():
     	#(row_count, dataset) = load_regions(cursor, year, datatype, region, debug)
 	return cursor
 
-def json_generator(jsondataname, sqlnames, data):
+def json_generator(c, jsondataname, data):
+	sqlnames = [desc[0] for desc in c.description]
         jsonlist = []
         jsonhash = {}
         
@@ -83,8 +84,7 @@ def load_topics(cursor):
 
         # retrieve the records from the database
         data = cursor.fetchall()
-        sqlnames = [desc[0] for desc in cursor.description]
-        jsondata = json_generator('topics', sqlnames, data)
+        jsondata = json_generator(cursor, 'topics', data)
         
         return jsondata
 
@@ -98,9 +98,9 @@ def load_regions(cursor):
 
         # retrieve the records from the database
         data = cursor.fetchall()
-        json_string = json.dumps(data, encoding="utf-8")
+	jsondata = json_generator(cursor, 'regions', data)
 
-        return json_string
+        return jsondata
 
 def load_data(cursor, year, datatype, region, debug):
         data = {}
@@ -128,9 +128,9 @@ def load_data(cursor, year, datatype, region, debug):
                 i = i + 1
                 data[i] = row
 #               print row[0]
-        json_string = json.dumps(data, encoding="utf-8")
+	jsondata = json_generator(cursor, 'data', data)
 
-        return json_string;
+        return jsondata;
 
 app = Flask(__name__)
 
