@@ -1,11 +1,80 @@
-API Service description
+## Russian Repository API Service 
 
 API service for browsing datasets functionality is complete, now it's possible to integrate all backend functionality with Drupal frontend. This service produces JSON for transfer data between frontend and backend so Gaele can use it to extend functionality of Drupal websites with advanced features.
 
 Entry points are:
 API service
 http://node-146.dev.socialhistoryservices.org/service
-Description of the service
+
+## API Description
+
+<pre class="terminal">
+$ curl -i http://node-146.dev.socialhistoryservices.org/service/topics
+{
+    "data": [
+        {
+            "datatype": "6", 
+            "description": " ", 
+            "topic_id": 1, 
+            "topic_name": "CAPITAL", 
+            "topic_root": 0
+        }, 
+        {
+            "datatype": "6.01", 
+            "description": " ", 
+            "topic_id": 2, 
+            "topic_name": "Capital assets", 
+            "topic_root": 6
+        }, 
+        {
+            "datatype": "6.02", 
+            "description": " ", 
+            "topic_id": 3, 
+            "topic_name": "Investments", 
+            "topic_root": 6
+        }, 
+        {
+            "datatype": "6.03", 
+            "description": " ", 
+            "topic_id": 4, 
+            "topic_name": "Interest", 
+            "topic_root": 6
+        }, 
+        {
+            "datatype": "2", 
+            "description": " ", 
+            "topic_id": 5, 
+            "topic_name": "LABOUR", 
+            "topic_root": 0
+        }, 
+        {
+            "datatype": "2.01", 
+            "description": " ", 
+            "topic_id": 6, 
+            "topic_name": "By profession", 
+            "topic_root": 2
+        }, 
+        {
+            "datatype": "2.03", 
+            "description": " ", 
+            "topic_id": 7, 
+            "topic_name": "By sector of employment", 
+            "topic_root": 2
+        } 
+}
+</pre>
+http://node-146.dev.socialhistoryservices.org/service/topics
+Get list of topics. Variables are:
+- topic_id
+- datatype
+- topic_name
+- topic_root
+
+It's possible to make filter on any variable name in json, for example:
+http://node-146.dev.socialhistoryservices.org/service/topics?topic_root=6
+or
+http://node-146.dev.socialhistoryservices.org/service/topics?topic_id=2
+
 
 http://node-146.dev.socialhistoryservices.org/service/regions
 Get list of regions. Variables:
@@ -19,18 +88,6 @@ Get list of regions. Variables:
 
 Example:
 http://node-146.dev.socialhistoryservices.org/service/regions?region_id=2
-
-http://node-146.dev.socialhistoryservices.org/service/topics
-Get list of topics. Variables are:
-- topic_id
-- datatype
-- topic_name
-- topic_root
-
-It's possible to make filter on any variable name in json, for example:
-http://node-146.dev.socialhistoryservices.org/service/topics?topic_root=6
-or
-http://node-146.dev.socialhistoryservices.org/service/topics?topic_id=2
 
 http://node-146.dev.socialhistoryservices.org/service/data
 Data query node
