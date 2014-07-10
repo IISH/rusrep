@@ -63,7 +63,7 @@ $ curl -i http://node-146.dev.socialhistoryservices.org/service/topics
         } 
 }
 </pre>
-Returns ist of topics. Variables are:
+API output is a list of topics. Variables are:
 - topic_id
 - datatype
 - topic_name
@@ -160,16 +160,25 @@ Example:
 $ curl -i http://node-146.dev.socialhistoryservices.org/service/regions?region_id=2
 </pre>
 
-http://node-146.dev.socialhistoryservices.org/service/data
-Data query node
+## Data query node
+<pre class="terminal">
+$ curl -i http://node-146.dev.socialhistoryservices.org/service/data
+</pre>
 
-http://node-146.dev.socialhistoryservices.org/service/histclasses
-The list of historical classes
+## The list of historical classes
+<pre class="terminal">
+$ curl -i ttp://node-146.dev.socialhistoryservices.org/service/histclasses
+</pre>
 
 http://node-146.dev.socialhistoryservices.org/service/years
-The list of years
+## The list of years
+<pre class="terminal">
+$ curl -i http://node-146.dev.socialhistoryservices.org/service/years
+</pre>
 
-http://node-146.dev.socialhistoryservices.org/service/maps
-API with poligon points to visualize historical maps
+## API with poligon points to visualize historical maps
+<pre class="terminal">
+$ curl -i http://node-146.dev.socialhistoryservices.org/service/maps
+</pre>
 
 Note: regions and historical classes are in Russian language so service will produce unicode output.
