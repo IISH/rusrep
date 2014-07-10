@@ -27,8 +27,10 @@ Get list of topics. Variables are:
 - topic_name
 - topic_root
 
-Example:
+It's possible to make filter on any variable name in json, for example:
 http://node-146.dev.socialhistoryservices.org/service/topics?topic_root=6
+or
+http://node-146.dev.socialhistoryservices.org/service/topics?topic_id=2
 
 http://node-146.dev.socialhistoryservices.org/service/data
 Data query node
