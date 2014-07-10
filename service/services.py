@@ -157,25 +157,25 @@ def test():
 def topics():
     cursor = connect()
     data = load_topics(cursor)
-    return data
+    return Response(data,  mimetype='application/json')
 
 @app.route('/histclasses')
 def classes():
     cursor = connect()
     data = load_classes(cursor)
-    return data
+    return Response(data,  mimetype='application/json')
 
 @app.route('/years')
 def years():
     cursor = connect()
     data = load_years(cursor)
-    return data
+    return Response(data,  mimetype='application/json')
 
 @app.route('/regions')
 def regions():
     cursor = connect()
     data = load_regions(cursor)
-    return data
+    return Response(data,  mimetype='application/json')
 
 @app.route('/data')
 def data():
@@ -185,7 +185,7 @@ def data():
     region = 0
     debug = 0
     data = load_data(cursor, year, datatype, region, debug)
-    return data
+    return Response(data,  mimetype='application/json')
 
 # http://bl.ocks.org/mbostock/raw/4090846/us.json
 @app.route('/maps')
@@ -193,7 +193,7 @@ def maps():
     donors_choose_url = "http://bl.ocks.org/mbostock/raw/4090846/us.json"
     response = urllib2.urlopen(donors_choose_url)
     json_response = json.load(response)
-    return json.dumps(json_response)
+    return Response(json_response,  mimetype='application/json')
 
 if __name__ == '__main__':
     app.run()
