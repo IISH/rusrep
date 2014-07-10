@@ -84,8 +84,22 @@ def load_topics(cursor):
 
         # retrieve the records from the database
         data = cursor.fetchall()
-        jsondata = json_generator(cursor, 'topics', data)
+        jsondata = json_generator(cursor, 'data', data)
         
+        return jsondata
+
+def load_classes(cursor):
+        data = {}
+        sql = "select * from datasets.histclasses where 1=1";
+        sql = sqlfilter(sql)
+
+        # execute
+        cursor.execute(sql)
+
+        # retrieve the records from the database
+        data = cursor.fetchall()
+        jsondata = json_generator(cursor, 'data', data)
+
         return jsondata
 
 def load_regions(cursor):
@@ -114,7 +128,7 @@ def load_data(cursor, year, datatype, region, debug):
 	query = sqlfilter(query)
         if debug:
             print "DEBUG " + query + " <br>\n"
-        query += 'order by territory asc'
+        query += ' order by territory asc'
 
         # execute
         cursor.execute(query)
@@ -128,7 +142,7 @@ def load_data(cursor, year, datatype, region, debug):
                 i = i + 1
                 data[i] = row
 #               print row[0]
-	jsondata = json_generator(cursor, 'data', data)
+	jsondata = json_generator(cursor, 'data', records)
 
         return jsondata;
 
@@ -143,6 +157,12 @@ def test():
 def topics():
     cursor = connect()
     data = load_topics(cursor)
+    return data
+
+@app.route('/histclasses')
+def classes():
+    cursor = connect()
+    data = load_classes(cursor)
     return data
 
 @app.route('/years')
