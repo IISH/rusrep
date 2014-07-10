@@ -74,7 +74,7 @@ It's possible to make filter on any variable name in json, for example:
 $ curl -i http://node-146.dev.socialhistoryservices.org/service/topics?topic_root=6
 or
 $ curl -i http://node-146.dev.socialhistoryservices.org/service/topics?topic_id=2
-<pre>
+</pre>
 
 
 <pre class="terminal">
