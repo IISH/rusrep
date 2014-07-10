@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>jQuery jsonTable Plugin Demo</title>
+<link href="http://www.jqueryscript.net/css/jquerysctipttop.css" rel="stylesheet" type="text/css">
+<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+<script type="text/javascript" src="jsonTable.js"></script>
+<style type="text/css">
+.rowClass td {
+border: 1px solid #c1c1c1;
+}
+</style>
+</head>
+<body>
+<div id="jquery-script-menu">
+<div class="jquery-script-center">
+<table id="dataTable">
+<thead>
+</thead>
+<tbody>
+</tbody>
+</table>
+<script type="text/javascript">
+	$("#dataTable").jsonTable({
+		head : ['DataType','TopicID','Topic name'],
+		json : ['datatype', 'topic_id', 'topic_name']
+	});
+
+	$("#dataTable").jsonTableUpdate({
+		source : "topics.json",
+		rowClass : "rowClass",
+		callback : function(){
+			$("#mssg").html("Table updated at " + new Date());
+		}
+	});
+</script>
+</body>
+</html>

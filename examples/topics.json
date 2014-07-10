@@ -1,0 +1,233 @@
+[
+        {
+            "datatype": "6", 
+            "description": " ", 
+            "topic_id": 1, 
+            "topic_name": "CAPITAL", 
+            "topic_root": 0
+        }, 
+        {
+            "datatype": "6.01", 
+            "description": " ", 
+            "topic_id": 2, 
+            "topic_name": "Capital assets", 
+            "topic_root": 6
+        }, 
+        {
+            "datatype": "6.02", 
+            "description": " ", 
+            "topic_id": 3, 
+            "topic_name": "Investments", 
+            "topic_root": 6
+        }, 
+        {
+            "datatype": "6.03", 
+            "description": " ", 
+            "topic_id": 4, 
+            "topic_name": "Interest", 
+            "topic_root": 6
+        }, 
+        {
+            "datatype": "2", 
+            "description": " ", 
+            "topic_id": 5, 
+            "topic_name": "LABOUR", 
+            "topic_root": 0
+        }, 
+        {
+            "datatype": "2.01", 
+            "description": " ", 
+            "topic_id": 6, 
+            "topic_name": "By profession", 
+            "topic_root": 2
+        }, 
+        {
+            "datatype": "2.03", 
+            "description": " ", 
+            "topic_id": 7, 
+            "topic_name": "By sector of employment", 
+            "topic_root": 2
+        }, 
+        {
+            "datatype": "2.04", 
+            "description": " ", 
+            "topic_id": 8, 
+            "topic_name": "By source of income", 
+            "topic_root": 2
+        }, 
+        {
+            "datatype": "7", 
+            "description": " ", 
+            "topic_id": 9, 
+            "topic_name": "LAND", 
+            "topic_root": 0
+        }, 
+        {
+            "datatype": "7.01", 
+            "description": " ", 
+            "topic_id": 10, 
+            "topic_name": "Land by type/use", 
+            "topic_root": 7
+        }, 
+        {
+            "datatype": "7.02", 
+            "description": " ", 
+            "topic_id": 11, 
+            "topic_name": "Land by ownership", 
+            "topic_root": 7
+        }, 
+        {
+            "datatype": "7.03", 
+            "description": " ", 
+            "topic_id": 12, 
+            "topic_name": "Land prices", 
+            "topic_root": 7
+        }, 
+        {
+            "datatype": "7.04", 
+            "description": " ", 
+            "topic_id": 13, 
+            "topic_name": "Land rents", 
+            "topic_root": 7
+        }, 
+        {
+            "datatype": "4", 
+            "description": " ", 
+            "topic_id": 14, 
+            "topic_name": "OUTPUT AGRICULTURE", 
+            "topic_root": 0
+        }, 
+        {
+            "datatype": "4.01", 
+            "description": " ", 
+            "topic_id": 15, 
+            "topic_name": "Agricultural output in rubles", 
+            "topic_root": 4
+        }, 
+        {
+            "datatype": "4.02", 
+            "description": " ", 
+            "topic_id": 16, 
+            "topic_name": "Agricultural output in kind", 
+            "topic_root": 4
+        }, 
+        {
+            "datatype": "3", 
+            "description": " ", 
+            "topic_id": 17, 
+            "topic_name": "OUTPUT INDUSTRY", 
+            "topic_root": 0
+        }, 
+        {
+            "datatype": "3.01", 
+            "description": " ", 
+            "topic_id": 18, 
+            "topic_name": "Industrial output in rubles", 
+            "topic_root": 3
+        }, 
+        {
+            "datatype": "3.02", 
+            "description": " ", 
+            "topic_id": 19, 
+            "topic_name": "Industrial output in kind", 
+            "topic_root": 3
+        }, 
+        {
+            "datatype": "5", 
+            "description": " ", 
+            "topic_id": 20, 
+            "topic_name": "OUTPUT SERVICES", 
+            "topic_root": 0
+        }, 
+        {
+            "datatype": "5.01", 
+            "description": " ", 
+            "topic_id": 21, 
+            "topic_name": "Services output in rubles", 
+            "topic_root": 5
+        }, 
+        {
+            "datatype": "5.02", 
+            "description": " ", 
+            "topic_id": 22, 
+            "topic_name": "Services output in kind", 
+            "topic_root": 5
+        }, 
+        {
+            "datatype": "1", 
+            "description": " ", 
+            "topic_id": 23, 
+            "topic_name": "POPULATION", 
+            "topic_root": 0
+        }, 
+        {
+            "datatype": "1.01", 
+            "description": " ", 
+            "topic_id": 24, 
+            "topic_name": "Population by sex", 
+            "topic_root": 1
+        }, 
+        {
+            "datatype": "1.02", 
+            "description": " ", 
+            "topic_id": 25, 
+            "topic_name": "Population by age", 
+            "topic_root": 1
+        }, 
+        {
+            "datatype": "1.03", 
+            "description": " ", 
+            "topic_id": 26, 
+            "topic_name": "Population urban/rural", 
+            "topic_root": 1
+        }, 
+        {
+            "datatype": "1.04", 
+            "description": " ", 
+            "topic_id": 27, 
+            "topic_name": "Population by confession", 
+            "topic_root": 1
+        }, 
+        {
+            "datatype": "1.05", 
+            "description": " ", 
+            "topic_id": 28, 
+            "topic_name": "Population by estate", 
+            "topic_root": 1
+        }, 
+        {
+            "datatype": "1.06", 
+            "description": " ", 
+            "topic_id": 29, 
+            "topic_name": "Number of births", 
+            "topic_root": 1
+        }, 
+        {
+            "datatype": "1.07", 
+            "description": " ", 
+            "topic_id": 30, 
+            "topic_name": "Number of deaths", 
+            "topic_root": 1
+        }, 
+        {
+            "datatype": "1.08", 
+            "description": " ", 
+            "topic_id": 31, 
+            "topic_name": "Number of marriages", 
+            "topic_root": 1
+        }, 
+        {
+            "datatype": "1.09", 
+            "description": " ", 
+            "topic_id": 32, 
+            "topic_name": "Marital status", 
+            "topic_root": 1
+        }, 
+        {
+            "datatype": "1.10", 
+            "description": " ", 
+            "topic_id": 33, 
+            "topic_name": "Education", 
+            "topic_root": 1
+        }
+]
