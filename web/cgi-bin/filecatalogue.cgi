@@ -136,7 +136,7 @@ sub readtopics
 		    my $topic_nameurl = "<a href=\"#\">$topic_name</a>";
                     my $status;
                     $status = "checked" if (keys %data);
-		    $htmltopic.="\n<tr><td bgcolor=#efefef width=\"20%\"><font color=\"#ffffff\">&nbsp;<input type=\"checkbox\" name=\"topic=$topic_id&d=$datatype\" $checked>&nbsp;$topic_nameurl&nbsp;</font></td><td bgcolor=#efefef width=50%></td>\n";
+		    $htmltopic.="\n<thead><tr><td class=\"indicator\" width=\"20%\"><font color=\"#ffffff\">&nbsp;<input type=\"checkbox\" name=\"topic=$topic_id&d=$datatype\" $checked>&nbsp;$topic_nameurl&nbsp;</font></td><td bgcolor=#efefef width=50%></td>\n";
 		}
 		else
 		{
@@ -168,7 +168,7 @@ sub readtopics
 		    $htmltopic.= "<td width=\"5%\" align=\"center\"><img width=20 height=20 src=\"/absent.jpg\"></td>";
 		}
 	    }
-	    $htmltopic.="</tr>";
+	    $htmltopic.="</thead></tr>";
 
 #	    $topicdata = "top";
             #$htmltopic.="<td>$topicdata</td></tr>\n"; # if ($topicdata);
@@ -181,16 +181,22 @@ sub readtopics
     $datalinks = "Download all data as one <a href=\"/tmp/$ziparc\">zipfile $topic_name</a><br>";
 
     $downloadlink = "
-    <table width=100% border=0><tr><td>Note: You can click on any historical class if you want to download available data for specific regions of Russia or years.<br>
+    <table width=100% border=0 class=\"rrtable\">
+    <thead>
+    <tr><td>Note: You can click on any historical class if you want to download available data for specific regions of Russia or years.<br>
     By default all data for all regions for selected historical classes will be selected.
     </td><td align=right>
-    &nbsp;<input type=\"submit\" value=\"Download Selected Datasets\">
-    </td></tr></table>
+    &nbsp;<input type=\"submit\" class=\"download\" value=\"Download Selected Datasets\">
+    </td></tr>
+    </thead>
+    </table>
     ";
 
-    $html.="<table border=1>
+    $html.="<table border=1 class=\"rrtable\">
+	<thead>
 	<tr align=center><td>&nbsp;</td><td>Datatype</td><td>1795</td><td>1858</td><td>1897</td><td>1959</td><td>2002</td></tr>
 	$htmltopic
+	</thead>
 	</table>";
     $html="
     <form name=\"submit\" action=\"/datasets/indicators\" method=\"get\">
