@@ -80,6 +80,12 @@ foreach $command (@commands)
    #$command=~s/\/\&/ /g;
    #  topic=10&d=7.01
    print "CMD $command <br>\n" if ($DEBUG);
+   if ($command=~/topicroot(\d+)/)
+   {
+	$topicRoots.= "$1, ";
+	$data{$command}++;
+   }
+
    if ($command=~/(\S+)\=(\S+)/)
    {
 	my $item = $command;
@@ -94,6 +100,10 @@ foreach $command (@commands)
 	{
 	   $datatypes.= "'$value', ";
 	}
+	if ($name=~/topic(\d+)/)
+	{
+	   $topicIDs = "$1, ";
+	}
 	$data{$item} = $item;
    }
 }
@@ -104,6 +114,7 @@ if (keys %data)
 
 print "$command >> *$topicIDs*<br>" if ($DEBUG);
 $topicIDs=~s/\,\s+$//g;
+$topicRoots=~s/\,\s+$//g;
 $datatypes=~s/\,\s+$//g;
 print "DATATYPES: $datatypes\n" if ($DEBUG);
 $html = readtopics($topicIDs,'',$filter_datatype);
@@ -116,6 +127,7 @@ sub readtopics
     $histclass_root = '0' unless ($histclass_root);
     $sqlquery = "select topic_id, datatype, topic_name, description, topic_root from datasets.topics where 1=1";
     $sqlquery.=" and topic_id in ($topicIDs)" if ($topicIDs);
+    $sqlquery.=" and topic_root in ($topicRoots)" if ($topicRoots);
     $sqlquery.=" and datatype in ($datatypes)" if ($datatypes=~/\d+/);
 #    $sqlquery.=" order by topic_name asc";
     print "$sqlquery\n" if ($DEBUG);
@@ -146,7 +158,7 @@ sub readtopics
 		    my $topic_nameurl = "<a href=\"#\">$topic_name</a>";
                     my $status;
                     $status = "checked" if (keys %data);
-		    $htmltopic.="\n<tr><td class=\"indicator\" width=\"20%\"><font color=\"#ffffff\">&nbsp;<input type=\"checkbox\" name=\"d=$datatype\" $checked>&nbsp;$topic_nameurl&nbsp;</font></td><td bgcolor=#efefef width=50%></td>\n";
+		    $htmltopic.="\n<tr><td class=\"indicator\" width=\"20%\"><font color=\"#ffffff\">&nbsp;<input type=\"checkbox\" name=\"topicroot$datatype\" $checked>&nbsp;$topic_nameurl&nbsp;</font></td><td bgcolor=#efefef width=50%></td>\n";
 		}
 		else
 		{
