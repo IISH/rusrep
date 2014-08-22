@@ -72,19 +72,27 @@ if ($uri=~/^.+?\?(.+)$/)
 {
    $uricom = $1;
 }
-my @commands = split(/\\\&/, $uricom);
+my @commands = split(/\&/, $uricom);
+$DEBUG = 0;
 foreach $command (@commands)
 {
    #$command = $1;
    #$command=~s/\/\&/ /g;
-   #print "CMD $command <br>\n" if ($DEBUG);
+   #  topic=10&d=7.01
+   print "CMD $command <br>\n" if ($DEBUG);
    if ($command=~/(\S+)\=(\S+)/)
    {
 	my $item = $command;
+	my ($name, $value) = ($1, $2);
+	print "$name => $value <br>\n" if ($DEBUG);
 	if ($item=~/(\d+)\.(\d+)/)
 	{
-	   $topicIDs.= "$1, ";
-	   $datatypes.= "$2 ";
+#	   $topicIDs.= "$1, ";
+#	   $datatypes.= "$2 ";
+	}
+	if ($name=~/d/)
+	{
+	   $datatypes.= "'$value', ";
 	}
 	$data{$item} = $item;
    }
@@ -97,6 +105,7 @@ if (keys %data)
 print "$command >> *$topicIDs*<br>" if ($DEBUG);
 $topicIDs=~s/\,\s+$//g;
 $datatypes=~s/\,\s+$//g;
+print "DATATYPES: $datatypes\n" if ($DEBUG);
 $html = readtopics($topicIDs,'',$filter_datatype);
 
 sub readtopics
@@ -106,7 +115,8 @@ sub readtopics
 
     $histclass_root = '0' unless ($histclass_root);
     $sqlquery = "select topic_id, datatype, topic_name, description, topic_root from datasets.topics where 1=1";
-    $sqlquery.=" and topic_id in ($topicIDs) or topic_root in ($datatypes)" if ($topicIDs=~/\d+/);
+    $sqlquery.=" and topic_id in ($topicIDs)" if ($topicIDs);
+    $sqlquery.=" and datatype in ($datatypes)" if ($datatypes=~/\d+/);
 #    $sqlquery.=" order by topic_name asc";
     print "$sqlquery\n" if ($DEBUG);
 
@@ -136,7 +146,7 @@ sub readtopics
 		    my $topic_nameurl = "<a href=\"#\">$topic_name</a>";
                     my $status;
                     $status = "checked" if (keys %data);
-		    $htmltopic.="\n<tr><td class=\"indicator\" width=\"20%\"><font color=\"#ffffff\">&nbsp;<input type=\"checkbox\" name=\"topic=$topic_id&d=$datatype\" $checked>&nbsp;$topic_nameurl&nbsp;</font></td><td bgcolor=#efefef width=50%></td>\n";
+		    $htmltopic.="\n<tr><td class=\"indicator\" width=\"20%\"><font color=\"#ffffff\">&nbsp;<input type=\"checkbox\" name=\"d=$datatype\" $checked>&nbsp;$topic_nameurl&nbsp;</font></td><td bgcolor=#efefef width=50%></td>\n";
 		}
 		else
 		{
@@ -150,7 +160,7 @@ sub readtopics
 		$topic_nameurl = "$topic_name";
 		my $status;
 		$status = "checked" if (keys %data);
-		$htmltopic.="\n<td></td><td width=50%>&nbsp;<input type=\"checkbox\" name=\"topic=$topic_id&d=$datatype\" $status>&nbsp;$datatype $topic_nameurl</td>";
+		$htmltopic.="\n<td></td><td width=50%>&nbsp;<input type=\"checkbox\" name=\"d=$datatype\" $status>&nbsp;$datatype $topic_nameurl</td>";
 	        #$topicdata = readclasses($topic_root, $datatype) if (($datatype eq $filter_datatype) || !$filter_datatype);
 		#$topicdata = "&nbsp;No data\n" unless ($topicdata);
 		#$htmltopic.="$topicdata</td>"; # if ($topicdate);
