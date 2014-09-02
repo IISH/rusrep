@@ -14,16 +14,17 @@ use ClioInfra;
 use ClioTemplates;
 $| = 1;
 
-#$site = "http://node-149.dev.socialhistoryservices.org";
-$scriptdir = "/home/clio-infra/cgi-bin";
 $countrylink = "datasets/countries";
 $indicatorlink ="indicator.html";
 
 $htmltemplate = "$Bin/../templates/countries.tpl";
-#@html = loadhtml($htmltemplate);
 
 my %dbconfig = loadconfig("$Bin/../config/russianrep.config");
 $site = $dbconfig{root};
+$introtext = $dbconfig{intro};
+$data2excel = $dbconfig{data2excel};
+$scriptdir = $dbconfig{scriptdir};
+$workpath = $dbconfig{workpath};
 my ($dbname, $dbhost, $dblogin, $dbpassword) = ($dbconfig{dbname}, $dbconfig{dbhost}, $dbconfig{dblogin}, $dbconfig{dbpassword});
 my $dbh = DBI->connect("dbi:Pg:dbname=$dbname;host=$dbhost",$dblogin,$dbpassword,{AutoCommit=>1,RaiseError=>1,PrintError=>0});
 
@@ -34,7 +35,7 @@ my $create_date = sprintf("%04d-%02d-%02d %02d:%02d", $time[5]+1900, $time[4]+1,
 my $path_date = sprintf("%04d%02d%02d.%02d%02d", $time[5]+1900, $time[4]+1, $time[3], $time[2], $time[1]); 
 my $edit_date = $create_date;
 
-$path = "/home/clio-infra/public_html/tmp/";
+$path = $workpath;
 $path.="$path_date";
 
 use Getopt::Long;
@@ -133,7 +134,8 @@ sub readtopics
     print "$sqlquery\n" if ($DEBUG);
 
     @years = (1795, 1858, 1897, 1959, 2002);
-    $active{"1897"}++;
+    $thisyear = "1897";
+    $active{$thisyear}++;
     if ($sqlquery)
     {
         my $sth = $dbh->prepare("$sqlquery");
@@ -142,12 +144,12 @@ sub readtopics
 	while (my ($topic_id, $datatype, $topic_name, $description, $topic_root) = $sth->fetchrow_array())
         {
 	    my $topicdata;
+	    $filename = "ERRHS_".$datatype."_data_".$thisyear.".xls";
 	    if (keys %data)
 	    {
 	        $datalinks.= "<a href=\"/tmp/dataset.$datatype.xls\">Excel for $topic_name</a> $datatype $path<br>";
-	        $datafile = `/home/clio-infra/cgi-bin/rr/data2excel.py -y 1897 -d $datatype -f dataset.$datatype.xls -p $path -D`;
+	        $datafile = `$data2excel -y $thisyear -d $datatype -f $filename -p $path -D`;
 		push(@datafiles, $datafile);
-		# $zip = `/usr/bin/zip -9 -y -r -q /home/clio-infra/public_html/tmp/alldata.zip /home/clio-infra/public_html/tmp/stat_test.csv
 	    }
 	    #print "$generator DEBUG <BR>";
 
@@ -199,12 +201,13 @@ sub readtopics
 
     $ziparc = "$path_date.zip";
     my $zipcommand = "cd $path;/usr/bin/zip -9 -y -r -q $ziparc *;/bin/mv $ziparc ../;/bin/rm -rf $path";
-    $runzip = `$zipcommand`;
-    $datalinks = "Download all data as one <a href=\"/tmp/$ziparc\">zipfile $topic_name</a><br>";
+    $runzip = `$zipcommand` if (-e $path);
+    $datalinks = "Download all data and documentation as one <a href=\"/tmp/$ziparc\">zipfile $topic_name</a><br>";
 
     $downloadlink = "
     <table width=100% border=0>
     <thead>
+    <tr><td>$introtext</td></tr>
     <tr><td>Note: You can click on any historical class if you want to download available data for specific regions of Russia or years.<br>
     By default all data for all regions for selected historical classes will be selected.
     </td><td align=right>
