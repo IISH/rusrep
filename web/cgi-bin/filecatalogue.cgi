@@ -22,10 +22,18 @@ $htmltemplate = "$Bin/../templates/countries.tpl";
 my %dbconfig = loadconfig("$Bin/../config/russianrep.config");
 $site = $dbconfig{root};
 $introtext = $dbconfig{intro};
+$introrus = $dbconfig{intro_rus};
 $data2excel = $dbconfig{data2excel};
 $scriptdir = $dbconfig{scriptdir};
 $workpath = $dbconfig{workpath};
 $checkicon = $dbconfig{checkicon};
+$note = $dbconfig{note};
+$note_rus = $dbconfig{note_rus};
+$downloadtext = $dbconfig{download};
+$downloadtext_rus = $dbconfig{download_rus};
+$downloadclick = $dbconfig{downloadclick};
+$downloadclick_rus = $dbconfig{downloadclick_rus};
+
 my ($dbname, $dbhost, $dblogin, $dbpassword) = ($dbconfig{dbname}, $dbconfig{dbhost}, $dbconfig{dblogin}, $dbconfig{dbpassword});
 my $dbh = DBI->connect("dbi:Pg:dbname=$dbname;host=$dbhost",$dblogin,$dbpassword,{AutoCommit=>1,RaiseError=>1,PrintError=>0});
 
@@ -74,6 +82,19 @@ if ($uri=~/^.+?\?(.+)$/)
 {
    $uricom = $1;
 }
+$lang = 'en';
+if ($uri=~/\/ru\//i)
+{
+   $lang = 'ru';
+}
+if ($lang eq 'ru')
+{
+   $introtext = $introrus;
+   $note = $note_rus;
+   $downloadtext = $downloadtext_rus;
+   $downloadclick = $downloadclick_rus;
+}
+
 my @commands = split(/\&/, $uricom);
 $DEBUG = 0;
 foreach $command (@commands)
@@ -203,16 +224,16 @@ sub readtopics
     $ziparc = "$path_date.zip";
     my $zipcommand = "cd $path;/usr/bin/zip -9 -y -r -q $ziparc *;/bin/mv $ziparc ../;/bin/rm -rf $path";
     $runzip = `$zipcommand` if (-e $path);
-    $datalinks = "Download all data and documentation as one <a href=\"/tmp/$ziparc\">zipfile $topic_name</a><br>";
+    $datalinks = "$downloadtext <a href=\"/tmp/$ziparc\">zipfile $topic_name</a><br>";
 
-    my $downloadtext = "<input type=\"submit\" class=\"download\" value=\"Download Selected Datasets\">";
+    my $downloadtext = "<input type=\"submit\" class=\"download\" value=\"$downloadclick\">";
     $downloadtext = '' if (keys %data);
     $downloadlink = "
     <table width=100% border=0>
     <thead>
     <tr><td>$introtext</td></tr>
-    <tr><td>Note: You can click on any historical class if you want to download available data for specific regions of Russia or years.<br>
-    By default all data for all regions for selected historical classes will be selected.
+    <tr><td>
+    $note
     </td><td align=right>
     &nbsp;$downloadtext
     </td></tr>
