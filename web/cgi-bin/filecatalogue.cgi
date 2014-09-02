@@ -25,6 +25,7 @@ $introtext = $dbconfig{intro};
 $data2excel = $dbconfig{data2excel};
 $scriptdir = $dbconfig{scriptdir};
 $workpath = $dbconfig{workpath};
+$checkicon = $dbconfig{checkicon};
 my ($dbname, $dbhost, $dblogin, $dbpassword) = ($dbconfig{dbname}, $dbconfig{dbhost}, $dbconfig{dblogin}, $dbconfig{dbpassword});
 my $dbh = DBI->connect("dbi:Pg:dbname=$dbname;host=$dbhost",$dblogin,$dbpassword,{AutoCommit=>1,RaiseError=>1,PrintError=>0});
 
@@ -185,7 +186,7 @@ sub readtopics
 		if ($active{$year})
 		{
 		     $url = "?topic=$topic_id&d=$datatype";
-		     $htmltopic.="<td width=\"5%\" align=\"center\"><a href=\"$url&y=$year\" align=\"center\"><img width=20 height=20 src=\"/excel.gif\"></a></td>";
+		     $htmltopic.="<td width=\"5%\" align=\"center\"><img width=20 height=20 src=\"/$checkicon\"></td>";
 		}
 		else
 		{
@@ -204,6 +205,8 @@ sub readtopics
     $runzip = `$zipcommand` if (-e $path);
     $datalinks = "Download all data and documentation as one <a href=\"/tmp/$ziparc\">zipfile $topic_name</a><br>";
 
+    my $downloadtext = "<input type=\"submit\" class=\"download\" value=\"Download Selected Datasets\">";
+    $downloadtext = '' if (keys %data);
     $downloadlink = "
     <table width=100% border=0>
     <thead>
@@ -211,7 +214,7 @@ sub readtopics
     <tr><td>Note: You can click on any historical class if you want to download available data for specific regions of Russia or years.<br>
     By default all data for all regions for selected historical classes will be selected.
     </td><td align=right>
-    &nbsp;<input type=\"submit\" class=\"download\" value=\"Download Selected Datasets\">
+    &nbsp;$downloadtext
     </td></tr>
     </thead>
     </table>
