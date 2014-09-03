@@ -33,6 +33,8 @@ $downloadtext = $dbconfig{download};
 $downloadtext_rus = $dbconfig{download_rus};
 $downloadclick = $dbconfig{downloadclick};
 $downloadclick_rus = $dbconfig{downloadclick_rus};
+$datatype_intro = $dbconfig{datatype_intro};
+$datatype_intro_rus = $dbconfig{datatype_intro_rus};
 
 my ($dbname, $dbhost, $dblogin, $dbpassword) = ($dbconfig{dbname}, $dbconfig{dbhost}, $dbconfig{dblogin}, $dbconfig{dbpassword});
 my $dbh = DBI->connect("dbi:Pg:dbname=$dbname;host=$dbhost",$dblogin,$dbpassword,{AutoCommit=>1,RaiseError=>1,PrintError=>0});
@@ -87,12 +89,17 @@ if ($uri=~/\/ru\//i)
 {
    $lang = 'ru';
 }
+if ($uri=~s/lang\=(\w+)//)
+{
+   $lang = $1;
+}
 if ($lang eq 'ru')
 {
    $introtext = $introrus;
    $note = $note_rus;
    $downloadtext = $downloadtext_rus;
    $downloadclick = $downloadclick_rus;
+   $datatype_intro = $datatype_intro_rus;
 }
 
 my @commands = split(/\&/, $uricom);
@@ -148,11 +155,11 @@ sub readtopics
     my ($html, $datalinks);
 
     $histclass_root = '0' unless ($histclass_root);
-    $sqlquery = "select topic_id, datatype, topic_name, description, topic_root from datasets.topics where 1=1";
+    $sqlquery = "select topic_id, datatype, topic_name, description, topic_root, topic_name_rus from datasets.topics where 1=1";
     $sqlquery.=" and topic_id in ($topicIDs)" if ($topicIDs);
     $sqlquery.=" and topic_root in ($topicRoots)" if ($topicRoots);
     $sqlquery.=" and datatype in ($datatypes)" if ($datatypes=~/\d+/);
-#    $sqlquery.=" order by topic_name asc";
+    $sqlquery.=" order by datatype asc";
     print "$sqlquery\n" if ($DEBUG);
 
     @years = (1795, 1858, 1897, 1959, 2002);
@@ -163,9 +170,10 @@ sub readtopics
         my $sth = $dbh->prepare("$sqlquery");
         $sth->execute();
 
-	while (my ($topic_id, $datatype, $topic_name, $description, $topic_root) = $sth->fetchrow_array())
+	while (my ($topic_id, $datatype, $topic_name, $description, $topic_root, $topic_name_rus) = $sth->fetchrow_array())
         {
 	    my $topicdata;
+	    $topic_name = $topic_name_rus if ($lang eq 'ru');
 	    $filename = "ERRHS_".$datatype."_data_".$thisyear.".xls";
 	    if (keys %data)
 	    {
@@ -226,7 +234,7 @@ sub readtopics
     $runzip = `$zipcommand` if (-e $path);
     $datalinks = "$downloadtext <a href=\"/tmp/$ziparc\">zipfile $topic_name</a><br>";
 
-    my $downloadtext = "<input type=\"submit\" class=\"download\" value=\"$downloadclick\">";
+    my $downloadtext = "<input type=hidden name=lang value=\"$lang\"><input type=\"submit\" class=\"download\" value=\"$downloadclick\">";
     $downloadtext = '' if (keys %data);
     $downloadlink = "
     <table width=100% border=0>
@@ -243,7 +251,7 @@ sub readtopics
 
     $html.="<table border=1 class=\"rrtable\">
 	<thead>
-	<tr align=center><td>&nbsp;</td><td>Datatype</td><td>1795</td><td>1858</td><td>1897</td><td>1959</td><td>2002</td></tr>
+	<tr align=center><td>&nbsp;</td><td>$datatype_intro</td><td>1795</td><td>1858</td><td>1897</td><td>1959</td><td>2002</td></tr>
 	</thead>
 	<tbody>
 	$htmltopic
