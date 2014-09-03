@@ -35,6 +35,7 @@ $downloadclick = $dbconfig{downloadclick};
 $downloadclick_rus = $dbconfig{downloadclick_rus};
 $datatype_intro = $dbconfig{datatype_intro};
 $datatype_intro_rus = $dbconfig{datatype_intro_rus};
+$papersdir = $dbconfig{papersdir};
 
 my ($dbname, $dbhost, $dblogin, $dbpassword) = ($dbconfig{dbname}, $dbconfig{dbhost}, $dbconfig{dblogin}, $dbconfig{dbpassword});
 my $dbh = DBI->connect("dbi:Pg:dbname=$dbname;host=$dbhost",$dblogin,$dbpassword,{AutoCommit=>1,RaiseError=>1,PrintError=>0});
@@ -175,11 +176,21 @@ sub readtopics
 	    my $topicdata;
 	    $topic_name = $topic_name_rus if ($lang eq 'ru');
 	    $filename = "ERRHS_".$datatype."_data_".$thisyear.".xls";
+	    $udatatype=$datatype;
+	    $udatatype=~s/\./\_/g;
+	    my @papers = find_papers($papersdir, $udatatype);
+
 	    if (keys %data)
 	    {
 	        $datalinks.= "<a href=\"/tmp/dataset.$datatype.xls\">Excel for $topic_name</a> $datatype $path<br>";
 	        $datafile = `$data2excel -y $thisyear -d $datatype -f $filename -p $path -D`;
 		push(@datafiles, $datafile);
+	    }
+	    foreach $file (@papers)
+	    {
+		$cp = "/bin/cp $file $path";
+		$cp.="/" if ($cp!~/\/$/g);
+		$run = `$cp`;
 	    }
 	    #print "$generator DEBUG <BR>";
 
@@ -229,6 +240,7 @@ sub readtopics
 	}
     }
 
+    # Add papers
     $ziparc = "$path_date.zip";
     my $zipcommand = "cd $path;/usr/bin/zip -9 -y -r -q $ziparc *;/bin/mv $ziparc ../;/bin/rm -rf $path";
     $runzip = `$zipcommand` if (-e $path);
@@ -340,4 +352,21 @@ foreach $item (sort {$dataindex{$a} <=> $dataindex{$b}} keys %dataindex)
     my $tab = "&nbsp;&nbsp;&nbsp;";
     print "\t<input type=\"checkbox\">$tab$item<br>\n";
     $known{$first}++;
+}
+
+sub find_papers
+{
+   my ($dir, $filter, $DEBUG) = @_;
+   my @files;
+   opendir(DIR, $dir) or die $!;
+
+   while (my $file = readdir(DIR)) {
+        if ($file=~/\.doc/ && (!$filter || $file=~/$filter/i))
+        {
+            push(@files, "$dir/$file");
+        }
+   }
+   closedir(DIR);
+
+   return @files;
 }
