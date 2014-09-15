@@ -141,6 +141,7 @@ foreach $command (@commands)
 if (keys %data)
 {
    mkdir $path unless (-e $path);
+   $datapage++;
 }
 
 print "$command >> *$topicIDs*<br>" if ($DEBUG);
@@ -166,7 +167,9 @@ sub readtopics
     @years = (1795, 1858, 1897, 1959, 2002);
     $thisyear = "1897";
     $active{$thisyear}++;
-    if ($sqlquery)
+    $active{"2002"}++;
+    my %nohtml;
+    foreach $thisyear (sort keys %active)
     {
         my $sth = $dbh->prepare("$sqlquery");
         $sth->execute();
@@ -194,14 +197,16 @@ sub readtopics
 	    }
 	    #print "$generator DEBUG <BR>";
 
+	    my $TOPIC_FLAG;
 	    unless ($topic_root)
 	    {
 		if ($HTML)
 		{
-		    my $topic_nameurl = "<a href=\"#\">$topic_name</a>";
+		    my $topic_nameurl = "<a href=\"#\">$datatype. $topic_name</a>";
+		    $TOPIC_FLAG = $datatype;
                     my $status;
                     $status = "checked" if (keys %data);
-		    $htmltopic.="\n<tr><td class=\"indicator\" width=\"20%\"><font color=\"#ffffff\">&nbsp;<input type=\"checkbox\" name=\"topicroot$datatype\" $checked>&nbsp;$topic_nameurl&nbsp;</font></td><td bgcolor=#efefef width=50%></td>\n";
+		    $htmltopic.="\n<tr><td class=\"indicator\" width=\"20%\"><font color=\"#ffffff\">&nbsp;<input type=\"checkbox\" name=\"topicroot$datatype\" $checked>&nbsp;$topic_nameurl&nbsp;</font></td><td bgcolor=#efefef width=50%></td>\n" unless ($nohtml{$datatype});
 		}
 		else
 		{
@@ -215,25 +220,36 @@ sub readtopics
 		$topic_nameurl = "$topic_name";
 		my $status;
 		$status = "checked" if (keys %data);
-		$htmltopic.="\n<td></td><td width=50%>&nbsp;<input type=\"checkbox\" name=\"d=$datatype\" $status>&nbsp;$datatype $topic_nameurl</td>";
+		$htmltopic.="\n<td></td><td width=50%>&nbsp;<input type=\"checkbox\" name=\"d=$datatype\" $status>&nbsp;$datatype $topic_nameurl</td>" unless ($nohtml{$datatype});
 	        #$topicdata = readclasses($topic_root, $datatype) if (($datatype eq $filter_datatype) || !$filter_datatype);
 		#$topicdata = "&nbsp;No data\n" unless ($topicdata);
 		#$htmltopic.="$topicdata</td>"; # if ($topicdate);
 	    }
 
-	    foreach $year (@years)
-	    {
+	    if (!$TOPIC_FLAG)
+            {
+	        foreach $year (@years)
+	        {
 		if ($active{$year})
 		{
+		     # Showyear management 
+		     my $showyear = "><img width=20 height=20 src=\"/$checkicon\">";
+		     $showyear = "<input type=checkbox name=year-$datatype-$year>" unless ($datapage);
 		     $url = "?topic=$topic_id&d=$datatype";
-		     $htmltopic.="<td width=\"5%\" align=\"center\"><img width=20 height=20 src=\"/$checkicon\"></td>";
+		     $htmltopic.="<td width=\"5%\" align=\"center\">$showyear</td>" unless ($nohtml{$datatype});
 		}
 		else
 		{
-		    $htmltopic.= "<td width=\"5%\" align=\"center\"><img width=20 height=20 src=\"/absent.jpg\"></td>";
+		    $htmltopic.= "<td width=\"5%\" align=\"center\"><img width=20 height=20 src=\"/absent.jpg\"></td>" unless ($nohtml{$datatype});
 		}
+	        }
+	    }
+	    else
+	    {
+	        $htmltopic.= "<td colspan=5 bgcolor=#efefef></td>";
 	    }
 	    $htmltopic.="</tr>";
+	    $nohtml{$datatype}++;
 
 #	    $topicdata = "top";
             #$htmltopic.="<td>$topicdata</td></tr>\n"; # if ($topicdata);
@@ -242,7 +258,7 @@ sub readtopics
 
     # Add papers
     $ziparc = "$path_date.zip";
-    my $zipcommand = "cd $path;/usr/bin/zip -9 -y -r -q $ziparc *;/bin/mv $ziparc ../;/bin/rm -rf $path";
+    my $zipcommand = "cd $path;/usr/bin/zip -9 -y -r -q $ziparc *;/bin/mv $ziparc ../;"; #/bin/rm -rf $path";
     $runzip = `$zipcommand` if (-e $path);
     $datalinks = "$downloadtext <a href=\"/tmp/$ziparc\">zipfile $topic_name</a><br>";
 
