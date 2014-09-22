@@ -18,13 +18,9 @@ $papersdir = $dbconfig{papersdir};
 my ($dbname, $dbhost, $dblogin, $dbpassword) = ($dbconfig{dbname}, $dbconfig{dbhost}, $dbconfig{dblogin}, $dbconfig{dbpassword});
 my $dbh = DBI->connect("dbi:Pg:dbname=$dbname;host=$dbhost",$dblogin,$dbpassword,{AutoCommit=>1,RaiseError=>1,PrintError=>0});
 
-@topics = read_topics($dbh);
+$topics = read_topics($dbh);
 
-my @papers;
-foreach $file (@papers)
-{
-   print "<a href\=\"$uri{$file}\">$file</a><br>\n";
-}
+print $topics;
 
 sub read_topics
 {
@@ -39,27 +35,42 @@ sub read_topics
     my $sth = $dbh->prepare("$sqlquery");
     $sth->execute();
 
+    $html = "<table width=100% border=1>";
     while (my ($topic_id, $datatype, $topic_name, $description, $topic_root, $topic_name_rus) = $sth->fetchrow_array())
     {
 	if ($datatype=~/\d+/)
 	{ 
             $udatatype=$datatype;
             $udatatype=~s/\./\_/g;
-	    $udatatype="ERRHS_".$udatatype;
-	    my @papers = find_papers($papersdir, $udatatype);
-
-	    if ($#papers >= 0)
+	    $udatatype="ERRHS_".$udatatype; #."_\\d+";
+	    my @papers;
+	    if ($topic_root || (!$topic_root && $datatype=~/^7/))
 	    {
-		print "$datatype $topic_name\n";
+	        @papers = find_papers($papersdir, $udatatype);
+	    }
+	    else
+	    {
+		$root_datatype = $topic_name;
 	    }
 
+	    if ($#papers >= 0 && !$topic_root)
+	    {
+#		$html.= "<tr><td colspan=\"3\">$datatype. $topic_name</td></tr>\n";
+	    }
+
+	    my @html;
 	    foreach $file (@papers)
 	    {
-		print "<a href\=\"$uri{$file}\">$file</a><br>\n";
+		$topic_root = $datatype unless ($topic_root);
+		$html.= "<tr><td width=20%>$topic_root. $root_datatype</td><td width=20%>$datatype. $topic_name</td><td width=60%><a href\=\"$uri{$file}\">$file</a></td></tr>\n";
+#		$known{$file}++;
 		#print "$paper\n";
 	    }
 	}
     }
+    $html.="</table>";
+
+    return $html;
 }
 
 sub find_papers
