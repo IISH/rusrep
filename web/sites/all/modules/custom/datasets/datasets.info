@@ -1,0 +1,7 @@
+name = Russian Repository datasets
+description = Upload and search datasets for Russian Repository.
+package = RusRep
+dependencies[] = ctools_automodal
+core = 7.x
+version = 7.x-1.x-dev
+

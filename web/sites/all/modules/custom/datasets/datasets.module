@@ -1,0 +1,387 @@
+<?php
+
+/**
+ * @file
+ * Upload and search datasets for Russian Repository.
+ */
+
+  $basedir = variable_get('rusrep_basedir', '/home/clio-infra');
+  global $scriptdir;
+  global $uri;
+  global $user;
+  global $username;
+  global $query;
+  global $datasetdir;
+  $datasetdir = "/tmp";
+  $scriptdir = $basedir . "/cgi-bin";
+  $uri = preg_replace('/\&/', '\\\&', $_SERVER['REQUEST_URI']);
+  parse_str($_SERVER['QUERY_STRING'], $query);
+
+function datasets_init() {
+  global $user;
+  global $username;
+  $username = user_is_logged_in() ? $user->name : "";
+}
+
+function datasets_permission() {
+  return aay(
+    'access datasets' => aay(
+      'title' => t('Access datasets'),
+      'description' => t('Allow users to view datasets'),
+    ),
+    'upload datasets' => aay(
+      'title' => t('Upload datasets'),
+      'description' => t('Allow users to upload datasets'),
+    ),
+    'administer datasets' => aay(
+      'title' => t('Administer datasets'),
+      'description' => t('Configure datasets copyright notice'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu().
+ *
+ */
+function datasets_menu() {
+  $items = aay();
+  $items['datasets'] = aay(
+    'title' => 'Datasets',
+    'page callback' => 'datasets_intro',
+    'access arguments' => aay('access datasets'),
+    'expanded' => TRUE,
+  );
+  $items['datasets/countries'] = aay(
+    'title' => 'Countries',
+    'page callback' => 'datasets_search_country',
+    'access arguments' => aay('access datasets'),
+    'description' => 'Form with file upload',
+    'weight' => 10,
+  );
+  $items['datasets/topics'] = aay(
+    'title' => 'Topics',
+    'page callback' => 'datasets_search_topic',
+    'access arguments' => aay('access datasets'),
+    'description' => 'Form with file upload',
+    'weight' => 11,
+  );
+  $items['datasets/indicators'] = aay(
+    'title' => 'File catalogue',
+    'page callback' => 'datasets_search_indicator',
+    'access arguments' => aay('access datasets'),
+    'description' => 'Form with file upload',
+    'weight' => 12,
+  );
+  $items['datasets/combined'] = aay(
+    'title' => 'Combined search',
+    'page callback' => 'datasets_search_combined',
+    'access arguments' => aay('access datasets'),
+    'description' => 'Form with file upload',
+    'weight' => 13,
+  );
+  $items['datasets/searchresults'] = aay(
+    'title' => 'Search results',
+    'page callback' => 'datasets_search_results',
+    'access arguments' => aay('access datasets'),
+    'description' => 'Form with file upload',
+    'weight' => 14,
+  );
+  $items['datasets/upload'] = aay(
+    'title' => 'Upload datasets',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => aay('datasets_upload'),
+    'access arguments' => aay('upload datasets'),
+    'description' => 'Form with file upload',
+    'file' => 'datasets_upload.inc',
+    'weight' => 14,
+  );
+
+  $items['datasets/download'] = aay(
+    'title' => t('Download datasets'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => aay('datasets_download_form', 0),
+    'access arguments' => aay('access datasets'),
+    'modal' => TRUE,
+  );
+
+  $items['admin/config/system/datasets'] = aay(
+    'title' => 'Russian Repository',
+    'description' => 'Russian Repository datasets settings.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => aay('datasets_settings'),
+    'access arguments' => aay('administer datasets'),
+  );
+
+  $items['visualize'] = aay(
+    'title' => 'Visualize',
+    'page callback' => 'datasets_visualize',
+    'access arguments' => aay('access datasets'),
+    'description' => 'Form with file upload',
+  );
+
+  $items['documentation'] = aay(
+    'documentation' => 'Papers',
+    'page callback' => 'datasets_visualize',
+    'access arguments' => aay('access datasets'),
+  );
+  return $items;
+}
+
+function datasets_intro() {
+  drupal_goto('datasets/indicators');
+}
+
+function datasets_search_country() {
+  global $language, $username, $uri, $query, $scriptdir;
+  $country = "";
+  $nolimit = "";
+  // if ($language->language == 'ru') { // Russian version }
+  if (isset($query['nolimit'])) {
+    $nolimit = " -nolimit '" . $query['nolimit'] ."'";
+  }
+  if (isset($query['country'])) {
+    $country = " -country '" . $query['country'] ."'";
+    $output = `$scriptdir/backend/indicators.cgi -uri '$uri' $country $nolimit`;
+  }
+  else {
+     #$output = `$scriptdir/backend/visual.cgi -user '$username' -uri '$uri' -showcountries 'yes'`;
+     $output = `$scriptdir//regions.cgi`;
+  }
+
+  return $output;
+}
+
+function datasets_search_topic() {
+  global $language, $username, $uri, $scriptdir, $query, $output;
+  $topic = "";
+  // if ($language->language == 'ru') { // Russian version }
+  if (isset($query['topicuri'])) {
+    $topic = " -topicuri '" . $query['topicuri'] ."'";
+    $output = `$scriptdir/backend/indicators.cgi -uri '$uri' $topic`;
+#	$output = "test";
+  }
+  else {
+    $output = `$scriptdir/backend/visual.cgi -user '$username' -uri '$uri' $topic -showtopics 'yes'`;
+    $output = `$scriptdir//topics.cgi -uri '$uri'`;
+  }
+  return $output;
+}
+
+function datasets_search_indicator() {
+  global $language, $username, $uri, $scriptdir, $query;
+  // if ($language->language == 'ru') { // Russian version }
+  $indicator = "";
+  if (isset($query['indicatoruri'])) {
+    $indicator = " -indicatoruri '". $query['indicatoruri'] ."'";
+    $output = `$scriptdir/backend/indicators.cgi -uri '$uri' $indicator`;
+  }
+  else
+  {
+     #$output = `$scriptdir/backend/visual.cgi -user '$username' -uri '$uri' $indicator -showindicators 'yes'`;
+     #$output = `$scriptdir//indicators.cgi`;
+     #$output = `$scriptdir//classes.cgi -uri '$uri'`;
+     $output = `$scriptdir//filecatalogue.cgi -uri '$uri'`;
+  };
+  return $output;
+}
+
+function datasets_search_combined() {
+  global $language, $username, $uri, $scriptdir;
+  // if ($language->language == 'ru') { // Russian version }
+  $output = `$scriptdir/visualize/combinedsearchform.cgi -user '$username' -uri '$uri'`;
+  return $output;
+}
+
+function datasets_search_results() {
+  global $language, $username, $uri, $scriptdir;
+  // if ($language->language == 'ru') { // Russian version }
+  $querystring = $_SERVER['QUERY_STRING'];
+  $output = `$scriptdir/backend/datasets.cgi -user '$username' -uri '$uri' -command '$querystring'`;
+  return $output;
+}
+
+function datasets_visualize() {
+  global $language, $scriptdir, $datasetdir, $query;
+  $datasetfile = "";
+  // if ($language->language == 'ru') { // Russian version }
+  if (isset($query['datasetfile'])) {
+    $datasetfile = " -datasetfile '" . $query['datasetfile'] ."'";
+  }
+  if (isset($query['datasetname'])) {
+    $datasetfile = " -datasetname '" . $query['datasetname'] ."'";
+  }
+  #$output = `$scriptdir/visualize/statplanet.cgi $datasetfile`;
+  $output = `$scriptdir/showmap.cgi`;
+  return $output;
+}
+
+function show_documentation() {
+  global $language, $scriptdir, $datasetdir, $query;
+  $datasetfile = "";
+
+  $output = `$scriptdir//filecatalogue.cgi -uri '$uri'`;
+  return $output;
+}
+
+
+/**
+ * Provides the user with a file download, given a valid file ID.
+ */
+/*
+function datasets_download_get_file() {
+  global $uri, $scriptdir;
+  $output = `$scriptdir/backend/datasets.cgi -download 'zip' -uri '$uri'`;
+  return $output;
+
+  $headers = aay(
+    'Pragma' => 'hack',
+    'Cache-Control' => 'public, must-revalidate',
+    'Content-Type' => $file['filemime'],
+    'Content-Disposition' => 'attachment',
+    'Content-Transfer-Encoding' => 'binary',
+  );
+  file_transfer($file['uri'], $headers);
+}
+*/
+
+function datasets_download_form($form, &$form_state, $fid) {
+  $form = aay();
+
+  $form['notice'] = aay(
+    '#prefix' => '<div class="copyright-notice">',
+    '#markup' => variable_get('datasets_copyright_notice', ''),
+    '#suffix' => '</div>',
+  );
+
+  if (!empty($_COOKIE['datasets_auth'])) {
+    $output = datasets_download_file($fid, $_GET['command']);
+    $items['datasets/download']['title'] = "Download dataset";
+  
+    $form['notice'] = aay(
+    '#prefix' => '',
+    '#markup' => $output,
+    '#suffix' => '',
+  );
+  }
+  else
+  {
+
+  $form['buttons']['submit'] = aay(
+    '#type' => 'submit',
+    '#value' => t('OK'),
+  );
+  $form['fid'] = aay(
+    '#type' => 'value',
+    '#value' => $fid,
+  );
+
+  if (isset($_GET['redirect']) && !url_is_external($_GET['redirect'])) {
+    $link = l(t('Cancel'), $_GET['redirect']);
+    $form['download']['cancel'] = aay(
+      '#type' => 'item',
+//      '#markup' => '<div>' . $link . '</div>',
+      '#markup' => $link,
+    );
+  }
+  }
+
+  if (isset($_GET['redirect']) && url_is_external($_GET['redirect'])) {
+  //echo "<br>".$_GET['redirect'].'<br>' .url_is_external($_GET['redirect'])."<br>";
+    $link = l(t('Cancel'), $_GET['redirect']);
+    $link = "TEST";
+    $form['download']['cancel'] = aay(
+      '#type' => 'item',
+      '#markup' => '<div>' . $link . '</div>',
+      '#markup' => $link,
+    );
+  }
+
+  return $form;
+}
+
+function datasets_download_form_submit($form, &$form_state) {
+  $fid = $form_state['values']['fid'];
+
+  $auth = md5(uniqid(""));
+  setcookie("datasets_auth", $auth, strtotime('+10 years'));
+
+  datasets_download_file($fid, '');
+}
+
+
+function datasets_modal_paths() {
+  $paths = aay();
+
+  $paths['datasets/download'] = aay(
+    'style' => 'datasets-download',
+    'close' => TRUE,
+  );
+
+  return $paths;
+}
+
+
+/**
+* Implements hook_modal_styles().
+*/
+function datasets_modal_styles() {
+  $styles = aay();
+
+  $styles['datasets-download'] = aay(
+    'modalSize' => aay(
+      'type' => 'fixed',
+      'width' => 500,
+      'height' => 500,
+    )
+  );
+
+  return $styles;
+}
+
+
+
+function datasets_download_file($fid, $command) {
+  global $uri, $scriptdir, $file;
+
+  //$file = "http://beta.clio-infra.eu:8081/tmp/zipfile.zip";
+  //echo "XXX" . $command."<BR>";
+  $command = "zip=dataset.zip&".$command;
+  $file = `$scriptdir/reader/download.cgi -uri '$command' -showlink yes`;
+  //$output = $file;
+  $output = `$scriptdir/backend/download_with_copyrights.cgi $file`;
+  //$output = "$scriptdir/reader/download.cgi -uri '".$command."' -showlink yes'";
+  return $output;
+
+/*
+  $headers = aay(
+    'Pragma' => 'hack',
+    'Cache-Control' => 'public, must-revalidate',
+    'Content-Type' => $file['filemime'],
+    'Content-Disposition' => 'attachment',
+    'Content-Transfer-Encoding' => 'binary',
+  );
+  file_transfer($file['uri'], $headers);
+*/
+}
+
+/**
+ * Settings page.
+ */
+function datasets_settings() {
+  $form = aay();
+
+  $form['settings']['datasets_copyright_notice'] = aay(
+    '#type' => 'textarea',
+    '#default_value' => variable_get('datasets_copyright_notice', ''),
+    '#title' => t('Copyright notice'),
+    '#description' => t("The text of the copyright notice the user should accept before downloading datasets."),
+  );
+
+  return system_settings_form($form);
+}
+
+
+
+
+
