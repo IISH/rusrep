@@ -10,8 +10,9 @@ use utf8;
 use Encode;
 use DB_File;
 use DBI;
-use ClioInfra;
-use ClioTemplates;
+#use ClioInfra;
+#use ClioTemplates;
+use Configme;
 $| = 1;
 
 $countrylink = "datasets/countries";

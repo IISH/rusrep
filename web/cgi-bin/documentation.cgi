@@ -4,13 +4,12 @@ use vars qw/$libpath/;
 use FindBin qw($Bin);
 BEGIN { $libpath="$Bin" };
 use lib "$libpath";
-use lib "$libpath/../libs";
+#use lib "$libpath/../libs";
 
 use utf8;
 use DBI;
+use Configme;
 my %dbconfig = loadconfig("$Bin/../config/russianrep.config");
-use ClioInfra;
-use ClioTemplates;
 $papersdir = $dbconfig{papersdir};
 #print "Content-type: text/html\n\n";
 @papers = find_papers($papersdir, $filter);
@@ -44,7 +43,8 @@ sub read_topics
             $udatatype=~s/\./\_/g;
 	    $udatatype="ERRHS_".$udatatype; #."_\\d+";
 	    my @papers;
-	    if ($topic_root || (!$topic_root && $datatype=~/^7/))
+	    #if ($topic_root || (!$topic_root && $datatype=~/^7/))
+	    if ($datatype)
 	    {
 	        @papers = find_papers($papersdir, $udatatype);
 	    }
@@ -52,6 +52,7 @@ sub read_topics
 	    {
 		$root_datatype = $topic_name;
 	    }
+	    $tnames{$topic_root} = $topic_name if (!$topic_root);
 
 	    if ($#papers >= 0 && !$topic_root)
 	    {
@@ -62,7 +63,7 @@ sub read_topics
 	    foreach $file (@papers)
 	    {
 		$topic_root = $datatype unless ($topic_root);
-		$html.= "<tr><td width=20%>$topic_root. $root_datatype</td><td width=20%>$datatype. $topic_name</td><td width=60%><a href\=\"$uri{$file}\">$file</a></td></tr>\n";
+		$html.= "<tr><td width=20%>$topic_root. $tnames{$topic_root}</td><td width=20%>$datatype. $topic_name</td><td width=60%><a href\=\"$uri{$file}\">$file</a></td></tr>\n";
 #		$known{$file}++;
 		#print "$paper\n";
 	    }

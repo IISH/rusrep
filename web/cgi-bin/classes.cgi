@@ -10,8 +10,7 @@ use utf8;
 use Encode;
 use DB_File;
 use DBI;
-use ClioInfra;
-use ClioTemplates;
+use Configme;
 $| = 1;
 
 #$site = "http://node-149.dev.socialhistoryservices.org";
@@ -30,6 +29,22 @@ my $dbh = DBI->connect("dbi:Pg:dbname=$dbname;host=$dbhost",$dblogin,$dbpassword
 my ($dbname, $dbhost, $dblogin, $dbpassword) = ($dbconfig{webdbname}, $dbconfig{dbhost}, $dbconfig{dblogin}, $dbconfig{dbpassword});
 my $dbh_web = DBI->connect("dbi:Pg:dbname=$dbname;host=$dbhost",$dblogin,$dbpassword,{AutoCommit=>1,RaiseError=>1,PrintError=>0});
 
+use Getopt::Long;
+
+my $result = GetOptions(
+    \%options,
+    'csvfile=s' => \$csvfile,
+    'all', 'help',
+    'topic=s' => \$topic,
+    'indicator=s' => \$indicator,
+    'year=s' => \$year,
+    'country=s' => \$country,
+    'command=s' => \$command,
+    'uri=s' => \$uri,
+    'download=s' => \$download,
+    'debug=s' => \$debug
+);
+
 $DEBUG = $ARGV[0];
 #print "Content-type: text/html\n\n";
 
@@ -39,17 +54,33 @@ $HTML = 1;
 my $DEBUG = 0;
 
 #$filter_datatype = '7.01';
-$html = readtopics('','',$filter_datatype);
-#print "Regions\n";
+if ($uri=~/^.+\/\S+?\?(\S+)$/)
+{
+   $command = $1;
+   $command=~s/\/\&/ /g;;
+   print "CMD $command <br>\n" if ($DEBUG);
+   while ($command=~s/(\w+\d+)\=on//)
+   {
+	my $item = $1;
+	if ($item=~/(\d+)/)
+	{
+	   $topicIDs.= "$1, ";
+	}
+	$data{$item} = $item;
+   }
+}
+print "$command >> *$topicIDs*<br>" if ($DEBUG);
+$topicIDs=~s/\,\s+$//g;
+$html = readtopics($topicIDs,'',$filter_datatype);
 
 sub readtopics
 {
-    my ($topicID, $histclass_root, $filter_datatype) = @_;
-    my $html;
+    my ($topicIDs, $histclass_root, $filter_datatype) = @_;
+    my ($html, $datalinks);
 
     $histclass_root = '0' unless ($histclass_root);
     $sqlquery = "select topic_id, datatype, topic_name, description, topic_root from datasets.topics where 1=1";
-    $sqlquery.=" and topic_id=$topicID" if ($topicID);
+    $sqlquery.=" and topic_id in ($topicIDs)" if ($topicIDs=~/\d+/);
     print "$sqlquery\n" if ($DEBUG);
 
     if ($sqlquery)
@@ -60,6 +91,13 @@ sub readtopics
 	while (my ($topic_id, $datatype, $topic_name, $description, $topic_root) = $sth->fetchrow_array())
         {
 	    my $topicdata;
+	    if (keys %data)
+	    {
+	        $datalinks.= "<a href=\"/tmp/dataset.$datatype.xls\">Download data in Excel for $topic_name</a><br>";
+	        $generator = `/home/clio-infra/cgi-bin/rr/data2excel.py -y 1897 -d $datatype -f dataset.$datatype.xls -D`;
+	    }
+	    #print "$generator DEBUG <BR>";
+
 	    unless ($topic_root)
 	    {
 		if ($HTML)
@@ -88,6 +126,7 @@ sub readtopics
     }
 
     $downloadlink = "
+    $datalinks
     <table width=100% border=0><tr><td>Note: You can click on any historical class if you want to download available data for specific regions of Russia or years.<br>
     By default all data for all regions for selected historical classes will be selected.
     </td><td align=right>

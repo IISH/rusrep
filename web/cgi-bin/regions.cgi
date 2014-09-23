@@ -8,8 +8,7 @@ use lib "$libpath/../libs";
 
 use DB_File;
 use DBI;
-use ClioInfra;
-use ClioTemplates;
+use Configme;
 $| = 1;
 
 #$site = "http://node-149.dev.socialhistoryservices.org";
