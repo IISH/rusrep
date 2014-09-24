@@ -22,6 +22,7 @@ $htmltemplate = "$Bin/../templates/countries.tpl";
 
 my %dbconfig = loadconfig("$Bin/../config/russianrep.config");
 $site = $dbconfig{root};
+$drupal_files = $dbconfig{drupal_files};
 $introtext = $dbconfig{intro};
 $introrus = $dbconfig{intro_rus};
 $data2excel = $dbconfig{data2excel};
@@ -292,7 +293,7 @@ sub readtopics
     $ziparc = "$path_date.zip";
     my $zipcommand = "cd $path;/usr/bin/zip -9 -y -r -q $ziparc *;/bin/mv $ziparc ../;"; #/bin/rm -rf $path";
     $runzip = `$zipcommand` if (-e $path);
-    $datalinks = "$downloadclick <a href=\"/tmp/$ziparc\">zipfile $topic_name</a><br>";
+    $datalinks = "$downloadclick <a href=\"$drupal_files/$ziparc\">zipfile $topic_name</a><br>";
     $datalinks = '' unless (keys %data);
 
     $downloadclick = $downloadpage1 unless (keys %data);
