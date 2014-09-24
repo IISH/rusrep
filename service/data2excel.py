@@ -10,6 +10,7 @@ import psycopg2.extras
 import pprint
 import collections
 import getopt
+import xlsxwriter
 import ConfigParser
 
 # Reading parameters
@@ -18,11 +19,12 @@ def read_params():
 	datatype = 0
 	filename = 'output.xls'
 	region = 0
-	global debug 
+	fields = ''
+	global debug
 	debug = 0
 
 	try:
-    	    myopts, args = getopt.getopt(sys.argv[1:],"y:d:h:r:f:Dp:")
+    	    myopts, args = getopt.getopt(sys.argv[1:],"y:d:h:r:f:Dp:F:c:")
         except getopt.GetoptError as e:
     		print (str(e))
     		print("Usage: %s -y year -d datatype -r region -f filename -DDEBUG -o output" % sys.argv[0])
@@ -39,15 +41,19 @@ def read_params():
 		filename=a
 	    elif o == '-p':
 		path=a
+            elif o == '-F':
+                fields=a
+            elif o == '-c':
+                copyrights=a
 	    elif o == '-D':
 		debug=1
 
 	if debug:
 	    print filename + "\n"
 
-        return (year, datatype, region, filename, path, debug)
+        return (year, datatype, region, filename, path, fields, copyrights, debug)
 
-def load_data(year, datatype, region, debug):
+def load_data(year, datatype, region, copyrights, debug):
 
         cparser = ConfigParser.RawConfigParser()
         cpath = "/etc/apache2/rusrep.config"
@@ -75,7 +81,9 @@ def load_data(year, datatype, region, debug):
 	    query += " AND territory = '%s'" % region
         if debug:
 	    print query + " TEST <br>\n"
-	query += 'order by territory asc'
+	# In Excel 2003, the maximum worksheet size is 65536 rows by 256 columns
+	# this should be improved in further version
+	query += ' order by ter_code asc limit 65535'
 
 	# execute
         cursor.execute(query)
@@ -102,17 +110,34 @@ def main():
     filename = ''
     datadir = "/home/clio-infra/public_html/tmp/"
 
-    (year, datatype, region, filename, datadir, debug) = read_params()
-    (row_count, dataset) = load_data(year, datatype, region, debug)
+    (year, datatype, region, filename, datadir, fieldline, copyrights, debug) = read_params()
+    (row_count, dataset) = load_data(year, datatype, region, copyrights, debug)
 
     wb = xlwt.Workbook(encoding='utf')
 
     f_short_name = "Data"
     ws = wb.add_sheet(str(f_short_name))
+    fieldline = "ID,TERRITORY,TER_CODE,TOWN,DISTRICT,YEAR,MONTH,VALUE,VALUE_UNIT,VALUE_LABEL,DATATYPE,HISTCLASS1,HISTCLASS2,HISTCLASS3,HISTCLASS4,HISTCLASS5,HISTCLASS6,HISTCLASS7,CLASS1,CLASS2,CLASS3,CLASS4,CLASS5,CLASS6,CLASS7,COMMENT_SOURCE,SOURCE,VOLUME,PAGE,NABORSHIK_ID,COMMENT_NABORSHIK"
+    fieldnames = fieldline.split(',')
+    i = 0
+    for row in fieldnames:
+	ws.write(0, i, row)
+        i = i+1
+
     for i in range(1,row_count):
-	for j in range(len(dataset[i])):
+	ulen = len(dataset[i]) - 1
+	for j in range(1,ulen):
 	     value = dataset[i][j]
-             ws.write(i, j, value)
+             if not (value > 0):
+		if (j == 8):
+                	value = "0"
+		else:
+			value = '.'
+             ws.write(i, j-1, value)
+
+    f_copyrights_name = "Copyrights"
+    wscop = wb.add_sheet(str(f_copyrights_name))
+    wscop.write(0,0,copyrights)
 
     wb.save(datadir + "/" + filename)
     print datadir + "/" + filename

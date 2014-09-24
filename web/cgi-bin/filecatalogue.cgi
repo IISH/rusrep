@@ -437,7 +437,7 @@ sub find_papers
 	$topicfilter = $topic_root."_00";
    }
 
-   my $year;
+   #my $year;
    while (my $file = readdir(DIR)) {
 	my $include;
         if ($file=~/\.doc/ && (!$year || ($file=~/$year/)))
