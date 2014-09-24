@@ -263,7 +263,7 @@ sub readtopics
 		if ($selectedyears{$year})
 		{
 		     # Showyear management 
-		     my $showyear = "<img width=20 height=20 src=\"/$checkicon\">";
+		     my $showyear = "<img width=20 height=20 src=\"$checkicon\">";
 		     $showyear = "<input type=checkbox name=\"datatype-$datatype-$year\">" unless ($datapage);
 		     $url = "?topic=$topic_id&d=$datatype";
 		     $htmltopic.="<td width=\"5%\" align=\"center\">$showyear</td>" unless ($nohtml{$datatype});
