@@ -206,7 +206,7 @@ sub readtopics
 	    $filename = "ERRHS_".$datatype."_data_".$thisyear.".xls";
 	    $udatatype=$datatype;
 	    $udatatype=~s/\./\_/g;
-	    my @papers = find_papers($papersdir, $udatatype);
+	    my @papers = find_papers($papersdir, $udatatype, $topic_root, $thisyear);
 
 	    if (keys %data)
 	    {
@@ -270,7 +270,7 @@ sub readtopics
 		}
 		else
 		{
-		    $htmltopic.= "<td width=\"5%\" align=\"center\"><img width=20 height=20 src=\"/absent.jpg\"></td>" unless ($nohtml{$datatype});
+		    $htmltopic.= "<td width=\"5%\" align=\"center\"><img width=20 height=20 src=\"/sites/all/themes/ristat/images/absent.jpg\"></td>" unless ($nohtml{$datatype});
 		}
 	        }
 	    }
@@ -426,15 +426,30 @@ foreach $item (sort {$dataindex{$a} <=> $dataindex{$b}} keys %dataindex)
 
 sub find_papers
 {
-   my ($dir, $filter, $DEBUG) = @_;
-   my @files;
+   my ($dir, $filter, $topic_root, $year, $DEBUG) = @_;
+   my (@files, $topicfilter);
    opendir(DIR, $dir) or die $!;
 
+   # New filter to include topic documentation to every archive
+   if ($topic_root)
+   {
+	# for example, ERRHS_1_00
+	$topicfilter = $topic_root."_00";
+   }
+
+   my $year;
    while (my $file = readdir(DIR)) {
-        if ($file=~/\.doc/ && (!$filter || $file=~/$filter/i))
-        {
-            push(@files, "$dir/$file");
-        }
+	my $include;
+        if ($file=~/\.doc/ && (!$year || ($file=~/$year/)))
+  	{
+	    $include++ if (!$filter || $file=~/$filter/i);
+	    $include++ if ($topicfilter && $file=~/$topicfilter/);
+
+	    if ($include)
+            {
+                push(@files, "$dir/$file");
+            }
+	}
    }
    closedir(DIR);
 
