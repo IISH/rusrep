@@ -342,18 +342,20 @@ function selectyears(datatype)
 </script>
 ";
 
-    $html.="<table border=1 class=\"rrtable\">
-	<thead>
-	<tr align=center><td>&nbsp;</td><td>$datatype_intro</td><td>1795</td><td>1858</td><td>1897</td><td>1959</td><td>2002</td></tr>
-	</thead>
-	<tbody>
-	$htmltopic
-	</tbody>
-	</table>";
+    $html.="<table border=\"1\" class=\"rrtable\"><thead><tr align=\"center\"><td>&nbsp;</td><td>";
 
     print("<form name=\"submit\" action=\"/datasets/indicators\" method=\"get\">");
     print($downloadlink);
+
     print($html);
+    print($datatype_intro) ;
+    print("</td><td>1795</td><td>1858</td><td>1897</td><td>1959</td><td>2002</td></tr>
+            </thead>
+            <tbody>
+            $htmltopic
+            </tbody>
+            </table>");
+
     print($datalinks);
     print("</form>");
     exit(0);
