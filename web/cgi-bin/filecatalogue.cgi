@@ -350,14 +350,12 @@ function selectyears(datatype)
 	$htmltopic
 	</tbody>
 	</table>";
-    $html="
-    <form name=\"submit\" action=\"/datasets/indicators\" method=\"get\">
-    $downloadlink
-$html
-    $datalinks
-    </form>
-    ";
-    print "$html\n";
+
+    print("<form name=\"submit\" action=\"/datasets/indicators\" method=\"get\">");
+    print($downloadlink);
+    print($html);
+    print($datalinks);
+    print("</form>");
     exit(0);
 }
 
