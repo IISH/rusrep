@@ -60,7 +60,6 @@ def load_data(year, datatype, region, copyrights, debug):
         cparser.read(cpath)
 
         conn_string = "host='%s' dbname='%s' user='%s' password='%s'" % (cparser.get('config', 'dbhost'), cparser.get('config', 'dbname'), cparser.get('config', 'dblogin'), cparser.get('config', 'dbpassword'))
-
         # products will be loaded in tulips
         data = {}
 
@@ -74,7 +73,7 @@ def load_data(year, datatype, region, copyrights, debug):
         # Example SQL: cursor.execute("select * from russianrepository where year='1897' and datatype='3.01' limit 1000")
 	query = "select * from russianrepository WHERE 1 = 1 ";
         if year > 0:
-	    query += " AND year = '%s'" % year
+	    query += " AND base_year = '%s'" % year
         if datatype > 0:
             query += " AND datatype = '%s'" % datatype
 	if region:

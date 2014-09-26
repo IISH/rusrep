@@ -10,8 +10,6 @@ use utf8;
 use Encode;
 use DB_File;
 use DBI;
-#use ClioInfra;
-#use ClioTemplates;
 use Configme;
 $| = 1;
 
@@ -28,6 +26,7 @@ $introrus = $dbconfig{intro_rus};
 $data2excel = $dbconfig{data2excel};
 $scriptdir = $dbconfig{scriptdir};
 $workpath = $dbconfig{workpath};
+$imgpath = "/sites/all/themes/ristat/images";
 $checkicon = $dbconfig{checkicon};
 $note = $dbconfig{note};
 $note_rus = $dbconfig{note_rus};
@@ -52,6 +51,7 @@ my $path_date = sprintf("%04d%02d%02d.%02d%02d%02d", $time[5]+1900, $time[4]+1, 
 my $edit_date = $create_date;
 
 $path = $workpath;
+$path.="/" unless ($path=~/\/$/);
 $path.="$path_date";
 
 use Getopt::Long;
@@ -67,6 +67,7 @@ my $result = GetOptions(
     'command=s' => \$command,
     'uri=s' => \$uri,
     'download=s' => \$download,
+    'lang=s' => \$lang,
     'debug=s' => \$debug
 );
 
@@ -98,7 +99,7 @@ if ($uri=~/^.+?\?(.+)$/)
 {
    $uricom = $1;
 }
-$lang = 'en';
+$lang = 'en' unless ($lang);
 if ($uri=~/\/ru\//i)
 {
    $lang = 'ru';
@@ -173,9 +174,22 @@ sub readtopics
     $yquery = "select year_id from datasets.years order by year_id asc";
     my $sth = $dbh->prepare("$yquery");
     $sth->execute();
+    my $yearslist;
     while (my $year_id = $sth->fetchrow_array())
     {
 	push(@years, $year_id); 
+	$yearslist.="'$year_id', ";
+    }
+    $yearslist=~s/\,\s+$//g;
+
+    $sqlquery = "select base_year, datatype, count(*) as count from russianrepository where base_year in ($yearslist) group by base_year, datatype";
+    my $sth = $dbh->prepare("$sqlquery");
+    $sth->execute();
+
+    while (my ($year_id, $datafloat, $count) = $sth->fetchrow_array())
+    {
+	my $thisdatatype = sprintf("%.02f", $datafloat);
+	$active{$year_id}{$thisdatatype} = $count;
     }
 
     $histclass_root = '0' unless ($histclass_root);
@@ -186,12 +200,8 @@ sub readtopics
     $sqlquery.=" order by datatype asc";
     print "$sqlquery\n" if ($DEBUG);
 
-    #@years = (1795, 1858, 1897, 1959, 2002);
-    $thisyear = "1897";
-    $active{$thisyear}++;
-    $active{"2002"}++;
     my %nohtml;
-    foreach $thisyear (sort keys %active)
+    foreach $thisyear (@years) #sort keys %active)
     {
         my $sth = $dbh->prepare("$sqlquery");
         $sth->execute();
@@ -200,7 +210,7 @@ sub readtopics
         {
 	    %selectedyears = %{$activeyearsdict{$datatype}} if ($activeyearsdict{$datatype});
 	    %selectedyears = %active unless (keys %selectedyears);
-	    if ($selectedyears{$thisyear}) 
+	    if ($selectedyears{$thisyear}) # && $active{$thisyear}{$datatype})
 	    {
 	    my $topicdata;
 	    $topic_name = $topic_name_rus if ($lang eq 'ru');
@@ -211,7 +221,7 @@ sub readtopics
 
 	    if (keys %data)
 	    {
-	        $datalinks.= "<a href=\"/tmp/dataset.$datatype.xls\">Excel for $topic_name</a> $datatype $path<br>";
+	        $datalinks.= "<a href=\"$drupal_files/dataset.$datatype.xls\">Excel for $topic_name</a> $datatype $path<br>";
 	        $datafile = `$data2excel -y $thisyear -d $datatype -f $filename -p $path -c '$introtext' -D `;
 		print "DEBUG $data2excel -y $thisyear -d $datatype -f $filename -p $path -D<br>" if ($DEBUG);
 		push(@datafiles, $datafile);
@@ -261,17 +271,17 @@ sub readtopics
 		$OPENTOPIC++;
 	        foreach $year (@years)
 	        {
-		if ($selectedyears{$year})
+		if ($selectedyears{$year} && $active{$year}{$datatype})
 		{
 		     # Showyear management 
-		     my $showyear = "<img width=20 height=20 src=\"$checkicon\">";
+		     my $showyear = "<img width=20 height=20 src=\"$imgpath/$checkicon\">";
 		     $showyear = "<input type=checkbox name=\"datatype-$datatype-$year\">" unless ($datapage);
 		     $url = "?topic=$topic_id&d=$datatype";
 		     $htmltopic.="<td width=\"5%\" align=\"center\">$showyear</td>" unless ($nohtml{$datatype});
 		}
 		else
 		{
-		    $htmltopic.= "<td width=\"5%\" align=\"center\"><img width=20 height=20 src=\"/sites/all/themes/ristat/images/absent.jpg\"></td>" unless ($nohtml{$datatype});
+		    $htmltopic.= "<td width=\"5%\" align=\"center\"><img width=20 height=20 src=\"$imgpath/absent.jpg\"></td>" unless ($nohtml{$datatype});
 		}
 	        }
 	    }

@@ -2,6 +2,8 @@ package Configme;
 
 use vars qw(@ISA @EXPORT @EXPORT_OK %EXPORT_TAGS $VERSION);
 
+use utf8;
+use DBI;
 use Exporter;
 
 $VERSION = 1.00;
@@ -9,6 +11,7 @@ $VERSION = 1.00;
 
 @EXPORT = qw(
 		loadconfig
+		loaddbconfig
 	   );
 
 sub loadconfig
@@ -27,4 +30,22 @@ sub loadconfig
     close(conf);
 
     return %config;
+}
+
+sub loaddbconfig
+{
+    my ($dbh, $DEBUG) = @_;
+    my %dbconfig;
+
+    $sqlquery = "select name, value, lang from datasets.configuration";
+    my $sth = $dbh->prepare("$sqlquery");
+    $sth->execute();
+
+    # lang reserved for other languages
+    while (my ($name, $value, $lang) = $sth->fetchrow_array())
+    {
+	$dbconfig{$name} = $value;
+    }
+
+    return %dbconfig;
 }
