@@ -1,3 +1,5 @@
+#!/usr/bin/perl
+#
 # Copyright (C) 2014 International Institute of Social History.
 #
 # This program is free software: you can redistribute it and/or  modify
@@ -24,45 +26,37 @@
 # delete this exception statement from all source files in the program,
 # then also delete it in the license file.
 
-package Ord;
+use vars qw/$libpath/;
+use FindBin qw($Bin);
+BEGIN { $libpath="$Bin" };
+use lib "$libpath";
+use lib "$libpath/../libs";
 
-use vars qw(@ISA @EXPORT @EXPORT_OK %EXPORT_TAGS $VERSION);
 use utf8;
-use Encode;
+use Configme;
+use DBI;
+my %dbconfig = loadconfig("$Bin/../config/russianrep.config");
+my ($dbname, $dbhost, $dblogin, $dbpassword) = ($dbconfig{dbname}, $dbconfig{dbhost}, $dbconfig{dblogin}, $dbconfig{dbpassword});
+my $dbh = DBI->connect("dbi:Pg:dbname=$dbname;host=$dbhost",$dblogin,$dbpassword,{AutoCommit=>1,RaiseError=>1,PrintError=>0});
 
-use Exporter;
-
-$VERSION = 1.00;
-@ISA = qw(Exporter);
-
-@EXPORT = qw(
-		ordering
-);
-
-sub ordering
+foreach $name (keys %dbconfig)
 {
-   my ($name, $DEBUG) = @_;
-
-   if ($name)
-   {
-        $text = decode_utf8($name);
-        if ($text=~/^\s*(\S)(\S)/)
-        {
-            $first = $1;
-            $second = lc $2;
-            $lc = lc $first;
-            $up = uc $first;
-            $ordID = ord($lc);
-            $ordIDindex = ord($lc)*100000 + ord($second);
-            my $thisitem = encode_utf8($text);
-            print "$first $text $ordID\n" if ($DEBUG);
-            $data{$text} = $ordID;
-            $dataindex{$text} = $ordIDindex;
-            $datachr{$text} = $up;
-            $index{$up} = $ordID;
-        }
+    if ($name=~/^(.+?)\_rus/)
+    {
+	my $default = $1;
+	print "$name => $dbconfig{$name}\n" if ($DEBUG);
+	sync_config($dbh, $name, $dbconfig{$name}, 'rus');
+	print "$default => $dbconfig{$default}\n" if ($DEBUG);
+ 	sync_config($dbh, $default, $dbconfig{$default}, 'eng');
     }
+}
 
-    return $ordIDindex;
-};
+sub sync_config
+{
+    my ($dbh, $name, $value, $lang) = @_;
 
+    $dbh->do("delete from datasets.configuration where name='$name'");
+    $dbh->do("insert into datasets.configuration (name, value, lang) values ('$name', '$value', '$lang')"); 
+
+    return;
+}
