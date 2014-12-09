@@ -150,7 +150,7 @@ def main():
 	ws.write(0, i, row)
         i = i+1
 
-    for i in range(1,row_count):
+    for i in range(1,row_count+1):
 	ulen = len(dataset[i]) - 1
 	for j in range(1,ulen):
 	     value = dataset[i][j]
