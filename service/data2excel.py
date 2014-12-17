@@ -1,31 +1,4 @@
 #!/usr/bin/python
-#
-# Copyright (C) 2014 International Institute of Social History.
-# @author Vyacheslav Tykhonov <vty@iisg.nl>
-#
-# This program is free software: you can redistribute it and/or  modify
-# it under the terms of the GNU Affero General Public License, version 3,
-# as published by the Free Software Foundation.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU Affero General Public License for more details.
-#
-# You should have received a copy of the GNU Affero General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
-#
-# As a special exception, the copyright holders give permission to link the
-# code of portions of this program with the OpenSSL library under certain
-# conditions as described in each individual source file and distribute
-# linked combinations including the program with the OpenSSL library. You
-# must comply with the GNU Affero General Public License in all respects
-# for all of the code used other than as permitted herein. If you modify
-# file(s) with this exception, you may extend this exception to your
-# version of the file(s), but you are not obligated to do so. If you do not
-# wish to do so, delete this exception statement from your version. If you
-# delete this exception statement from all source files in the program,
-# then also delete it in the license file.
 
 import glob
 import csv
@@ -40,6 +13,22 @@ import getopt
 import xlsxwriter
 import ConfigParser
 
+# Find configuration
+def walkpath (name, path):
+    for root, dirs, files in os.walk(path):
+        if name in files:
+            return os.path.join(root, name)
+
+def findconfig(configfile):
+    #configfile = 'russianrep.config'
+    basedir = '/etc/apache2'
+
+    if os.path.isfile(basedir + '/' + configfile):
+         filename = basedir + '/' + configfile
+    else:
+         filename = walkpath(configfile, '../../../')
+    return filename
+
 # Reading parameters
 def read_params():
 	year = 0
@@ -47,7 +36,7 @@ def read_params():
 	filename = 'output.xls'
 	region = 0
 	fields = ''
-	global debug
+	global debug 
 	debug = 0
 
 	try:
@@ -81,9 +70,9 @@ def read_params():
         return (year, datatype, region, filename, path, fields, copyrights, debug)
 
 def load_data(year, datatype, region, copyrights, debug):
-
+        #Define connection to database from default configuration file 
         cparser = ConfigParser.RawConfigParser()
-        cpath = "/etc/apache2/rusrep.config"
+        cpath = findconfig('russianrep.config');
         cparser.read(cpath)
 
         conn_string = "host='%s' dbname='%s' user='%s' password='%s'" % (cparser.get('config', 'dbhost'), cparser.get('config', 'dbname'), cparser.get('config', 'dblogin'), cparser.get('config', 'dbpassword'))
@@ -143,7 +132,7 @@ def main():
 
     f_short_name = "Data"
     ws = wb.add_sheet(str(f_short_name))
-    fieldline = "ID,TERRITORY,TER_CODE,TOWN,DISTRICT,YEAR,MONTH,VALUE,VALUE_UNIT,VALUE_LABEL,DATATYPE,HISTCLASS1,HISTCLASS2,HISTCLASS3,HISTCLASS4,HISTCLASS5,HISTCLASS6,HISTCLASS7,CLASS1,CLASS2,CLASS3,CLASS4,CLASS5,CLASS6,CLASS7,COMMENT_SOURCE,SOURCE,VOLUME,PAGE,NABORSHIK_ID,COMMENT_NABORSHIK"
+    fieldline = "ID,TERRITORY,TER_CODE,TOWN,DISTRICT,YEAR,MONTH,VALUE,VALUE_UNIT,VALUE_LABEL,DATATYPE,HISTCLASS1,HISTCLASS2,HISTCLASS3,HISTCLASS4,HISTCLASS5,HISTCLASS6,HISTCLASS7,HISTCLASS8,HISTCLASS9,HISTCLASS10,CLASS1,CLASS2,CLASS3,CLASS4,CLASS5,CLASS6,CLASS7,CLASS8,CLASS9,CLASS10,COMMENT_SOURCE,SOURCE,VOLUME,PAGE,NABORSHIK_ID,COMMENT_NABORSHIK"
     fieldnames = fieldline.split(',')
     i = 0
     for row in fieldnames:
