@@ -145,7 +145,7 @@ def main():
 	     value = dataset[i][j]
              if not (value > 0):
 		if (j == 8):
-                	value = "0"
+                	value = "."
 		else:
 			value = '.'
              ws.write(i, j-1, value)
