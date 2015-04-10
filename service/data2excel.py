@@ -96,7 +96,7 @@ def load_data(year, datatype, region, copyrights, debug):
             query += " AND datatype = '%s'" % datatype
 	if region:
 	    query += " AND territory = '%s'" % region
-	query += ' order by reg.region_ord asc limit 65535'
+	query += ' order by reg.region_ord asc' # limit 65535'
 
         if debug:
 	    print query + " TEST <br>\n"
@@ -133,10 +133,10 @@ def main():
     (year, datatype, region, filename, datadir, fieldline, copyrights, debug) = read_params()
     (row_count, dataset) = load_data(year, datatype, region, copyrights, debug)
 
-    wb = xlwt.Workbook(encoding='utf')
+    wb = xlsxwriter.Workbook(datadir + "/" + filename)
 
     f_short_name = "Data"
-    ws = wb.add_sheet(str(f_short_name))
+    ws = wb.add_worksheet(str(f_short_name))
     fieldline = "ID,TERRITORY,TER_CODE,TOWN,DISTRICT,YEAR,MONTH,VALUE,VALUE_UNIT,VALUE_LABEL,DATATYPE,HISTCLASS1,HISTCLASS2,HISTCLASS3,HISTCLASS4,HISTCLASS5,HISTCLASS6,HISTCLASS7,HISTCLASS8,HISTCLASS9,HISTCLASS10,CLASS1,CLASS2,CLASS3,CLASS4,CLASS5,CLASS6,CLASS7,CLASS8,CLASS9,CLASS10,COMMENT_SOURCE,SOURCE,VOLUME,PAGE,NABORSHIK_ID,COMMENT_NABORSHIK"
     fieldnames = fieldline.split(',')
     i = 0
@@ -156,7 +156,7 @@ def main():
              ws.write(i, j-1, value)
 
     f_copyrights_name = "Copyrights"
-    wscop = wb.add_sheet(str(f_copyrights_name))
+    wscop = wb.add_worksheet(str(f_copyrights_name))
     c = copyrights
     copyright = c.split("|")
     i = 0
@@ -164,7 +164,7 @@ def main():
         i = i + 1
         wscop.write(i,0, copyline)
 
-    wb.save(datadir + "/" + filename)
+    wb.close()
     print datadir + "/" + filename
 
     if debug:
