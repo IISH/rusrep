@@ -1,4 +1,5 @@
 #!/usr/bin/python
+# -*- coding: utf-8 -*-
 
 import glob
 import csv
@@ -87,18 +88,22 @@ def load_data(year, datatype, region, copyrights, debug):
 
         # execute our Query
         # Example SQL: cursor.execute("select * from russianrepository where year='1897' and datatype='3.01' limit 1000")
-	query = "select * from russianrepository WHERE 1 = 1 ";
+	#query = "select * from russianrepository WHERE 1 = 1 ";
+	query = "select r.indicator_id,r.id,reg.region_name,r.ter_code,r.town,r.district,r.year,r.month,r.value,r.value_unit,r.value_label,r.datatype,r.histclass1,r.histclass2,r.histclass3,r.histclass4,r.histclass5,r.histclass6,r.histclass7,r.histclass8,r.histclass9,r.histclass10,r.class1,r.class2,r.class3,r.class4,r.class5,r.class6,r.class7,r.class8,r.class9,r.class10,r.comment_source,r.source,r.volume,r.page,r.naborshik_id,r.comment_naborshik,r.base_year,r.indicator,r.valuemark from russianrepository as r, datasets.regions as reg where r.ter_code=reg.region_code ";
         if year > 0:
 	    query += " AND base_year = '%s'" % year
         if datatype > 0:
             query += " AND datatype = '%s'" % datatype
 	if region:
 	    query += " AND territory = '%s'" % region
+	query += ' order by reg.region_ord asc limit 65535'
+
         if debug:
 	    print query + " TEST <br>\n"
 	# In Excel 2003, the maximum worksheet size is 65536 rows by 256 columns
 	# this should be improved in further version
-	query += ' order by ter_code asc limit 65535'
+	#query += ' order by id asc limit 65535'
+	#query += ' limit 65535'
 
 	# execute
         cursor.execute(query)
@@ -141,18 +146,23 @@ def main():
 
     for i in range(1,row_count+1):
 	ulen = len(dataset[i]) - 1
-	for j in range(1,ulen):
+	for j in range(1,ulen-1):
 	     value = dataset[i][j]
              if not (value > 0):
 		if (j == 8):
-                	value = "0"
+                	value = "."
 		else:
 			value = '.'
              ws.write(i, j-1, value)
 
     f_copyrights_name = "Copyrights"
     wscop = wb.add_sheet(str(f_copyrights_name))
-    wscop.write(0,0,copyrights)
+    c = copyrights
+    copyright = c.split("|")
+    i = 0
+    for copyline in copyright:
+        i = i + 1
+        wscop.write(i,0, copyline)
 
     wb.save(datadir + "/" + filename)
     print datadir + "/" + filename

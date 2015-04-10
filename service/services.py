@@ -1,30 +1,3 @@
-# Copyright (C) 2014 International Institute of Social History.
-# @author Vyacheslav Tykhonov <vty@iisg.nl>
-#
-# This program is free software: you can redistribute it and/or  modify
-# it under the terms of the GNU Affero General Public License, version 3,
-# as published by the Free Software Foundation.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU Affero General Public License for more details.
-#
-# You should have received a copy of the GNU Affero General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
-#
-# As a special exception, the copyright holders give permission to link the
-# code of portions of this program with the OpenSSL library under certain
-# conditions as described in each individual source file and distribute
-# linked combinations including the program with the OpenSSL library. You
-# must comply with the GNU Affero General Public License in all respects
-# for all of the code used other than as permitted herein. If you modify
-# file(s) with this exception, you may extend this exception to your
-# version of the file(s), but you are not obligated to do so. If you do not
-# wish to do so, delete this exception statement from your version. If you
-# delete this exception statement from all source files in the program,
-# then also delete it in the license file.
-
 from flask import Flask, Response, request
 from twisted.web import http
 import json
@@ -72,7 +45,11 @@ def json_generator(c, jsondataname, data):
             jsonlist.append(datakeys)
         
         jsonhash[jsondataname] = jsonlist;
-        json_string = json.dumps(jsonhash, encoding="utf-8", sort_keys=True, indent=4)
+        json_string = json.dumps(jsonhash, encoding="utf8", ensure_ascii=False, sort_keys=True, indent=4)
+	#encoding="utf8"
+	#.decode('unicode-escape')
+ 	#.encode('utf8')
+	#json_string = json.dumps(jsonhash, ensure_ascii=False,indent=4).encode('utf8')
 
         return json_string
 
@@ -140,8 +117,7 @@ def load_regions(cursor):
         # retrieve the records from the database
         data = cursor.fetchall()
 	jsondata = json_generator(cursor, 'regions', data)
-
-        return jsondata
+	return jsondata
 
 def load_data(cursor, year, datatype, region, debug):
         data = {}
@@ -184,25 +160,25 @@ def test():
 def topics():
     cursor = connect()
     data = load_topics(cursor)
-    return Response(data,  mimetype='application/json')
+    return Response(data,  mimetype='application/json; charset=utf-8')
 
 @app.route('/histclasses')
 def classes():
     cursor = connect()
     data = load_classes(cursor)
-    return Response(data,  mimetype='application/json')
+    return Response(data,  mimetype='application/json; charset=utf-8')
 
 @app.route('/years')
 def years():
     cursor = connect()
     data = load_years(cursor)
-    return Response(data,  mimetype='application/json')
+    return Response(data,  mimetype='application/json; charset=utf-8')
 
 @app.route('/regions')
 def regions():
     cursor = connect()
     data = load_regions(cursor)
-    return Response(data,  mimetype='application/json')
+    return Response(data,  mimetype='application/json; charset=utf-8')
 
 @app.route('/data')
 def data():
@@ -212,7 +188,7 @@ def data():
     region = 0
     debug = 0
     data = load_data(cursor, year, datatype, region, debug)
-    return Response(data,  mimetype='application/json')
+    return Response(data,  mimetype='application/json; charset=utf-8')
 
 # http://bl.ocks.org/mbostock/raw/4090846/us.json
 @app.route('/maps')
@@ -220,7 +196,7 @@ def maps():
     donors_choose_url = "http://bl.ocks.org/mbostock/raw/4090846/us.json"
     response = urllib2.urlopen(donors_choose_url)
     json_response = json.load(response)
-    return Response(json_response,  mimetype='application/json')
+    return Response(json_response,  mimetype='application/json; charset=utf-8')
 
 if __name__ == '__main__':
     app.run()
