@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #
-# Copyright (C) 2014 International Institute of Social History.
+# Copyright (C) 2014-2015 International Institute of Social History.
 # @author Vyacheslav Tykhonov <vty@iisg.nl>
 #
 # This program is free software: you can redistribute it and/or  modify
@@ -46,14 +46,28 @@ $indicatorlink ="indicator.html";
 $htmltemplate = "$Bin/../templates/countries.tpl";
 
 my %dbconfig = loadconfig("$Bin/../config/russianrep.config");
+
+my ($dbname, $dbhost, $dblogin, $dbpassword) = ($dbconfig{dbname}, $dbconfig{dbhost}, $dbconfig{dblogin}, $dbconfig{dbpassword});
+my $dbh = DBI->connect("dbi:Pg:dbname=$dbname;host=$dbhost",$dblogin,$dbpassword,{AutoCommit=>1,RaiseError=>1,PrintError=>0});
+# Overwrite confuration settings for locale
+%dbvars = loaddbconfig($dbh);
+foreach $dbname (keys %dbvars)
+{
+    $dbconfig{$dbname} = $dbvars{$dbname};
+}
+
 $site = $dbconfig{root};
+$licence = $dbconfig{licence};
+$licence_rus = $dbconfig{licence_rus};
+$mainpaper = $dbconfig{mainpaper};
 $drupal_files = $dbconfig{drupal_files};
 $introtext = $dbconfig{intro};
 $introrus = $dbconfig{intro_rus};
 $data2excel = $dbconfig{data2excel};
 $scriptdir = $dbconfig{scriptdir};
 $workpath = $dbconfig{workpath};
-$theme = $dbconfig{theme};
+$imgpath = "/sites/all/themes/ristat/images";
+$checkicon = $dbconfig{checkicon};
 $note = $dbconfig{note};
 $note_rus = $dbconfig{note_rus};
 $downloadtext = $dbconfig{download};
@@ -65,9 +79,12 @@ $datatype_intro_rus = $dbconfig{datatype_intro_rus};
 $papersdir = $dbconfig{papersdir};
 $downloadpage1 = $dbconfig{downloadpage1};
 $downloadpage1_rus = $dbconfig{downloadpage1_rus};
-
-my ($dbname, $dbhost, $dblogin, $dbpassword) = ($dbconfig{dbname}, $dbconfig{dbhost}, $dbconfig{dblogin}, $dbconfig{dbpassword});
-my $dbh = DBI->connect("dbi:Pg:dbname=$dbname;host=$dbhost",$dblogin,$dbpassword,{AutoCommit=>1,RaiseError=>1,PrintError=>0});
+$warningblank = $dbconfig{warningblank};
+$warningblank_rus = $dbconfig{warningblank_rus};
+$accepttip = $dbconfig{accepttip};
+$declinetip = $dbconfig{declinetip};
+$accepttip_rus = $dbconfig{accepttip_rus};
+$declinetip_rus = $dbconfig{declinetip_rus};
 
 my ($dbname, $dbhost, $dblogin, $dbpassword) = ($dbconfig{webdbname}, $dbconfig{dbhost}, $dbconfig{dblogin}, $dbconfig{dbpassword});
 my $dbh_web = DBI->connect("dbi:Pg:dbname=$dbname;host=$dbhost",$dblogin,$dbpassword,{AutoCommit=>1,RaiseError=>1,PrintError=>0});
@@ -137,11 +154,15 @@ if ($uri=~s/lang\=(\w+)//)
 if ($lang eq 'ru')
 {
    $introtext = $introrus;
+   $licence = $licence_rus;
    $note = $note_rus;
    $downloadtext = $downloadtext_rus;
    $downloadclick = $downloadclick_rus;
    $datatype_intro = $datatype_intro_rus;
    $downloadpage1 = $downloadpage1_rus;
+   $warningblank = $warningblank_rus;
+   $accepttip = $accepttip_rus;
+   $declinetip = $declinetip_rus;
 }
 
 my @commands = split(/\&/, $uricom);
@@ -190,7 +211,37 @@ $topicIDs=~s/\,\s+$//g;
 $topicRoots=~s/\,\s+$//g;
 $datatypes=~s/\,\s+$//g;
 print "DATATYPES: $datatypes\n" if ($DEBUG);
-$html = readtopics($topicIDs,'',$filter_datatype);
+#print "F $filter_datatype $topicIDs\n";
+if ($topicIDs)
+{
+    $html = readtopics($topicIDs,'',$filter_datatype);
+}
+else
+{
+    if ($uri=~/\?$/)
+    {
+	print "<p>$note</p>\n";
+	print "<center><b>$warningblank</b></center>";
+    }
+    elsif ($uri=~/\?download\=(\S+)/)
+    {
+	$dataset = $1;
+	$dataset=~s/^(.+)\&.*$/$1/g;
+	$html = "
+<center>
+<form action=\"$drupal_files/$dataset\" Method=\"post\">
+<input type=\"hidden\" name=\"AcceptedorDeclined\" value=\"Accepted\">
+<input type=\"Submit\" name=\"Accept\" value=\"$accepttip\"><input type=\"button\" name=\"Decline\" value=\"$declinetip\" onclick=\"Javascript: alert('You must accept our terms and conditions')\">
+</form>
+</center>
+";
+	print "<p><b>$licence</b>\n$html</p>\n";
+    }
+    else
+    {
+        $html = readtopics($topicIDs,'',$filter_datatype);
+    }
+}
 
 sub readtopics
 {
@@ -236,22 +287,29 @@ sub readtopics
         {
 	    %selectedyears = %{$activeyearsdict{$datatype}} if ($activeyearsdict{$datatype});
 	    %selectedyears = %active unless (keys %selectedyears);
-	    if ($selectedyears{$thisyear}) # && $active{$thisyear}{$datatype})
+	    if ($selectedyears{$thisyear}) # && $active{$thisyear}{$datatype}) 
 	    {
 	    my $topicdata;
 	    $topic_name = $topic_name_rus if ($lang eq 'ru');
-	    $filename = "ERRHS_".$datatype."_data_".$thisyear.".xls";
+	    $filename = "ERRHS_".$datatype."_data_".$thisyear.".xlsx";
 	    $udatatype=$datatype;
 	    $udatatype=~s/\./\_/g;
 	    my @papers = find_papers($papersdir, $udatatype, $topic_root, $thisyear);
 
 	    if (keys %data)
 	    {
-	        $datalinks.= "<a href=\"$drupal_files/dataset.$datatype.xls\">Excel for $topic_name</a> $datatype $path<br>";
-	        $datafile = `$data2excel -y $thisyear -d $datatype -f $filename -p $path -c '$introtext' -D `;
+	        $datalinks.= "<a href=\"$drupal_files/dataset.$datatype.xlsx\">Excel for $topic_name</a> $datatype $path<br>";
+	        $datafile = `$data2excel -y $thisyear -d $datatype -f $filename -p $path -c '$introtext' -D ` unless ($NODATA);
 		print "DEBUG $data2excel -y $thisyear -d $datatype -f $filename -p $path -D<br>" if ($DEBUG);
 		push(@datafiles, $datafile);
 	    }
+	    if ($mainpaper)
+	    {
+		$cp = "/bin/cp $papersdir/$mainpaper $path";
+                $cp.="/" if ($cp!~/\/$/g);
+                $run = `$cp`;
+	    }
+
 	    foreach $file (@papers)
 	    {
 		$cp = "/bin/cp $file $path";
@@ -300,14 +358,14 @@ sub readtopics
 		if ($selectedyears{$year} && $active{$year}{$datatype})
 		{
 		     # Showyear management 
-		     my $showyear = "<img width=20 height=20 src=\"$theme/images/checkmark.png\">";
+		     my $showyear = "<img width=20 height=20 src=\"$imgpath/$checkicon\">";
 		     $showyear = "<input type=checkbox name=\"datatype-$datatype-$year\">" unless ($datapage);
 		     $url = "?topic=$topic_id&d=$datatype";
 		     $htmltopic.="<td width=\"5%\" align=\"center\">$showyear</td>" unless ($nohtml{$datatype});
 		}
 		else
 		{
-		    $htmltopic.= "<td width=\"5%\" align=\"center\"><img width=20 height=20 src=\"$theme/images/absent.jpg\"></td>" unless ($nohtml{$datatype});
+		    $htmltopic.= "<td width=\"5%\" align=\"center\"><img width=20 height=20 src=\"$imgpath/absent.jpg\"></td>" unless ($nohtml{$datatype});
 		}
 	        }
 	    }
@@ -329,7 +387,13 @@ sub readtopics
     $ziparc = "$path_date.zip";
     my $zipcommand = "cd $path;/usr/bin/zip -9 -y -r -q $ziparc *;/bin/mv $ziparc ../;"; #/bin/rm -rf $path";
     $runzip = `$zipcommand` if (-e $path);
-    $datalinks = "$downloadclick <a href=\"$drupal_files/$ziparc\">zipfile $topic_name</a><br>";
+    #$datalinks = "$downloadclick <a href=\"$drupal_files/$ziparc\">zipfile $topic_name</a><br>";
+    $download = "/datasets/indicators?download=$ziparc";
+    if ($lang eq 'ru')
+    {
+	$download= "/$lang$download&lang=$lang";
+    }
+    $datalinks = "$downloadclick <a href=\"$download\">zipfile $topic_name</a><br>";
     $datalinks = '' unless (keys %data);
 
     $downloadclick = $downloadpage1 unless (keys %data);
@@ -377,12 +441,14 @@ function selectyears(datatype)
 	$htmltopic
 	</tbody>
 	</table>";
-
-    print("<form name=\"submit\" action=\"/datasets/indicators\" method=\"get\">");
-    print($downloadlink);
-    print($html);
-    print($datalinks);
-    print("</form>");
+    $html="
+    <form name=\"submit\" action=\"/datasets/indicators\" method=\"get\">
+    $downloadlink
+$html
+    $datalinks
+    </form>
+    ";
+    print "$html\n";
     exit(0);
 }
 
