@@ -49,6 +49,7 @@ $mapintro_rus = $dbconfig{mapintro_rus};
 if ($uri=~/\/ru\//)
 {
    $mapintro = $mapintro_rus;
+   $lang = 'ru';
 }
 
 $workpath = $dbconfig{workpath};
@@ -64,6 +65,7 @@ unless ($file)
    {
        $line=~s/\%\%mapintro\%\%/$mapintro/g;
        $line=~s/\%\%tmpdir\%\%/$drupalfiles/g;
+       $line=~s/_eng(\.\w+)/$1/g if ($lang eq 'ru');
        print "$line";
    }
 }
