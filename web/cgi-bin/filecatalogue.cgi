@@ -68,6 +68,8 @@ $scriptdir = $dbconfig{scriptdir};
 $workpath = $dbconfig{workpath};
 $imgpath = "/sites/all/themes/ristat/images";
 $checkicon = $dbconfig{checkicon};
+# Default green icon
+$checkicon = "checkmark.png" unless ($checkicon);
 $note = $dbconfig{note};
 $note_rus = $dbconfig{note_rus};
 $downloadtext = $dbconfig{download};
