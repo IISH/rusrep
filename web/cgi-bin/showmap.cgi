@@ -6,14 +6,6 @@ BEGIN { $libpath="$Bin" };
 use lib "$libpath";
 use lib "$libpath/../libs";
 
-#!/usr/bin/perl
-
-use vars qw/$libpath/;
-use FindBin qw($Bin);
-BEGIN { $libpath="$Bin" };
-use lib "$libpath";
-use lib "$libpath/../libs";
-
 use utf8;
 use Encode;
 use DB_File;
@@ -22,6 +14,12 @@ use Configme;
 $| = 1;
 
 my %dbconfig = loadconfig("$Bin/../config/russianrep.config");
+
+my ($dbname, $dbhost, $dblogin, $dbpassword) = ($dbconfig{dbname}, $dbconfig{dbhost}, $dbconfig{dblogin}, $dbconfig{dbpassword});
+my $dbh = DBI->connect("dbi:Pg:dbname=$dbname;host=$dbhost",$dblogin,$dbpassword,{AutoCommit=>1,RaiseError=>1,PrintError=>0});
+# Overwrite confuration settings for locale
+%dbvars = loaddbconfig($dbh);
+
 use Getopt::Long;
 
 my $result = GetOptions(
@@ -40,14 +38,32 @@ open(mapfile, "$Bin/map.template.html");
 @map = <mapfile>;
 close(mapfile);
 
+%dbvars = loaddbconfig($dbh);
+foreach $dbname (keys %dbvars)
+{
+    $dbconfig{$dbname} = $dbvars{$dbname};
+}
+
 $mapintro = $dbconfig{mapintro};
 $mapintro_rus = $dbconfig{mapintro_rus};
 if ($uri=~/\/ru\//)
 {
    $mapintro = $mapintro_rus;
 }
-foreach $line (@map)
+
+$workpath = $dbconfig{workpath};
+$drupalfiles = $dbconfig{drupal_files};
+unless (-e "$workpath/data.csv")
 {
-   $line=~s/\%\%mapintro\%\%/$mapintro/g;
-   print "$line";
+   $cp = `/bin/cp $Bin/showcase/* $workpath/`;
+}
+
+unless ($file)
+{
+   foreach $line (@map)
+   {
+       $line=~s/\%\%mapintro\%\%/$mapintro/g;
+       $line=~s/\%\%tmpdir\%\%/$drupalfiles/g;
+       print "$line";
+   }
 }
