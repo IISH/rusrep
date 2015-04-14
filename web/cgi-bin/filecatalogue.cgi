@@ -93,10 +93,13 @@ my $dbh_web = DBI->connect("dbi:Pg:dbname=$dbname;host=$dbhost",$dblogin,$dbpass
 my @time = (localtime)[0..5];
 my $create_date = sprintf("%04d-%02d-%02d %02d:%02d", $time[5]+1900, $time[4]+1, $time[3], $time[2], $time[1]);
 my $path_date = sprintf("%04d%02d%02d.%02d%02d%02d", $time[5]+1900, $time[4]+1, $time[3], $time[2], $time[1], $time[0]); 
+$todaydate = sprintf("%04d%02d%02d", $time[5]+1900, $time[4]+1, $time[3]);
 my $edit_date = $create_date;
 
 $path = $workpath;
 $path.="/" unless ($path=~/\/$/);
+# Clean work path first
+cleanpath($path, $todaydate);
 $path.="$path_date";
 
 use Getopt::Long;
@@ -557,4 +560,24 @@ sub find_papers
    closedir(DIR);
 
    return @files;
+}
+
+sub cleanpath
+{
+    my ($workpath, $today, $DEBUG) = @_;
+    opendir(DIR, $workpath);
+    @files = readdir(DIR);
+    closedir(DIR);
+    
+    foreach $file (@files)
+    {
+	my ($todayfile, $zipfile, $folder);
+	$zipfile++ if ($file=~/\.zip/);
+	$folder++ if (-d "$workpath/$file");
+	$todayfile++ if ($file=~/$today/);
+	if (!$todayfile && ($zipfile || $folder))
+	{
+	    $rm = `/bin/rm -rf $workpath/$file`;
+	}
+    }
 }
