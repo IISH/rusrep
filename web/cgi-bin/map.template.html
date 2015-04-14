@@ -71,8 +71,8 @@ div.tooltip {
   //Reading map file and data
 
   queue()
-  .defer(d3.json, "/russia/russia_1e-7sr.json")
-  .defer(d3.csv, "/russia/Accidents.csv")
+  .defer(d3.json, "%%tmpdir%%/russia_1e-7sr.json")
+  .defer(d3.csv, "%%tmpdir%%/data.csv")
   .await(ready);
 
   //Start of Choropleth drawing
