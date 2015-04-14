@@ -119,7 +119,7 @@ div.tooltip {
   
    // Adding cities on the map
 
-  d3.tsv("/russia/cities_eng.tsv", function(error, data) {
+  d3.tsv("%%tmpdir%%/cities_eng.tsv", function(error, data) {
     var city = svg.selectAll("g.city")
     .data(data)
     .enter()
