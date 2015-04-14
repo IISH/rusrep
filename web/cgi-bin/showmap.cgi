@@ -53,7 +53,7 @@ if ($uri=~/\/ru\//)
 
 $workpath = $dbconfig{workpath};
 $drupalfiles = $dbconfig{drupal_files};
-unless (-e "$workpath/data.csv")
+unless (-e "$workpath/cities_eng.tsv")
 {
    $cp = `/bin/cp $Bin/showcase/* $workpath/`;
 }
