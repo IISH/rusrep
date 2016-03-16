@@ -115,13 +115,63 @@ def load_topics(cursor):
         
         return jsondata
 
+def datasetfilter(data, sqlnames, classification):
+    if data:
+        # retrieve the records from the database
+        datafilter = []
+        for dataline in data:
+            datarow = {}
+            active = ''
+            for i in range(len(sqlnames)):
+                name = sqlnames[i]
+                if classification == 'historical':
+                    if name.find("class", 0):
+                        try:
+                            nextvalue = dataline[i+1]
+                        except:
+                            nextvalue = '.'
+
+                        if (dataline[i] == "." and nextvalue == "."):
+                            skip = 'yes'
+                        else:
+                            toplevel = re.search("(\d+)", name)
+                            if name.find("histclass10", 0):
+                                datarow[name] = dataline[i]
+                                if toplevel:
+                                    datarow["levels"] = toplevel.group(0)
+                if classification == 'modern':
+                    if name.find("histclass", 0):
+                        try:
+                            nextvalue = dataline[i+1]
+                        except:
+                            nextvalue = '.'
+
+                        if (dataline[i] == "." and nextvalue == "."):
+                            skip = 'yes'
+                        else:
+                            toplevel = re.search("(\d+)", name)
+                            if name.find("class10", 0):
+                                datarow[name] = dataline[i]
+                                if toplevel:
+                                    if toplevel.group(0) != '10':
+                                        datarow["levels"] = toplevel.group(0)
+            try:
+                if datarow["levels"] > 0:
+                    datafilter.append(datarow)
+            except:
+                skip = 'yes'
+
+        if classification:
+	    return datafilter
+            #return json.dumps(datafilter, encoding="utf8", ensure_ascii=False, sort_keys=True, indent=4)
+
 def load_classes(cursor):
         data = {}
 	classification = 'historical'
 	if request.args.get('classification'):
 	    classification = request.args.get('classification')
 	if request.args.get('overview'):
-	    sql = "select distinct %s, year, datatype from datasets.classes where 1=1" % request.args.get('overview') 
+	    sql = "select distinct %s, year, datatype from datasets.classification where 1=1" % request.args.get('overview') 
 	    sql = sql + " AND %s <> '.'" % request.args.get('overview')
 	    if request.args.get('year'):
 		sql = sql + " AND %s = '%s' " % ('year', request.args.get('year'))
@@ -129,7 +179,7 @@ def load_classes(cursor):
                 sql = sql + " AND %s = '%s' " % ('datatype', request.args.get('datatype'))
 	
 	else:
-	    sql = "select * from datasets.classes where 1=1";
+	    sql = "select * from datasets.classification where 1=1";
             sql = sqlconstructor(sql)
 
         # execute
@@ -346,6 +396,38 @@ def data():
     debug = 0
     data = load_data(cursor, year, datatype, region, debug)
     return Response(data,  mimetype='application/json; charset=utf-8')
+
+@app.route('/filter', methods=['POST', 'GET'])
+def login(settings=''):
+    cursor = connect()
+    filter = {}
+    qinput = request.json
+    try:
+        if qinput['action'] == 'aggregate':
+	    sql = "select histclass1, datatype, value_unit, value, ter_code from russianrepository where 1=1 "
+    except:
+	sql = "select * from datasets.classification where 1=1";
+        #datatype='7.01' and base_year='1897' group by histclass1, datatype, value_unit, ter_code, value;
+    try:
+	classification = qinput['classification']	
+    except:
+	classification = 'historical'
+    forbidden = ["classification", "action", "language"]
+    for name in qinput:
+	if not name in forbidden:
+	    sql+= " AND %s='%s'" % (name, qinput[name])
+
+    #return sql
+    if sql:
+        # execute
+        cursor.execute(sql)
+	sqlnames = [desc[0] for desc in cursor.description]
+
+        data = cursor.fetchall()
+	jsondata = datasetfilter(data, sqlnames, classification)
+	return Response(jsondata,  mimetype='application/json; charset=utf-8')
+    else:
+	return ''
 
 # http://bl.ocks.org/mbostock/raw/4090846/us.json
 @app.route('/maps')
