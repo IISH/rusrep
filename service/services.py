@@ -162,8 +162,8 @@ def datasetfilter(data, sqlnames, classification):
                 skip = 'yes'
 
         if classification:
-	    return datafilter
-            #return json.dumps(datafilter, encoding="utf8", ensure_ascii=False, sort_keys=True, indent=4)
+	    #return datafilter
+            return json.dumps(datafilter, encoding="utf8", ensure_ascii=False, sort_keys=True, indent=4)
 
 def load_classes(cursor):
         data = {}
@@ -404,7 +404,7 @@ def login(settings=''):
     try:
         qinput = request.json
     except:
-        return 'OK' 
+        return '{}' 
     try:
         if qinput['action'] == 'aggregate':
 	    sql = "select histclass1, datatype, value_unit, value, ter_code from russianrepository where 1=1 "
