@@ -401,7 +401,10 @@ def data():
 def login(settings=''):
     cursor = connect()
     filter = {}
-    qinput = request.json
+    try:
+        qinput = request.json
+    except:
+        return 'OK' 
     try:
         if qinput['action'] == 'aggregate':
 	    sql = "select histclass1, datatype, value_unit, value, ter_code from russianrepository where 1=1 "
