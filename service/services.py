@@ -1,6 +1,7 @@
 from flask import Flask, Response, request
 from twisted.web import http
 import json
+import tables
 import urllib2
 import glob
 import csv
@@ -259,33 +260,6 @@ def load_classes(cursor):
 
         return jsondata
 
-def aggregate(cursor):
-        data = {}
-	sqlfields = ''
-	sqlkeys = ''
-        for key, value in request.args.iteritems():
-        #     extra = "%s<br>%s=%s<br>" % (extra, key, value)
-	    if sqlfields:
-	        sqlfields = "%s, %s" % (sqlfields, key)
-		sqlkeys = "%s, %s" % (sqlkeys, key)
-	    else:
-	  	sqlfields = key
-		sqlkeys = key
-	sql = "select cast(value as double precision) as value, value_unit, territory, year, histclass1, %s from russianrepository where 1=1" % sqlfields
-	sql = sqlconstructor(sql)
-	wheresql = "group by histclass1, territory, year, %s, value_unit, value" % sqlkeys
-	sql = "%s %s" % (sql, wheresql)
-	#return sql
-
-        # execute
-        cursor.execute(sql)
-
-        # retrieve the records from the database
-        data = cursor.fetchall()
-        jsondata = json_generator(cursor, 'data', data)
-
-        return jsondata
-
 def load_histclasses(cursor):
         data = {}
         sql = "select * from datasets.histclasses where 1=1";
@@ -363,11 +337,112 @@ def histclasses():
     data = load_histclasses(cursor)
     return Response(data,  mimetype='application/json; charset=utf-8')
 
-@app.route('/aggregate')
+@app.route('/aggregate1')
 def aggr():
     cursor = connect()
     data = aggregate(cursor)
     return Response(data,  mimetype='application/json; charset=utf-8')
+
+class Histclass(tables.IsDescription):
+    histclass1 = tables.StringCol(256,pos=0)
+    histclass2 = tables.StringCol(256,pos=0)
+    histclass3 = tables.StringCol(256,pos=0)
+
+@app.route('/aggregate', methods=['POST', 'GET'])
+def aggr():
+    data = {}
+    sqlfields = ''
+    sqlkeys = ''
+    cursor = connect()
+    try:
+        qinput = json.loads(request.data)
+    except:
+        return '{}'
+
+    forbidden = ["classification", "action", "language", "path"]
+    if cursor:
+        #     extra = "%s<br>%s=%s<br>" % (extra, key, value)
+	for key in qinput:
+	    if key not in forbidden:
+	        value = qinput[key]
+                if sqlfields:
+                    sqlfields = "%s, %s" % (sqlfields, key)
+                    sqlkeys = "%s, %s" % (sqlkeys, key)
+                else:
+                    sqlfields = key
+                    sqlkeys = key
+
+        sql = "select cast(value as double precision) as value, value_unit, territory, year, histclass1, histclass2, histclass3, histclass4, histclass5, histclass6, histclass7, histclass8, histclass9, histclass10, %s from russianrepository where 1=1" % sqlfields
+        for name in qinput:
+            if not name in forbidden:
+	        value = str(qinput[name])
+	        if value[0] != "[":
+                    sql+= " AND %s = '%s'" % (name, qinput[name])
+		else:
+		    orvalue = ''
+		    for val in qinput[name]:
+			orvalue+=" '%s'," % (val)
+		    orvalue = orvalue[:-1]
+		    sql+= " AND %s IN (%s)" % (name, orvalue)
+            elif name == 'path':
+                fullpath = qinput[name]
+		topsql = 'AND ('
+		for path in fullpath:	
+		    tmpsql = ' ('
+                    for xkey in path:
+		       tmpsql+= " %s = '%s' AND " % (xkey, path[xkey])
+		    tmpsql+='1=1 ) '
+		    topsql+=tmpsql + " OR "
+		topsql = topsql[:-3]
+		topsql+=')'
+		sql+=topsql
+
+        #sql = sqlconstructor(sql)
+        wheresql = "group by histclass1, histclass2, histclass3, histclass4, histclass5, histclass6, histclass7, histclass8, histclass9, histclass10, territory, year, %s, value_unit, value" % sqlkeys
+        sql = "%s %s" % (sql, wheresql)
+
+        # execute
+        cursor.execute(sql)
+	sqlnames = [desc[0] for desc in cursor.description]
+
+        # retrieve the records from the database
+        data = cursor.fetchall()
+	result = []
+	chain = {}
+        class inchain(object):
+    	    def __init__(self,name):
+                self.name = name
+
+	hclasses = {}
+	for row in data:
+	    lineitem = {}
+	    for i in range(0, len(sqlnames)):
+		if row[i]:
+	            lineitem[sqlnames[i]] = row[i] 
+
+	    sorteditems = {}
+	    order = []
+	    for item in sorted(lineitem):
+	 	order.append(item)
+	    for item in order:	
+		sorteditems[item] = lineitem[item]	
+	    x = collections.OrderedDict(sorted(sorteditems.items()))
+	    #return json.dumps(x)
+
+	    vocab = {}
+	    for i in range(1,10):
+	        histkey = "histclass%s" % str(i)
+		if histkey in x:
+		    vocab[histkey] = x[histkey]
+		    del x[histkey]
+	
+	    x['histclases'] = vocab
+	    result.append(x)
+	
+        #jsondata = json_generator(cursor, 'data', result)
+	#result = hclasses
+
+        return Response(json.dumps(result),  mimetype='application/json; charset=utf-8')
 
 @app.route('/classes')
 def classes():
@@ -396,6 +471,22 @@ def data():
     debug = 0
     data = load_data(cursor, year, datatype, region, debug)
     return Response(data,  mimetype='application/json; charset=utf-8')
+
+@app.route('/translate')
+def translate():
+    cursor = connect()
+    if cursor:
+        data = {}
+        sql = "select * from datasets.classmaps where 1=1";
+        sql = sqlfilter(sql)
+
+        # execute
+        cursor.execute(sql)
+
+        # retrieve the records from the database
+        data = cursor.fetchall()
+        jsondata = json_generator(cursor, 'data', data)
+	return Response(jsondata,  mimetype='application/json; charset=utf-8')
 
 @app.route('/filter', methods=['POST', 'GET'])
 def login(settings=''):
