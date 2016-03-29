@@ -91,8 +91,10 @@ def sqlconstructor(sql):
         for key, value in request.args.items():
             items = request.args.get(key, '')
             itemlist = items.split(",")
-            if key == 'classification':
-                do = 1
+	    if key == 'language':
+		skip = 1
+            elif key == 'classification':
+                skip = 1
 	    elif key == 'basisyear':
 		sql += " AND %s like '%s'" % ('region_code', sqlparams)
 	    else:
@@ -441,8 +443,11 @@ def aggr():
 	
         #jsondata = json_generator(cursor, 'data', result)
 	#result = hclasses
+	final = {}
+	final['url'] = 'http://ristat.sandbox.socialhistoryservices.org/datasets/indicators?download=20160329.115021.zip'
+	final['data'] = result
 
-        return Response(json.dumps(result),  mimetype='application/json; charset=utf-8')
+        return Response(json.dumps(final),  mimetype='application/json; charset=utf-8')
 
 @app.route('/classes')
 def classes():
