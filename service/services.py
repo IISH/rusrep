@@ -55,6 +55,32 @@ def json_generator(c, jsondataname, data):
 
         return json_string
 
+def translatedclasses(cursor, classinfo):
+    dictdata = {}
+    sql = "select * from datasets.classmaps"; # where class_rus in ";
+    sqlclass = ''
+    for classname in classinfo:
+	if sqlclass:
+            sqlclass = "%s, '%s'" % (sqlclass, classinfo[classname])
+	else:
+	    sqlclass = "'%s'" % classinfo[classname]
+    sql = "%s (%s)" % (sql, sqlclass)
+    sql = "select * from datasets.classmaps";
+    cursor.execute(sql)
+    data = cursor.fetchall()
+    sqlnames = [desc[0] for desc in cursor.description]
+    if data:
+        for valuestr in data:
+            datakeys = {}
+            for i in range(len(valuestr)):
+               name = sqlnames[i]
+               value = valuestr[i]
+               datakeys[name] = value
+            dictdata[datakeys['class_rus']] = datakeys
+	    dictdata[datakeys['class_eng']] = datakeys
+
+    return dictdata
+
 def load_years(cursor):
         data = {}
         sql = "select * from datasets.years where 1=1";
@@ -170,9 +196,12 @@ def datasetfilter(data, sqlnames, classification):
 
 def load_classes(cursor):
         data = {}
+	engdata = {}
 	classification = 'historical'
 	if request.args.get('classification'):
 	    classification = request.args.get('classification')
+	if request.args.get('language') == 'en':
+	    engdata = translatedclasses(cursor, request.args)
 	if request.args.get('overview'):
 	    sql = "select distinct %s, year, datatype from datasets.classification where 1=1" % request.args.get('overview') 
 	    sql = sql + " AND %s <> '.'" % request.args.get('overview')
@@ -209,7 +238,10 @@ def load_classes(cursor):
 			else:
 			    toplevel = re.search("(\d+)", name)
 			    if name.find("histclass10", 0):
-			        datarow[name] = dataline[i] 
+				value = dataline[i]
+				if value in engdata:
+				    value = engdata[value]['class_eng']
+			        datarow[name] = str(value) 
 			        if toplevel:
 				    datarow["levels"] = toplevel.group(0)
 
@@ -355,6 +387,7 @@ def aggr():
     data = {}
     sqlfields = ''
     sqlkeys = ''
+    engdata = {}
     cursor = connect()
     try:
         qinput = json.loads(request.data)
@@ -364,6 +397,10 @@ def aggr():
     forbidden = ["classification", "action", "language", "path"]
     if cursor:
         #     extra = "%s<br>%s=%s<br>" % (extra, key, value)
+	if 'language' in qinput:
+            if qinput['language']== 'en':
+                engdata = translatedclasses(cursor, request.args)
+
 	for key in qinput:
 	    if key not in forbidden:
 	        value = qinput[key]
@@ -378,11 +415,15 @@ def aggr():
         for name in qinput:
             if not name in forbidden:
 	        value = str(qinput[name])
+                if value in engdata:
+                    value = engdata[value]['class_rus']
 	        if value[0] != "[":
                     sql+= " AND %s = '%s'" % (name, qinput[name])
 		else:
 		    orvalue = ''
 		    for val in qinput[name]:
+			if val in engdata:
+			    val = engdata[val]['class_rus']
 			orvalue+=" '%s'," % (val)
 		    orvalue = orvalue[:-1]
 		    sql+= " AND %s IN (%s)" % (name, orvalue)
@@ -392,7 +433,10 @@ def aggr():
 		for path in fullpath:	
 		    tmpsql = ' ('
                     for xkey in path:
-		       tmpsql+= " %s = '%s' AND " % (xkey, path[xkey])
+		        value = path[xkey]
+		        if value in engdata:
+			    value = str(engdata[value]['class_rus'])
+		        tmpsql+= " %s = '%s' AND " % (xkey, value.decode('utf-8'))
 		    tmpsql+='1=1 ) '
 		    topsql+=tmpsql + " OR "
 		topsql = topsql[:-3]
@@ -420,7 +464,10 @@ def aggr():
 	    lineitem = {}
 	    for i in range(0, len(sqlnames)):
 		if row[i]:
-	            lineitem[sqlnames[i]] = row[i] 
+		    value = row[i]
+                    if value in engdata:
+                        value = engdata[value]['class_eng']
+	            lineitem[sqlnames[i]] = value 
 
 	    sorteditems = {}
 	    order = []
