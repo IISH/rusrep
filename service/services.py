@@ -436,7 +436,10 @@ def aggr():
 		        value = path[xkey]
 		        if value in engdata:
 			    value = str(engdata[value]['class_rus'])
-		        tmpsql+= " %s = '%s' AND " % (xkey, value.decode('utf-8'))
+			try:
+		            tmpsql+= " %s = '%s' AND " % (xkey, value.decode('utf-8'))
+			except:
+			    tmpsql+= " %s = '%s' AND " % (xkey, value)
 		    tmpsql+='1=1 ) '
 		    topsql+=tmpsql + " OR "
 		topsql = topsql[:-3]
