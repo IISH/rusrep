@@ -65,6 +65,41 @@ def translatedclasses(cursor, classinfo):
 	else:
 	    sqlclass = "'%s'" % classinfo[classname]
     sql = "%s (%s)" % (sql, sqlclass)
+ 
+    sql = "select * from datasets.regions";
+    cursor.execute(sql)
+    data = cursor.fetchall()
+    sqlnames = [desc[0] for desc in cursor.description]
+    if data:
+        for valuestr in data:
+            datakeys = {}
+            for i in range(len(valuestr)):
+                name = sqlnames[i]
+                value = valuestr[i]
+		if name == 'region_name':
+		    name = 'class_rus'
+		if name == 'region_name_eng':
+		    name = 'class_eng'
+                datakeys[name] = value
+
+            dictdata[datakeys['class_eng']] = datakeys
+	    dictdata[datakeys['class_rus']] = datakeys
+        
+    sql = "select * from datasets.valueunits";
+    cursor.execute(sql)
+    data = cursor.fetchall()
+    sqlnames = [desc[0] for desc in cursor.description]
+    if data:
+        for valuestr in data:
+	    datakeys = {}
+            for i in range(len(valuestr)):
+                name = sqlnames[i]
+                value = valuestr[i]
+                datakeys[name] = value
+            dictdata[datakeys['class_rus']] = datakeys
+            dictdata[datakeys['class_eng']] = datakeys
+
+    # FIX
     sql = "select * from datasets.classmaps";
     cursor.execute(sql)
     data = cursor.fetchall()
@@ -197,6 +232,7 @@ def datasetfilter(data, sqlnames, classification):
 def load_classes(cursor):
         data = {}
 	engdata = {}
+	total = 0
 	classification = 'historical'
 	if request.args.get('classification'):
 	    classification = request.args.get('classification')
@@ -389,6 +425,7 @@ def aggr():
     sqlkeys = ''
     engdata = {}
     cursor = connect()
+    total = 0
     try:
         qinput = json.loads(request.data)
     except:
@@ -471,6 +508,10 @@ def aggr():
                     if value in engdata:
                         value = engdata[value]['class_eng']
 	            lineitem[sqlnames[i]] = value 
+            try:
+                total+=float(lineitem['value'])
+            except:
+                total = 'NA'
 
 	    sorteditems = {}
 	    order = []
@@ -495,6 +536,7 @@ def aggr():
 	#result = hclasses
 	final = {}
 	final['url'] = 'http://ristat.sandbox.socialhistoryservices.org/datasets/indicators?download=20160329.115021.zip'
+	final['total'] = total
 	final['data'] = result
 
         return Response(json.dumps(final),  mimetype='application/json; charset=utf-8')
