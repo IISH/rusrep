@@ -408,7 +408,7 @@ def histclasses():
     return Response(data,  mimetype='application/json; charset=utf-8')
 
 @app.route('/aggregate1')
-def aggr():
+def aggr1():
     cursor = connect()
     data = aggregate(cursor)
     return Response(data,  mimetype='application/json; charset=utf-8')
