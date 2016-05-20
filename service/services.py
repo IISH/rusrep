@@ -1,6 +1,9 @@
+from __future__ import absolute_import
 from flask import Flask, Response, request
+import requests
 from twisted.web import http
 import json
+import simplejson
 import tables
 import urllib2
 import glob
@@ -15,6 +18,12 @@ import collections
 import getopt
 import ConfigParser
 import re
+import os
+import sys
+import unittest
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname("__file__"), './')))
+from cliocore.configutils import Configuration, Utils, DataFilter
+from dataverse import Connection
 
 def connect():
         cparser = ConfigParser.RawConfigParser()
@@ -535,11 +544,75 @@ def aggr():
         #jsondata = json_generator(cursor, 'data', result)
 	#result = hclasses
 	final = {}
-	final['url'] = 'http://ristat.sandbox.socialhistoryservices.org/datasets/indicators?download=20160329.115021.zip'
+	final['url'] = 'http://data.sandbox.socialhistoryservices.org/service/download?id=1144&filetype=excel'
 	final['total'] = total
 	final['data'] = result
 
         return Response(json.dumps(final),  mimetype='application/json; charset=utf-8')
+
+def loadjson(apiurl):
+    jsondataurl = apiurl
+
+    req = urllib2.Request(jsondataurl)
+    opener = urllib2.build_opener()
+    f = opener.open(req)
+    dataframe = simplejson.load(f)
+    return dataframe
+
+@app.route('/download')
+def download():
+    clioinfra = Configuration()
+    if request.args.get('id'):
+        host = "datasets.socialhistory.org"
+        url = "https://%s/api/access/datafile/%s?&key=%s&show_entity_ids=true&q=authorName:*" % (host, request.args.get('id'), clioinfra.config['ristatkey'])
+        f = urllib2.urlopen(url)
+        pdfdata = f.read()
+	filetype = "application/pdf"
+	if request.args.get('filetype') == 'excel':
+	    filetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        return Response(pdfdata, mimetype=filetype)
+    else:
+	return 'Not found'
+
+@app.route('/documentation')
+def documentation():
+    cursor = connect()
+    clioinfra = Configuration()
+    host = "datasets.socialhistory.org"
+    connection = Connection(host, clioinfra.config['ristatkey'])
+    dataverse = connection.get_dataverse('RISTAT')
+    settings = DataFilter(request.args)
+    papers = []
+    for item in dataverse.get_contents():
+        handle = str(item['protocol']) + ':' + str(item['authority']) + "/" + str(item['identifier'])
+	if handle == clioinfra.config['ristatdocs']:
+            datasetid = item['id']
+            url = "https://" + str(host) + "/api/datasets/" + str(datasetid) + "/?&key=" + str(clioinfra.config['ristatkey'])
+	    dataframe = loadjson(url)
+	    for files in dataframe['data']['latestVersion']['files']:
+		paperitem = {}
+		paperitem['id'] = str(files['datafile']['id'])
+	        paperitem['name'] = str(files['datafile']['name'])
+		paperitem['url'] = "http://data.sandbox.socialhistoryservices.org/service/download?id=%s" % paperitem['id']
+		try:
+		    if settings.datafilter['lang']:
+		        varpat = r"(_\d{4}_+%s|class|region)" % (settings.datafilter['lang'])
+                        pattern = re.compile(varpat, re.IGNORECASE)
+                        found = pattern.findall(paperitem['name'])
+                        if found:
+                            papers.append(paperitem)
+
+		    if settings.datafilter['topic']:
+		        varpat = r"(_%s_.+_\d+_+%s.|class|region)" % (settings.datafilter['topic'], settings.datafilter['lang'])
+		        pattern = re.compile(varpat, re.IGNORECASE)
+		        found = pattern.findall(paperitem['name'])
+		        if found:
+			    papers.append(paperitem)
+		    else:
+			papers.append(paperitem)
+		except:
+	            papers.append(paperitem)
+    return Response(json.dumps(papers),  mimetype='application/json; charset=utf-8')
 
 @app.route('/classes')
 def classes():
