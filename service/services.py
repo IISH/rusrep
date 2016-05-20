@@ -125,10 +125,13 @@ def translatedclasses(cursor, classinfo):
 
     return dictdata
 
-def load_years(cursor):
+def load_years(cursor, datatype):
         data = {}
-        sql = "select * from datasets.years where 1=1";
-        # execute
+ #       sql = "select * from datasets.years where 1=1";
+	sql = "select count(*) as c, base_year from russianrepository where 1=1"
+	if datatype:
+	    sql=sql + " and datatype='%s'" % datatype 
+	sql= sql + " group by base_year";
         cursor.execute(sql)
 
         # retrieve the records from the database
@@ -595,23 +598,26 @@ def documentation():
 	        paperitem['name'] = str(files['datafile']['name'])
 		paperitem['url'] = "http://data.sandbox.socialhistoryservices.org/service/download?id=%s" % paperitem['id']
 		try:
-		    if settings.datafilter['lang']:
-		        varpat = r"(_\d{4}_+%s|class|region)" % (settings.datafilter['lang'])
+		    if 'lang' in settings.datafilter:
+		        varpat = r"(_%s)" % (settings.datafilter['lang'])
                         pattern = re.compile(varpat, re.IGNORECASE)
                         found = pattern.findall(paperitem['name'])
                         if found:
                             papers.append(paperitem)
 
-		    if settings.datafilter['topic']:
+		    if 'topic' in settings.datafilter:
 		        varpat = r"(_%s_.+_\d+_+%s.|class|region)" % (settings.datafilter['topic'], settings.datafilter['lang'])
 		        pattern = re.compile(varpat, re.IGNORECASE)
 		        found = pattern.findall(paperitem['name'])
 		        if found:
 			    papers.append(paperitem)
 		    else:
-			papers.append(paperitem)
+		 	if 'lang' not in settings.datafilter: 
+			    papers.append(paperitem)
 		except:
-	            papers.append(paperitem)
+		    if 'lang' not in settings.datafilter:
+	                papers.append(paperitem)
+
     return Response(json.dumps(papers),  mimetype='application/json; charset=utf-8')
 
 @app.route('/classes')
@@ -623,7 +629,11 @@ def classes():
 @app.route('/years')
 def years():
     cursor = connect()
-    data = load_years(cursor)
+    settings = DataFilter(request.args)
+    datatype = ''
+    if 'datatype' in settings.datafilter:
+	datatype = settings.datafilter['datatype']
+    data = load_years(cursor, datatype)
     return Response(data,  mimetype='application/json; charset=utf-8')
 
 @app.route('/regions')
