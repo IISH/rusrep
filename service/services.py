@@ -126,9 +126,11 @@ def translatedclasses(cursor, classinfo):
     return dictdata
 
 def load_years(cursor, datatype):
+	clioinfra = Configuration()
+	years = clioinfra.config['years'].split(',')
         data = {}
  #       sql = "select * from datasets.years where 1=1";
-	sql = "select count(*) as c, base_year from russianrepository where 1=1"
+	sql = "select base_year, count(*) as c from russianrepository where 1=1"
 	if datatype:
 	    sql=sql + " and datatype='%s'" % datatype 
 	sql= sql + " group by base_year";
@@ -136,7 +138,15 @@ def load_years(cursor, datatype):
 
         # retrieve the records from the database
         data = cursor.fetchall()
-        json_string = json.dumps(data, encoding="utf-8")
+	result = {}
+	for val in data:
+            result[val[0]] = val[1]
+	for year in years:
+	     if int(year) not in result:
+		result[int(year)] = 0
+	
+#	jsondata = json_generator(cursor, 'years', result)
+        json_string = json.dumps(result, encoding="utf-8")
 
         return json_string
 
@@ -406,6 +416,17 @@ app = Flask(__name__)
 def test():
     description = 'Russian Repository API Service v.0.1<br>/service/regions<br>/service/topics<br>/service/data<br>/service/histclasses<br>/service/years<br>/service/maps (reserved)<br>'
     return description
+
+@app.route('/export')
+def export():
+    settings = Configuration()
+    keys = ["intro", "intro_rus", "datatype_intro", "datatype_intro_rus", "note", "note_rus", "downloadpage1", "downloadpage1_rus" "downloadclick", "downloadclick_rus", "warningblank", "warningblank_rus", "mapintro", "mapintro_rus"]
+    exportkeys = {}
+    for ikey in keys:
+	if ikey in settings.config:
+	    exportkeys[ikey] = settings.config[ikey]
+    result = json.dumps(exportkeys, encoding="utf8", ensure_ascii=False, sort_keys=True, indent=4)
+    return Response(result,  mimetype='application/json; charset=utf-8')
 
 @app.route('/topics')
 def topics():
