@@ -544,7 +544,7 @@ def aggr():
             try:
                 total+=float(lineitem['value'])
             except:
-                total = 'NA'
+                itotal = 'NA'
 
 	    sorteditems = {}
 	    order = []
