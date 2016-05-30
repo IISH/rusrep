@@ -536,10 +536,13 @@ def aggr():
 	for row in data:
 	    lineitem = {}
 	    for i in range(0, len(sqlnames)):
-		if row[i]:
+		if row[i] != None:
 		    value = row[i]
                     if value in engdata:
                         value = engdata[value]['class_eng']
+		    if sqlnames[i] == 'value':
+			if float(value).is_integer():
+			    value = int(value)
 	            lineitem[sqlnames[i]] = value 
             try:
                 total+=float(lineitem['value'])
