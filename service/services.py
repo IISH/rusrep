@@ -451,6 +451,111 @@ class Histclass(tables.IsDescription):
     histclass2 = tables.StringCol(256,pos=0)
     histclass3 = tables.StringCol(256,pos=0)
 
+def get_sql_query(name, value):
+    sqlquery = ''    
+    result = re.match("\[(.+)\]", value)   
+    if result:
+        query = result.group(1)
+        ids = query.split(',')
+        for param in ids:
+	    param=re.sub("u'", "'", str(param))
+            sqlquery+="%s," % param        
+        if sqlquery:
+            sqlquery = sqlquery[:-1]
+            sqlquery = "%s in (%s)" % (name, sqlquery)
+    else:
+        sqlquery = "%s = '%s'" % (name, value)
+    return sqlquery
+
+@app.route('/aggregation', methods=['POST', 'GET'])
+def aggregation():
+    try:
+        qinput = json.loads(request.data)
+    except:
+        return '{}'
+    engdata = {}
+    cursor = connect()
+    forbidden = ["classification", "action", "language", "path"]
+    if cursor:
+        #     extra = "%s<br>%s=%s<br>" % (extra, key, value)
+        if 'language' in qinput:
+            if qinput['language']== 'en':
+                engdata = translatedclasses(cursor, request.args)
+    sql = {}   
+    sql['condition'] = ''
+    knownfield = {}
+    sql['groupby'] = ''
+    sql['where'] = ''
+    sql['internal'] = ''
+    if qinput:
+        for name in qinput:
+            if not name in forbidden:
+                value = str(qinput[name])
+                if value in engdata:
+                    value = engdata[value]['class_rus']
+		#sql['where']+="%s='%s' AND1 " % (name, value)
+		sql['where']+="%s AND " % get_sql_query(name, value)
+		sql['condition']+="%s, " % name
+		knownfield[name] = value
+
+            elif name == 'path':
+                fullpath = qinput[name]
+                topsql = 'AND ('
+                for path in fullpath:
+                    tmpsql = ' ('
+		    sqllocal = {}
+                    for xkey in path:
+                        value = path[xkey]
+                        if value in engdata:
+                            value = engdata[value]['class_rus']
+		        sqllocal[xkey]="%s='%s', " % (xkey, value)
+			if not knownfield.has_key(xkey):
+			    knownfield[xkey] = value
+			    sql['condition']+="%s, " % xkey
+
+                        if value in engdata:
+                            value = str(engdata[value]['class_rus'])
+                        try:
+                            tmpsql+= " %s = '%s' AND " % (xkey, value.decode('utf-8'))
+                        except:
+                            tmpsql+= " %s = '%s' AND " % (xkey, value)
+                    tmpsql+='1=1 ) '
+                    topsql+=tmpsql + " OR "
+		    if sqllocal:
+			sql['internal']+=' ('
+		        for key in sqllocal:
+			    sqllocal[key] = sqllocal[key][:-2]
+			    sql['internal']+="%s AND " % sqllocal[key]
+			sql['internal'] = sql['internal'][:-4]
+			sql['internal']+=') OR'
+    sql['internal'] = sql['internal'][:-3]
+
+#select sum(cast(value as double precision)), value_unit from russianrepository where datatype = '1.02' and year='2002' and histclass2 = '' and histclass1='1' group by histclass1, histclass2, value_unit;
+    sqlquery = "select sum(cast(value as double precision)) as total, value_unit, ter_code"
+    if sql['where']:
+	sqlquery+=", %s" % sql['condition']
+        sqlquery = sqlquery[:-2]
+        sqlquery+=" from russianrepository where %s" % sql['where']
+	sqlquery = sqlquery[:-4]
+    if sql['internal']:
+	sqlquery+=" AND (%s) " % sql['internal']
+    
+    sqlquery+=" group by value_unit, ter_code, "
+    for f in knownfield:
+	sqlquery+="%s," % f
+    sqlquery = sqlquery[:-1]
+    #return sqlquery
+    if sqlquery:
+        cursor.execute(sqlquery)
+        sqlnames = [desc[0] for desc in cursor.description]
+
+        # retrieve the records from the database
+        data = cursor.fetchall()
+	jsondata = json_generator(cursor, 'data', data)
+	return Response(jsondata,  mimetype='application/json; charset=utf-8')
+
+    return str('{}')
+
 @app.route('/aggregate', methods=['POST', 'GET'])
 def aggr():
     data = {}
@@ -471,6 +576,7 @@ def aggr():
             if qinput['language']== 'en':
                 engdata = translatedclasses(cursor, request.args)
 
+#	return str(engdata)
 	for key in qinput:
 	    if key not in forbidden:
 	        value = qinput[key]
@@ -481,7 +587,7 @@ def aggr():
                     sqlfields = key
                     sqlkeys = key
 
-        sql = "select cast(value as double precision) as value, value_unit, territory, year, histclass1, histclass2, histclass3, histclass4, histclass5, histclass6, histclass7, histclass8, histclass9, histclass10, %s from russianrepository where 1=1" % sqlfields
+        sql = "select sum(cast(value as double precision)) as value, value_unit, territory, year, histclass1, histclass2, histclass3, histclass4, histclass5, histclass6, histclass7, histclass8, histclass9, histclass10, %s from russianrepository where 1=1" % sqlfields
         for name in qinput:
             if not name in forbidden:
 	        value = str(qinput[name])
@@ -528,6 +634,7 @@ def aggr():
         data = cursor.fetchall()
 	result = []
 	chain = {}
+	regions = {}
         class inchain(object):
     	    def __init__(self,name):
                 self.name = name
@@ -535,11 +642,28 @@ def aggr():
 	hclasses = {}
 	for row in data:
 	    lineitem = {}
+	    dataitem = {}
+            for i in range(0, len(sqlnames)):
+                if row[i] != None:
+                    value = row[i]
+	            dataitem[sqlnames[i]] = value
+
+	    if dataitem['value'] != None:
+		location = dataitem['territory']
+		if location in engdata:
+		    location = engdata[location]['class_eng']
+
+		if location in regions:
+		    regions[location]+=dataitem['value']
+		else:
+		    regions[location] = dataitem['value']
+
 	    for i in range(0, len(sqlnames)):
 		if row[i] != None:
 		    value = row[i]
                     if value in engdata:
                         value = engdata[value]['class_eng']
+
 		    if sqlnames[i] == 'value':
 			if float(value).is_integer():
 			    value = int(value)
@@ -573,6 +697,7 @@ def aggr():
 	final = {}
 	final['url'] = 'http://data.sandbox.socialhistoryservices.org/service/download?id=1144&filetype=excel'
 	final['total'] = total
+	final['regions'] = regions
 	final['data'] = result
 
         return Response(json.dumps(final),  mimetype='application/json; charset=utf-8')
