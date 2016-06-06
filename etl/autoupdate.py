@@ -53,7 +53,10 @@ def connect():
 def alldatasets():
     cursor = connect()
     clioinfra = Configuration()
-    host = "datasets.socialhistory.org"
+    host = clioinfra.config['dataverseroot']
+    dom = re.match(r'https\:\/\/(.+)$', host)
+    if dom:
+        host = dom.group(1)
     connection = Connection(host, clioinfra.config['ristatkey'])
     dataverse = connection.get_dataverse('RISTAT')
     settings = DataFilter('')
@@ -71,14 +74,14 @@ def alldatasets():
                 paperitem['id'] = str(files['datafile']['id'])
                 paperitem['name'] = str(files['datafile']['name'])
         	url = "https://%s/api/access/datafile/%s?&key=%s&show_entity_ids=true&q=authorName:*" % (host, paperitem['id'], clioinfra.config['ristatkey'])
-		filepath = "%s/%s.xlsx" % (clioinfra.config['tmppath'], paperitem['id'])
-		csvfile = "%s/%s.csv" % (clioinfra.config['tmppath'], paperitem['id'])
+		filepath = "%s/%s" % (clioinfra.config['tmppath'], paperitem['name'])
+		csvfile = "%s/%s.csv" % (clioinfra.config['tmppath'], paperitem['name'])
 		f = urllib.urlopen(url)    
 		fh = open(filepath, 'wb')
 		fh.write(f.read())
 		fh.close()
-		outfile = open(csvfile, 'w+')
-		xlsx2csv(filepath, outfile, **kwargs)
+		#outfile = open(csvfile, 'w+')
+		#xlsx2csv(filepath, outfile, **kwargs)
     return ''
 
 def documentation():
