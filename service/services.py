@@ -41,6 +41,17 @@ def connect():
     	#(row_count, dataset) = load_regions(cursor, year, datatype, region, debug)
 	return cursor
 
+def classcollector(keywords):
+    classdict = {}
+    normaldict = {}
+    for item in keywords:
+        classmatch = re.search(r'class', item)
+        if classmatch:
+            classdict[item] = keywords[item]
+        else:
+            normaldict[item] = keywords[item]
+    return (classdict, normaldict)
+
 def json_generator(c, jsondataname, data):
 	sqlnames = [desc[0] for desc in c.description]
         jsonlist = []
@@ -52,15 +63,12 @@ def json_generator(c, jsondataname, data):
                name = sqlnames[i]
                value = valuestr[i]
                datakeys[name] = value
-               #print "%s %s", (name, value)
-            jsonlist.append(datakeys)
+	    (path, output) = classcollector(datakeys)
+	    output['path'] = path
+            jsonlist.append(output)
         
-        jsonhash[jsondataname] = jsonlist;
+        jsonhash[jsondataname] = jsonlist
         json_string = json.dumps(jsonhash, encoding="utf8", ensure_ascii=False, sort_keys=True, indent=4)
-	#encoding="utf8"
-	#.decode('unicode-escape')
- 	#.encode('utf8')
-	#json_string = json.dumps(jsonhash, ensure_ascii=False,indent=4).encode('utf8')
 
         return json_string
 
@@ -140,10 +148,11 @@ def load_years(cursor, datatype):
         data = cursor.fetchall()
 	result = {}
 	for val in data:
-            result[val[0]] = val[1]
+	    if val[0]:
+                result[val[0]] = val[1]
 	for year in years:
 	     if int(year) not in result:
-		result[int(year)] = 0
+	         result[int(year)] = 0
 	
 #	jsondata = json_generator(cursor, 'years', result)
         json_string = json.dumps(result, encoding="utf-8")
@@ -544,7 +553,6 @@ def aggregation():
     for f in knownfield:
 	sqlquery+="%s," % f
     sqlquery = sqlquery[:-1]
-    #return sqlquery
     if sqlquery:
         cursor.execute(sqlquery)
         sqlnames = [desc[0] for desc in cursor.description]
