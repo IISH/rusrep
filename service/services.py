@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from flask import Flask, Response, request
 import requests
 from twisted.web import http
+from pymongo import MongoClient
 import json
 import simplejson
 import tables
@@ -16,11 +17,18 @@ import psycopg2.extras
 import pprint
 import collections
 import getopt
+import urllib
 import ConfigParser
 import re
 import os
 import sys
 import unittest
+import pandas as pd
+from StringIO import StringIO
+import numpy as np
+from rdflib import Graph, plugin, Namespace, Literal, term, BNode
+from rdflib.serializer import Serializer
+from rdflib.namespace import DC, FOAF
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname("__file__"), './')))
 from cliocore.configutils import Configuration, Utils, DataFilter
 from dataverse import Connection
@@ -57,12 +65,23 @@ def json_generator(c, jsondataname, data):
         jsonlist = []
         jsonhash = {}
         
+	forbidden = {'dataactive', 0, 'datarecords', 1}
         for valuestr in data:    
             datakeys = {}
+	    extravalues = {}
             for i in range(len(valuestr)):
-               name = sqlnames[i]
-               value = valuestr[i]
-               datakeys[name] = value
+                name = sqlnames[i]
+                value = valuestr[i]
+	        if name not in forbidden:
+                    datakeys[name] = value
+		else:
+		    extravalues[name] = value
+
+	    # If aggregation check data output for 'NA' values
+	    if 'total' in datakeys:
+		if extravalues['dataactive']:
+		    datakeys['total'] = 'NA'
+
 	    (path, output) = classcollector(datakeys)
 	    output['path'] = path
             jsonlist.append(output)
@@ -71,6 +90,25 @@ def json_generator(c, jsondataname, data):
         json_string = json.dumps(jsonhash, encoding="utf8", ensure_ascii=False, sort_keys=True, indent=4)
 
         return json_string
+
+def translatedvocabulary():
+    client = MongoClient()
+    dbname = 'vocabulary'
+    db = client.get_database(dbname)
+    vocab = db.data.find()
+    data = {}
+    for item in vocab:
+	item['RUS'] = item['RUS'].encode('UTF-8')
+	item['EN'] = item['EN'].encode('UTF-8')
+        if item['RUS'].startswith('"') and item['RUS'].endswith('"'):
+            item['RUS'] = string[1:-1]
+        if item['EN'].startswith('"') and item['EN'].endswith('"'):
+            item['EN'] = string[1:-1]
+	item['RUS'] = re.sub(r'"', '', item['RUS'])
+	item['EN'] = re.sub(r'"', '', item['EN'])
+	data[item['RUS']] = item['EN']
+	data[item['EN']] = item['RUS'] 
+    return data
 
 def translatedclasses(cursor, classinfo):
     dictdata = {}
@@ -449,11 +487,51 @@ def histclasses():
     data = load_histclasses(cursor)
     return Response(data,  mimetype='application/json; charset=utf-8')
 
-@app.route('/aggregate1')
-def aggr1():
-    cursor = connect()
-    data = aggregate(cursor)
-    return Response(data,  mimetype='application/json; charset=utf-8')
+def rdfconvertor(url):
+    f = urllib.urlopen(url)
+    data = f.read()
+    csvio = StringIO(str(data))
+    dataframe = pd.read_csv(csvio, sep='\t', dtype='unicode')
+    finalsubset = dataframe
+    columns = finalsubset.columns
+    rdf = "@prefix ristat: <http://ristat.org/api/vocabulary#> .\n"
+    vocaburi = "http://ristat.org/service/vocab#"
+    vocaburi = "http://data.sandbox.socialhistoryservices.org/service/vocab#"
+    g=Graph()
+
+    for ids in finalsubset.index:
+        item = finalsubset.ix[ids]    
+	uri = term.URIRef("%s%s" % (vocaburi, str(item['ID'])))        
+	if uri:
+            for col in columns:
+                if col is not 'ID':
+                    if item[col]:
+			c = term.URIRef(col)
+			g.add((uri, c, Literal(str(item[col]))))
+                        rdf+="ristat:%s " % item['ID']
+                        rdf+="ristat:%s ristat:%s." % (col, item[col])
+                    rdf+="\n"
+    return g
+
+@app.route('/vocab')
+def vocab():
+    url = "https://datasets.socialhistory.org/api/access/datafile/586?&key=6f07ea5d-be76-444a-8a20-0ee2f02fda21&show_entity_ids=true&q=authorName:*"
+    g = rdfconvertor(url)
+    showformat = 'json'
+    if request.args.get('format'):
+	showformat = request.args.get('format')
+    if showformat == 'turtle':
+	jsondump = g.serialize(format='n3')
+	return Response(jsondump,  mimetype='application/x-turtle; charset=utf-8')
+    else:
+        jsondump = g.serialize(format='json-ld', indent=4)
+        return Response(jsondump,  mimetype='application/json; charset=utf-8')
+
+@app.route('/vocabulary')
+def getvocabulary():
+    data = translatedvocabulary()
+    json_string = json.dumps(data, encoding="utf8", ensure_ascii=False, sort_keys=True, indent=4)
+    return Response(json_string,  mimetype='application/json; charset=utf-8')
 
 class Histclass(tables.IsDescription):
     histclass1 = tables.StringCol(256,pos=0)
@@ -489,7 +567,8 @@ def aggregation():
         #     extra = "%s<br>%s=%s<br>" % (extra, key, value)
         if 'language' in qinput:
             if qinput['language']== 'en':
-                engdata = translatedclasses(cursor, request.args)
+                #engdata = translatedclasses(cursor, request.args)
+		engdata = translatedvocabulary()
     sql = {}   
     sql['condition'] = ''
     knownfield = {}
@@ -501,7 +580,8 @@ def aggregation():
             if not name in forbidden:
                 value = str(qinput[name])
                 if value in engdata:
-                    value = engdata[value]['class_rus']
+                    #value = engdata[value]['class_rus']
+		    value = engdata[value]
 		#sql['where']+="%s='%s' AND1 " % (name, value)
 		sql['where']+="%s AND " % get_sql_query(name, value)
 		sql['condition']+="%s, " % name
@@ -516,14 +596,16 @@ def aggregation():
                     for xkey in path:
                         value = path[xkey]
                         if value in engdata:
-                            value = engdata[value]['class_rus']
+                            #value = engdata[value]['class_rus']
+			    value = engdata[value]
 		        sqllocal[xkey]="%s='%s', " % (xkey, value)
 			if not knownfield.has_key(xkey):
 			    knownfield[xkey] = value
 			    sql['condition']+="%s, " % xkey
 
                         if value in engdata:
-                            value = str(engdata[value]['class_rus'])
+                            #value = str(engdata[value]['class_rus'])
+			    value = str(engdata[value])
                         try:
                             tmpsql+= " %s = '%s' AND " % (xkey, value.decode('utf-8'))
                         except:
@@ -540,7 +622,7 @@ def aggregation():
     sql['internal'] = sql['internal'][:-3]
 
 #select sum(cast(value as double precision)), value_unit from russianrepository where datatype = '1.02' and year='2002' and histclass2 = '' and histclass1='1' group by histclass1, histclass2, value_unit;
-    sqlquery = "select sum(cast(value as double precision)) as total, value_unit, ter_code"
+    sqlquery = "select count(*) as datarecords, count(*) - count(value) as dataactive, sum(cast(value as double precision)) as total, value_unit, ter_code"
     if sql['where']:
 	sqlquery+=", %s" % sql['condition']
         sqlquery = sqlquery[:-2]
@@ -553,13 +635,26 @@ def aggregation():
     for f in knownfield:
 	sqlquery+="%s," % f
     sqlquery = sqlquery[:-1]
+#    forbidden = {'dataactive', 0, 'datarecords', 1}
     if sqlquery:
         cursor.execute(sqlquery)
         sqlnames = [desc[0] for desc in cursor.description]
 
         # retrieve the records from the database
         data = cursor.fetchall()
-	jsondata = json_generator(cursor, 'data', data)
+	finaldata = []
+	for item in data:
+	    finalitem = []
+	    for i, thisname in enumerate(sqlnames):
+		value = item[i]
+	    #for value in item:
+	        if value in engdata:
+		    value = value.encode('UTF-8')
+		    value = engdata[value]
+		if thisname not in forbidden:
+		    finalitem.append(value)
+	    finaldata.append(finalitem)
+	jsondata = json_generator(cursor, 'data', finaldata)
 	return Response(jsondata,  mimetype='application/json; charset=utf-8')
 
     return str('{}')
