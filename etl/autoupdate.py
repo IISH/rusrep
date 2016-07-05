@@ -23,6 +23,8 @@ import re
 import os
 import sys
 import unittest
+from vocab import vocabulary, classupdate
+from pymongo import MongoClient
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname("__file__"), './')))
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname("__file__"), '../service')))
 from xlsx2csv import xlsx2csv
@@ -77,14 +79,15 @@ def alldatasets():
 		filepath = "%s/%s" % (clioinfra.config['tmppath'], paperitem['name'])
 		csvfile = "%s/%s.csv" % (clioinfra.config['tmppath'], paperitem['name'])
 		f = urllib.urlopen(url)    
+		print filepath
 		fh = open(filepath, 'wb')
 		fh.write(f.read())
 		fh.close()
-		#outfile = open(csvfile, 'w+')
-		#xlsx2csv(filepath, outfile, **kwargs)
+		outfile = open(csvfile, 'w+')
+		xlsx2csv(filepath, outfile, **kwargs)
     return ''
 
-def documentation():
+def content():
     cursor = connect()
     clioinfra = Configuration()
     host = "datasets.socialhistory.org"
@@ -92,9 +95,11 @@ def documentation():
     dataverse = connection.get_dataverse('RISTAT')
     settings = DataFilter('')
     papers = []
+    ids = {}
     for item in dataverse.get_contents():
         handle = str(item['protocol']) + ':' + str(item['authority']) + "/" + str(item['identifier'])
-        if handle not in [clioinfra.config['ristatdocs'], clioinfra.config['ristatvoc']]:
+#        if handle not in [clioinfra.config['ristatdocs'], clioinfra.config['ristatvoc']]:
+	if handle in clioinfra.config['ristatvoc']:
             datasetid = item['id']
             url = "https://" + str(host) + "/api/datasets/" + str(datasetid) + "/?&key=" + str(clioinfra.config['ristatkey'])
             dataframe = loadjson(url)
@@ -102,7 +107,18 @@ def documentation():
                 paperitem = {}
                 paperitem['id'] = str(files['datafile']['id'])
                 paperitem['name'] = str(files['datafile']['name'])
+		ids[paperitem['id']] = paperitem['name']
+		paperitem['handle'] = handle
                 paperitem['url'] = "http://data.sandbox.socialhistoryservices.org/service/download?id=%s" % paperitem['id']
+                url = "https://%s/api/access/datafile/%s?&key=%s&show_entity_ids=true&q=authorName:*" % (host, paperitem['id'], clioinfra.config['ristatkey'])
+                filepath = "%s/%s" % (clioinfra.config['tmppath'], paperitem['name'])
+                csvfile = "%s/%s.csv" % (clioinfra.config['tmppath'], paperitem['name'])
+		print url
+                f = urllib.urlopen(url)
+                fh = open(filepath, 'wb')
+                fh.write(f.read())
+                fh.close()
+
                 try:
                     if 'lang' in settings.datafilter:
                         varpat = r"(_%s)" % (settings.datafilter['lang'])
@@ -124,7 +140,30 @@ def documentation():
                     if 'lang' not in settings.datafilter:
                         papers.append(paperitem)
 
-    return papers
+    return (papers, ids)
 
-docs = alldatasets()
-print str(docs)
+#docs = alldatasets()
+
+# Update vocabularies
+(docs, ids) = content()
+clioinfra = Configuration()
+host = clioinfra.config['dataverseroot']
+apikey = clioinfra.config['ristatkey']
+dbname = clioinfra.config['vocabulary']
+client = MongoClient()
+
+if ids:
+    db = client.get_database(dbname)
+    db.data.drop()
+    bigvocabulary = vocabulary(host, apikey, ids)
+    data = json.loads(bigvocabulary.to_json(orient='records'))
+    for item in data:
+	if 'YEAR' in item:
+	    item['YEAR'] = re.sub('.0', '', str(item['YEAR']))
+	if 'basisyear':
+	    item['basisyear'] = re.sub('.0', '', str(item['basisyear']))
+    result = db.data.insert(data)
+    #print bigvocabulary.to_json(orient='records')
+
+classdata = classupdate()
+result = db.data.insert(classdata)
