@@ -105,16 +105,20 @@ def translatedvocabulary(newfilter):
     data = {}
     histdata = {}
     for item in vocab:
-	item['RUS'] = item['RUS'].encode('UTF-8')
-	item['EN'] = item['EN'].encode('UTF-8')
-        if item['RUS'].startswith('"') and item['RUS'].endswith('"'):
-            item['RUS'] = string[1:-1]
-        if item['EN'].startswith('"') and item['EN'].endswith('"'):
-            item['EN'] = string[1:-1]
-	item['RUS'] = re.sub(r'"', '', item['RUS'])
-	item['EN'] = re.sub(r'"', '', item['EN'])
-	data[item['RUS']] = item['EN']
-	data[item['EN']] = item['RUS'] 
+	if 'RUS' in item:
+	    try:
+	        item['RUS'] = item['RUS'].encode('UTF-8')
+	        item['EN'] = item['EN'].encode('UTF-8')
+                if item['RUS'].startswith('"') and item['RUS'].endswith('"'):
+                    item['RUS'] = string[1:-1]
+                if item['EN'].startswith('"') and item['EN'].endswith('"'):
+                    item['EN'] = string[1:-1]
+	        item['RUS'] = re.sub(r'"', '', item['RUS'])
+	        item['EN'] = re.sub(r'"', '', item['EN'])
+	        data[item['RUS']] = item['EN']
+	        data[item['EN']] = item['RUS'] 
+	    except:
+	        skip = 1
     return data
 
 def translatedclasses(cursor, classinfo):
@@ -681,7 +685,7 @@ def aggregation():
             if qinput['language']== 'en':
                 #engdata = translatedclasses(cursor, request.args)
 		newfilter = {}
-		if qinput['year']:
+		if 'year' in qinput:
 		    thisyear = qinput['year']
 		    newfilter['YEAR'] = thisyear
 		engdata = translatedvocabulary(newfilter)
