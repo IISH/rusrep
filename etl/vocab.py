@@ -116,7 +116,7 @@ def classupdate():
 
             # Check comma and add between classes
             for n in range(1,firstclass):
-                name = "histclass%s" % n
+                name = "class%s" % n
                 if name not in classes:
                     classes[name] = '.'
 
