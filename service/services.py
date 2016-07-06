@@ -685,6 +685,10 @@ def aggregation():
 		    thisyear = qinput['year']
 		    newfilter['YEAR'] = thisyear
 		engdata = translatedvocabulary(newfilter)
+		units = translatedvocabulary({"vocabulary": "ERRHS_Vocabulary_units"})
+        	for item in units:
+                    engdata[item] = units[item]
+
     sql = {}   
     sql['condition'] = ''
     knownfield = {}
