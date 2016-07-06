@@ -159,9 +159,9 @@ if ids:
     data = json.loads(bigvocabulary.to_json(orient='records'))
     for item in data:
 	if 'YEAR' in item:
-	    item['YEAR'] = re.sub('.0', '', str(item['YEAR']))
+	    item['YEAR'] = re.sub(r'\.0', '', str(item['YEAR']))
 	if 'basisyear':
-	    item['basisyear'] = re.sub('.0', '', str(item['basisyear']))
+	    item['basisyear'] = re.sub(r'\.0', '', str(item['basisyear']))
     result = db.data.insert(data)
     #print bigvocabulary.to_json(orient='records')
 

@@ -63,17 +63,27 @@ def classupdate():
             for i in range(len(valuestr)):
                 name = sqlnames[i]
                 value = valuestr[i]
-		if not value:
-		    value = ''
-		classes[name] = value
+		#print "%s %s" % (name, value)
+		if value:
+		    classes[name] = str(value)
 
 	    flagvalue = 0
-	    for n in range(10,0,-1):
+	    firstclass = 0
+	    for n in range(10,1,-1):
 		name = "histclass%s" % n
-	 	if classes[name]:
-		    flagvalue = 1
-	 	if flagvalue == 0:
-		    del classes[name]
+	 	if name in classes:
+		    if classes[name]:
+		        flagvalue = 1
+			if not firstclass:
+			    firstclass = n
+	 	    if flagvalue == 0:
+		        del classes[name]
+
+	    # Check comma and add between classes
+	    for n in range(1,firstclass):
+                name = "histclass%s" % n
+                if name not in classes:
+		    classes[name] = '.'
 		   
 	    classes['vocabulary'] = 'historical'
 	    if 'datatype' in classes:
@@ -89,17 +99,26 @@ def classupdate():
             for i in range(len(valuestr)):
                 name = sqlnames[i]
                 value = valuestr[i]
-                if not value:
-                    value = ''
-                classes[name] = value
+                if value:
+                    classes[name] = str(value)
 
             flagvalue = 0
-            for n in range(10,0,-1):
+	    firstclass = 0
+            for n in range(10,1,-1):
                 name = "class%s" % n
-                if classes[name]:
-                    flagvalue = 1
-                if flagvalue == 0:
-                    del classes[name]
+		if name in classes:
+                    if classes[name]:
+                        flagvalue = 1
+                        if not firstclass:
+                            firstclass = n
+                    if flagvalue == 0:
+                        del classes[name]
+
+            # Check comma and add between classes
+            for n in range(1,firstclass):
+                name = "histclass%s" % n
+                if name not in classes:
+                    classes[name] = '.'
 
             classes['vocabulary'] = 'modern'
             if 'datatype' in classes:
