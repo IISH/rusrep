@@ -33,6 +33,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname("__file__"), './
 from cliocore.configutils import Configuration, Utils, DataFilter
 from dataverse import Connection
 
+forbidden = ["classification", "action", "language", "path"]
+
 def connect():
         cparser = ConfigParser.RawConfigParser()
         cpath = "/etc/apache2/rusrep.config"
@@ -91,12 +93,17 @@ def json_generator(c, jsondataname, data):
 
         return json_string
 
-def translatedvocabulary():
+def translatedvocabulary(newfilter):
     client = MongoClient()
     dbname = 'vocabulary'
     db = client.get_database(dbname)
-    vocab = db.data.find()
+    if newfilter:
+	#vocab = db.data.find({"YEAR": thisyear})	
+	vocab = db.data.find(newfilter)
+    else:
+        vocab = db.data.find()
     data = {}
+    histdata = {}
     for item in vocab:
 	item['RUS'] = item['RUS'].encode('UTF-8')
 	item['EN'] = item['EN'].encode('UTF-8')
@@ -399,6 +406,109 @@ def load_classes(cursor):
 
         return jsondata
 
+def translateitem(item, engdata):
+    # Translate first
+    newitem = {}
+    if engdata:
+        for name in item:
+            value = item[name].encode('UTF-8')
+            if value in engdata:
+                value = engdata[value]
+            newitem[name] = value
+        item = newitem
+    return item
+
+def load_vocabulary(vocname):
+    client = MongoClient()
+    dbname = 'vocabulary'
+    db = client.get_database(dbname)
+    newfilter = {}
+    engdata = {}
+    if request.args.get('classification'):
+	vocname = request.args.get('classification')
+	if vocname == 'historical':
+	    newfilter['vocabulary'] = 'ERRHS_Vocabulary_histclasses'
+	else:
+	    newfilter['vocabulary'] = 'ERRHS_Vocabulary_modclasses'
+
+    if request.args.get('language') == 'en':
+	thisyear = ''
+        if request.args.get('base_year'):
+	    if vocname == 'historical':
+                thisyear = request.args.get('base_year')
+	        newfilter['YEAR'] = thisyear 
+        engdata = translatedvocabulary(newfilter)
+	units = translatedvocabulary({"vocabulary": "ERRHS_Vocabulary_units"})
+	for item in units:
+	    engdata[item] = units[item]
+
+    params = {"vocabulary": vocname}
+    for name in request.args:
+	if name not in forbidden:
+	    params[name] = request.args.get(name)
+
+    if vocname:
+        vocab = db.data.find(params)
+    else:
+        vocab = db.data.find()
+
+    data = []
+    uid = 0
+    for item in vocab:
+	del item['_id']
+	del item['vocabulary']
+	regions = {}
+	if vocname == "ERRHS_Vocabulary_regions":
+	    uid+=1
+	    regions['region_name'] = item['RUS']
+	    regions['region_name_eng'] = item['EN']
+	    regions['region_code'] = item['ID']
+	    regions['region_id'] = uid
+	    regions['region_ord'] = 189702
+	    regions['description'] = regions['region_name']
+	    regions['active'] = 1
+	    item = regions
+	    data.append(item)
+	elif vocname == 'modern':
+	    if engdata:
+                item = translateitem(item, engdata)
+	    data.append(item)
+        elif vocname == 'historical':
+	    if engdata:
+	        item = translateitem(item, engdata)
+            data.append(item)
+	else:
+	    # Translate first
+	    newitem = {}
+	    if engdata:
+		for name in item:
+		    value = item[name]
+		    if value in engdata: 
+			value = engdata[value]
+		    newitem[name] = value
+		item = newitem
+
+            (path, output) = classcollector(item)
+	    if path:
+                output['path'] = path
+	        data.append(output)
+	    else:
+	        data.append(item)
+
+    jsonhash = {}
+    if vocname == "ERRHS_Vocabulary_regions":
+	jsonhash['regions'] = data
+    elif vocname == 'modern':
+	jsonhash = data
+    elif vocname == 'historical':
+        jsonhash = data
+    else:
+        jsonhash['data'] = data
+    jsondata = json.dumps(jsonhash, encoding="utf8", ensure_ascii=False, sort_keys=True, indent=4)
+    return jsondata
+
+    return jsonhash
+
 def load_histclasses(cursor):
         data = {}
         sql = "select * from datasets.histclasses where 1=1";
@@ -484,7 +594,8 @@ def topics():
 @app.route('/histclasses')
 def histclasses():
     cursor = connect()
-    data = load_histclasses(cursor)
+    #data = load_histclasses(cursor)
+    data = load_vocabulary('historical')
     return Response(data,  mimetype='application/json; charset=utf-8')
 
 def rdfconvertor(url):
@@ -556,6 +667,7 @@ def get_sql_query(name, value):
 
 @app.route('/aggregation', methods=['POST', 'GET'])
 def aggregation():
+    thisyear = ''
     try:
         qinput = json.loads(request.data)
     except:
@@ -568,7 +680,11 @@ def aggregation():
         if 'language' in qinput:
             if qinput['language']== 'en':
                 #engdata = translatedclasses(cursor, request.args)
-		engdata = translatedvocabulary()
+		newfilter = {}
+		if qinput['year']:
+		    thisyear = qinput['year']
+		    newfilter['YEAR'] = thisyear
+		engdata = translatedvocabulary(newfilter)
     sql = {}   
     sql['condition'] = ''
     knownfield = {}
@@ -593,7 +709,13 @@ def aggregation():
                 for path in fullpath:
                     tmpsql = ' ('
 		    sqllocal = {}
-                    for xkey in path:
+		    clearpath = {}
+		    for xkey in path:
+			value = path[xkey]
+			if value != '.':
+			    clearpath[xkey] = value
+
+                    for xkey in clearpath:
                         value = path[xkey]
                         if value in engdata:
                             #value = engdata[value]['class_rus']
@@ -635,6 +757,7 @@ def aggregation():
     for f in knownfield:
 	sqlquery+="%s," % f
     sqlquery = sqlquery[:-1]
+    #return sqlquery
 #    forbidden = {'dataactive', 0, 'datarecords', 1}
     if sqlquery:
         cursor.execute(sqlquery)
@@ -875,7 +998,8 @@ def documentation():
 @app.route('/classes')
 def classes():
     cursor = connect()
-    data = load_classes(cursor)
+    #data = load_classes(cursor)
+    data = load_vocabulary('modern')
     return Response(data,  mimetype='application/json; charset=utf-8')
 
 @app.route('/years')
@@ -888,10 +1012,12 @@ def years():
     data = load_years(cursor, datatype)
     return Response(data,  mimetype='application/json; charset=utf-8')
 
+# REGIONS
 @app.route('/regions')
 def regions():
     cursor = connect()
-    data = load_regions(cursor)
+    #data = load_regions(cursor)
+    data = load_vocabulary("ERRHS_Vocabulary_regions")
     return Response(data,  mimetype='application/json; charset=utf-8')
 
 @app.route('/data')
