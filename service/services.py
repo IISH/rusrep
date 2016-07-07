@@ -18,6 +18,7 @@ import pprint
 import collections
 import getopt
 import urllib
+import random
 import ConfigParser
 import re
 import os
@@ -88,8 +89,21 @@ def json_generator(c, jsondataname, data):
 	    output['path'] = path
             jsonlist.append(output)
         
+	# Cache
+	clientcache = MongoClient()
+        dbcache = clientcache.get_database('datacache')
+
         jsonhash[jsondataname] = jsonlist
-        json_string = json.dumps(jsonhash, encoding="utf8", ensure_ascii=False, sort_keys=True, indent=4)
+	newkey = str("%05.8f" % random.random())
+	jsonhash['url'] = "/download?key=%s" % newkey
+	json_string = json.dumps(jsonhash, encoding="utf8", ensure_ascii=False, sort_keys=True, indent=4)
+	try:
+	    thisdata = jsonhash
+	    del thisdata['url']
+	    thisdata['key'] = newkey
+	    result = dbcache.data.insert(thisdata)
+	except:
+	    skip = 'something went wrong...'
 
         return json_string
 
