@@ -34,7 +34,6 @@ def preprocessor(datakey):
                 if 'total' in itemlexicon:
                     del itemlexicon['total']
 	
-#		if 'lands' in lexicon:
 		lexkey = json.dumps(itemlexicon)
 		itemlexicon['lands'] = lands
 		if lexkey in lexicon:
@@ -56,14 +55,27 @@ def aggregate_dataset(fullpath, result):
     i = 9
     for itemchain in result:
         j = 0
-        if i == 1:
-    #        ws.column_dimensions["A"].width = 80
-    #        ws.column_dimensions["B"].width = 20
+        if i == 9:
+    #        ws.column_dimensions["C"].width = 80
+    #        ws.column_dimensions["D"].width = 20
     #        ws.column_dimensions["O"].width = 100
     #        ws.column_dimensions["P"].width = 100
-            c = ws.cell(row=i, column=j)
-            c.value = 'observations'
+            chain = json.loads(itemchain)
+            terdata = result[itemchain]
+            for name in sorted(chain):
+                c = ws.cell(row=i, column=j)
+                c.value = name
+                j+=1
+            for ter_code in terdata:
+                c = ws.cell(row=i, column=j)
+                ter_value = terdata[ter_code]
+                ter_value = re.sub(r'\.0', '', str(ter_value))
+                c.value = ter_code
+                j+=1
+	    i+=1
+
 	if itemchain:
+	    j = 0
 	    chain = json.loads(itemchain)
 	    terdata = result[itemchain]
 	    for name in sorted(chain):
@@ -76,7 +88,8 @@ def aggregate_dataset(fullpath, result):
 		ter_value = re.sub(r'\.0', '', str(ter_value))
                 c.value = ter_value
 		j+=1
-	i+=1
+	    i+=1
+
     wb.save(fullpath)
     return fullpath
 
