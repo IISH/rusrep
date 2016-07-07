@@ -10,8 +10,8 @@ def preprocessor(datakey):
     dataset = []
     lexicon = {}
     lands = {}
+    clientcache = MongoClient()
     if datakey:
-	clientcache = MongoClient()
         dbcache = clientcache.get_database('datacache')
         result = dbcache.data.find({"key": datakey })
         for rowitem in result:
@@ -45,9 +45,19 @@ def preprocessor(datakey):
 		    lexicon[lexkey] = lands
 
 		dataset.append(dataitem)
-    return lexicon
+	# load regions
+	db = clientcache.get_database('vocabulary')
+	vocab = db.data.find({"vocabulary": "ERRHS_Vocabulary_regions"})
+	regions = {}
+	vocabulary = {}
+	for item in vocab:
+	    regions[item['ID']] = item['EN']
+	vocabulary['regions'] = regions
+	# load terms
+	vocab = db.data.find({"vocabulary": "ERRHS_Vocabulary_download"})
+    return (lexicon, vocabulary)
 
-def aggregate_dataset(fullpath, result):
+def aggregate_dataset(fullpath, result, vocab):
     wb = openpyxl.Workbook(encoding='utf-8')
     ws = wb.get_active_sheet()
     ws.title = "Dataset"
@@ -66,11 +76,12 @@ def aggregate_dataset(fullpath, result):
                 c = ws.cell(row=i, column=j)
                 c.value = name
                 j+=1
-            for ter_code in terdata:
+            for ter_code in vocab['regions']:
                 c = ws.cell(row=i, column=j)
-                ter_value = terdata[ter_code]
-                ter_value = re.sub(r'\.0', '', str(ter_value))
-                c.value = ter_code
+		ter_name = ter_code
+		if ter_code in vocab['regions']:
+		    ter_name = vocab['regions'][ter_code]
+                c.value = ter_name
                 j+=1
 	    i+=1
 
@@ -82,10 +93,13 @@ def aggregate_dataset(fullpath, result):
 	        c = ws.cell(row=i, column=j)
 	        c.value = chain[name] 
 		j+=1
-	    for ter_code in terdata:
+	    for ter_code in vocab['regions']:
                 c = ws.cell(row=i, column=j)
-		ter_value = terdata[ter_code]
-		ter_value = re.sub(r'\.0', '', str(ter_value))
+                if ter_code in terdata:
+                    ter_value = terdata[ter_code]
+                    ter_value = re.sub(r'\.0', '', str(ter_value))
+                else:
+                    ter_value = 'NA'
                 c.value = ter_value
 		j+=1
 	    i+=1
