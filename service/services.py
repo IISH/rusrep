@@ -33,6 +33,7 @@ from rdflib.namespace import DC, FOAF
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname("__file__"), './')))
 from cliocore.configutils import Configuration, Utils, DataFilter
 from dataverse import Connection
+from excelmaster import aggregate_dataset, preprocessor
 
 forbidden = ["classification", "action", "language", "path"]
 
@@ -64,6 +65,10 @@ def classcollector(keywords):
     return (classdict, normaldict)
 
 def json_generator(c, jsondataname, data):
+        cparser = ConfigParser.RawConfigParser()
+        cpath = "/etc/apache2/rusrep.config"
+        cparser.read(cpath)
+
 	sqlnames = [desc[0] for desc in c.description]
         jsonlist = []
         jsonhash = {}
@@ -95,7 +100,7 @@ def json_generator(c, jsondataname, data):
 
         jsonhash[jsondataname] = jsonlist
 	newkey = str("%05.8f" % random.random())
-	jsonhash['url'] = "/download?key=%s" % newkey
+	jsonhash['url'] = "%s/service/download?key=%s" % (cparser.get('config', 'root'), newkey)
 	json_string = json.dumps(jsonhash, encoding="utf8", ensure_ascii=False, sort_keys=True, indent=4)
 	try:
 	    thisdata = jsonhash
@@ -962,6 +967,7 @@ def loadjson(apiurl):
 @app.route('/download')
 def download():
     clioinfra = Configuration()
+
     if request.args.get('id'):
         host = "datasets.socialhistory.org"
         url = "https://%s/api/access/datafile/%s?&key=%s&show_entity_ids=true&q=authorName:*" % (host, request.args.get('id'), clioinfra.config['ristatkey'])
@@ -971,6 +977,25 @@ def download():
 	if request.args.get('filetype') == 'excel':
 	    filetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         return Response(pdfdata, mimetype=filetype)
+    if request.args.get('key'):
+        clientcache = MongoClient()
+	datafilter = {}
+	datafilter['key'] = request.args.get('key')
+	(lexicon, regions) = preprocessor(datafilter)
+	fullpath = "/home/dpe/tmp/data/%s.xlsx" % request.args.get('key')
+        filename = aggregate_dataset(fullpath, lexicon, regions)
+	with open(filename, 'rb') as f:
+            datacontents = f.read()
+        filetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        return Response(datacontents, mimetype=filetype)
+
+        dbcache = clientcache.get_database('datacache')
+	result = dbcache.data.find({"key": str(request.args.get('key')) })
+	for item in result:
+	    del item['key']
+	    del item['_id']
+	    dataset = json.dumps(item, encoding="utf8", ensure_ascii=False, sort_keys=True, indent=4)
+	    return Response(dataset,  mimetype='application/json; charset=utf-8')
     else:
 	return 'Not found'
 

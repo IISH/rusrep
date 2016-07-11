@@ -6,14 +6,15 @@ import openpyxl
 from openpyxl.cell import get_column_letter
 import re
 
-def preprocessor(datakey):
+def preprocessor(datafilter):
     dataset = []
     lexicon = {}
     lands = {}
+    year = 0
     clientcache = MongoClient()
-    if datakey:
+    if datafilter['key']:
         dbcache = clientcache.get_database('datacache')
-        result = dbcache.data.find({"key": datakey })
+        result = dbcache.data.find({"key": datafilter['key'] })
         for rowitem in result:
             del rowitem['key']
             del rowitem['_id']
@@ -25,6 +26,8 @@ def preprocessor(datakey):
 		    clist = {}
 		    for classname in classes:
 		        dataitem[classname] = classes[classname]
+		if 'year' in item:
+		    year = item['year']
 
 	        itemlexicon = dataitem
 		lands = {}
@@ -47,7 +50,11 @@ def preprocessor(datakey):
 		dataset.append(dataitem)
 	# load regions
 	db = clientcache.get_database('vocabulary')
-	vocab = db.data.find({"vocabulary": "ERRHS_Vocabulary_regions"})
+	regfilter = {}
+	regfilter["vocabulary"] = "ERRHS_Vocabulary_regions"
+	if year:
+	    regfilter['basisyear'] = year
+	vocab = db.data.find(regfilter)
 	regions = {}
 	vocabulary = {}
 	for item in vocab:
