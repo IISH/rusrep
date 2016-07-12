@@ -68,6 +68,13 @@ def json_generator(c, jsondataname, data):
         cparser = ConfigParser.RawConfigParser()
         cpath = "/etc/apache2/rusrep.config"
         cparser.read(cpath)
+	lang = 'en'
+        try:
+            qinput = json.loads(request.data)
+	    if 'language' in qinput:	
+		lang = qinput['language']
+        except:
+	    skip = 'yes'
 
 	sqlnames = [desc[0] for desc in c.description]
         jsonlist = []
@@ -106,6 +113,7 @@ def json_generator(c, jsondataname, data):
 	    thisdata = jsonhash
 	    del thisdata['url']
 	    thisdata['key'] = newkey
+	    thisdata['language'] = lang
 	    result = dbcache.data.insert(thisdata)
 	except:
 	    skip = 'something went wrong...'
