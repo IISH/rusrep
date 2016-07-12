@@ -990,7 +990,7 @@ def download():
 	datafilter = {}
 	datafilter['key'] = request.args.get('key')
 	(lexicon, regions) = preprocessor(datafilter)
-	fullpath = "/home/dpe/tmp/data/%s.xlsx" % request.args.get('key')
+	fullpath = "%s/%s.xlsx" % (clioinfra.config['tmppath'],request.args.get('key'))
         filename = aggregate_dataset(fullpath, lexicon, regions)
 	with open(filename, 'rb') as f:
             datacontents = f.read()
