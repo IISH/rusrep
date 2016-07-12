@@ -1,10 +1,12 @@
 #!/usr/bin/python
+# -*- coding: utf-8 -*-
 
 import json
 from pymongo import MongoClient
 import openpyxl
 from openpyxl.cell import get_column_letter
 import re
+from icu import Locale, Collator
 
 def preprocessor(datafilter):
     dataset = []
@@ -13,6 +15,7 @@ def preprocessor(datafilter):
     year = 0
     lang = 'en'
     clientcache = MongoClient()
+
     if datafilter['key']:
         dbcache = clientcache.get_database('datacache')
         result = dbcache.data.find({"key": datafilter['key'] })
@@ -79,6 +82,18 @@ def aggregate_dataset(fullpath, result, vocab):
     ws.title = "Dataset"
 
     i = 9
+    myloc = Locale('ru')  # 'el' is the locale code for Greek
+    col = Collator.createInstance(myloc)
+    regions = {}
+    regnames = []
+    for ter_code in vocab['regions']:
+        tmpname = vocab['regions'][ter_code]
+	ter_name = tmpname.decode('utf-8')
+	regions[ter_name] = ter_code
+	regnames.append(ter_name) 
+
+    sorted_regions = sorted(regnames, cmp=col.compare)
+
     for itemchain in result:
         j = 0
         if i == 9:
@@ -92,7 +107,8 @@ def aggregate_dataset(fullpath, result, vocab):
                 c = ws.cell(row=i, column=j)
                 c.value = name
                 j+=1
-            for ter_code in vocab['regions']:
+            for ter_name in sorted_regions:
+                ter_code = regions[ter_name]
                 c = ws.cell(row=i, column=j)
 		ter_name = ter_code
 		if ter_code in vocab['regions']:
@@ -109,7 +125,9 @@ def aggregate_dataset(fullpath, result, vocab):
 	        c = ws.cell(row=i, column=j)
 	        c.value = chain[name] 
 		j+=1
-	    for ter_code in vocab['regions']:
+	    # Sorting
+	    for ter_name in sorted_regions:
+		ter_code = regions[ter_name]
                 c = ws.cell(row=i, column=j)
                 if ter_code in terdata:
                     ter_value = terdata[ter_code]
