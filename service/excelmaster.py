@@ -11,6 +11,7 @@ def preprocessor(datafilter):
     lexicon = {}
     lands = {}
     year = 0
+    lang = 'en'
     clientcache = MongoClient()
     if datafilter['key']:
         dbcache = clientcache.get_database('datacache')
@@ -18,6 +19,9 @@ def preprocessor(datafilter):
         for rowitem in result:
             del rowitem['key']
             del rowitem['_id']
+	    if 'language' in rowitem:
+		lang = rowitem['language']
+	    del rowitem['language']
 	    for item in rowitem['data']:
 	        dataitem = item
 	        if 'path' in item:
@@ -28,6 +32,8 @@ def preprocessor(datafilter):
 		        dataitem[classname] = classes[classname]
 		if 'year' in item:
 		    year = item['year']
+                if 'base_year' in item:
+                    year = item['base_year']
 
 	        itemlexicon = dataitem
 		lands = {}
@@ -53,12 +59,15 @@ def preprocessor(datafilter):
 	regfilter = {}
 	regfilter["vocabulary"] = "ERRHS_Vocabulary_regions"
 	if year:
-	    regfilter['basisyear'] = year
+	    regfilter['basisyear'] = str(year)
 	vocab = db.data.find(regfilter)
 	regions = {}
 	vocabulary = {}
 	for item in vocab:
-	    regions[item['ID']] = item['EN']
+	    if lang == 'en':
+	        regions[item['ID']] = item['EN']
+	    else:
+		regions[item['ID']] = item['RUS']
 	vocabulary['regions'] = regions
 	# load terms
 	vocab = db.data.find({"vocabulary": "ERRHS_Vocabulary_download"})
