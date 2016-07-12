@@ -33,6 +33,7 @@ def findconfig(configfile):
 def read_params():
 	year = 0
 	datatype = 0
+	(path, copyrights) = ('','')
 	filename = 'output.xls'
 	region = 0
 	fields = ''
