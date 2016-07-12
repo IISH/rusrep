@@ -39,7 +39,7 @@ forbidden = ["classification", "action", "language", "path"]
 
 def connect():
         cparser = ConfigParser.RawConfigParser()
-        cpath = "/etc/apache2/rusrep.config"
+        cpath = "/etc/apache2/russianrep.config"
         cparser.read(cpath)
 
 	conn_string = "host='%s' dbname='%s' user='%s' password='%s'" % (cparser.get('config', 'dbhost'), cparser.get('config', 'dbname'), cparser.get('config', 'dblogin'), cparser.get('config', 'dbpassword'))
@@ -66,7 +66,7 @@ def classcollector(keywords):
 
 def json_generator(c, jsondataname, data):
         cparser = ConfigParser.RawConfigParser()
-        cpath = "/etc/apache2/rusrep.config"
+        cpath = "/etc/apache2/russianrep.config"
         cparser.read(cpath)
 	lang = 'en'
         try:
