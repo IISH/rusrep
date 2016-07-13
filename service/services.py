@@ -31,7 +31,7 @@ from rdflib import Graph, plugin, Namespace, Literal, term, BNode
 from rdflib.serializer import Serializer
 from rdflib.namespace import DC, FOAF
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname("__file__"), './')))
-from cliocore.configutils import Configuration, Utils, DataFilter
+from ristatcore.configutils import Configuration, Utils, DataFilter
 from dataverse import Connection
 from excelmaster import aggregate_dataset, preprocessor
 
