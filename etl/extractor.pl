@@ -1,4 +1,31 @@
 #!/usr/bin/perl
+#
+# Copyright (C) 2014 International Institute of Social History.
+# @author Vyacheslav Tykhonov <vty@iisg.nl>
+#
+# This program is free software: you can redistribute it and/or  modify
+# it under the terms of the GNU Affero General Public License, version 3,
+# as published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# As a special exception, the copyright holders give permission to link the
+# code of portions of this program with the OpenSSL library under certain
+# conditions as described in each individual source file and distribute
+# linked combinations including the program with the OpenSSL library. You
+# must comply with the GNU Affero General Public License in all respects
+# for all of the code used other than as permitted herein. If you modify
+# file(s) with this exception, you may extend this exception to your
+# version of the file(s), but you are not obligated to do so. If you do not
+# wish to do so, delete this exception statement from your version. If you
+# delete this exception statement from all source files in the program,
+# then also delete it in the license file.
 
 use vars qw/$libpath/;
 use FindBin qw($Bin);
@@ -20,11 +47,6 @@ my $dbh = DBI->connect("dbi:Pg:dbname=$dbname;host=$dbhost",$dblogin,$dbpassword
 $MAX = 300;
 $dir = $ARGV[0];
 $filename = $ARGV[1];
-$datadir = "$Bin/../newdatasets";
-mkdir $datadir unless (-e $datadir);
-$datadir.="/tmp";
-
-use File::List;
 unless ($tmpdir)
 {
     $datadir = "$Bin/../datasets";
@@ -35,6 +57,10 @@ else
     $datadir = $tmpdir."/../datasets";
 }
 mkdir $datadir unless (-e $datadir);
+$datadir.="/tmp";
+mkdir $datadir unless (-e $datadir);
+
+use File::List;
 
 my $search = new File::List($dir);
 my @files  = @{ $search->find("\.xls") };    # find all perl scripts in /usr/local
@@ -55,20 +81,18 @@ foreach $file (@files)
 
    if ($true)
    {
-        print "$file $datadir\n";
+        print "$file\n";
         @folders = getdirlist($file);
         ($thisdir, $thisfile) = makefolders($datadir, @folders);
 	$thisfile=~s/\)|\(//g;
 	open(datasets, ">$datadir/$thisfile.sql");
 	open(datasetinfo, ">$datadir/$thisfile.dump");
         extractor($file, $thisfile, "$thisdir/$thisfile");
-	print "$thisdir/$thisfile\n";
 	close(datasets);
 	close(datasetinfo);
    }
 };
 close(instruction);
-print "$datadir\n";
 
 sub extractor
 {
@@ -80,11 +104,6 @@ sub extractor
    # && $file=~/\)/)
    {
 	my $newfile = $file;
-	my $baseyear;
-	if ($newfile=~/(\d+)\.xls/)
-	{
-	    $baseyear = $1;
-	}
 
 	$newfile=~s/\(\d+\)//g;
 	$newfile=~s/\s+//g;
@@ -104,38 +123,17 @@ sub extractor
 	   open(dataset, ">$outfile.data");
 	   print dataset "$dataset";
 	   close(dataset);
-	   my @lines;
-	   my @slines = split(/\n/, $dataset);
-	   $ID = 0;
-	   foreach $item (@slines)
-	   {
-		unless ($item=~/^\"/)
-		{
-		    push(@lines, $item);
-		    $ID++;
-	 	}
-		else
-		{
-		    $pID = $ID - 1;
-		    $lines[$pID].="$item";
-		}
-	   }
-	   # Add baseyear
-	   @lines[0] = "base_year|$lines[0]";
-	   for ($i=1; $i<=$#lines; $i++)
-	   {
-	       $lines[$i] = "$baseyear|$lines[$i]";
-	   }
+	   my @lines = split(/\n/, $dataset);
 	   my @names = split(/\|/, $lines[0]);
 	   %fields = getfields(@names);
 	   %dataset = dataset_processor(@lines);
 
-	   $table = "repository";
+	   #$table = "repository";
 	   $table = "$thisfile";
+	   $table = "i$thisfile";
 	   $sql.="CREATE table $table (\n";
 	   print instruction "INSERT INTO $database select * from $table;\n";
 	   $sql.="\tindicator_id integer $default{integer}, \n";
-	   #$sql.="\tbase_year $varchar $default{$varchar}, \n";
 
 	   foreach $id (sort {$order{$a} <=> $order{$b}} keys %order)
 	   {
@@ -183,20 +181,10 @@ sub extractor
 		    my ($varname, $value) = ($varnames{$fID}, $values[$fID]);
 		    $value=~s/^\s*\.\s*$//g;
 
-		    if ($varname && $value=~/\S+/)
+		    if ($varname && $value)
 		    {
 			my $sqlvarname = $varname;
 			my $sqlvalue = $value;
-			if ($sqlvarname=~/datatype/i)
-			{
-			    $sqlvalue=~s/\.$//g;
-			    $sqlvalue = sprintf("%.02f", $sqlvalue);
-			}
-			if ($sqlvarname=~/code/i)
-			{
-			    $sqlvalue=~s/\"|\'//g;
-			}
-		
 			if ($i eq 1 && $sqlvarname!~/Comment\_Naborshika/i)
 			{
                 	   $sqlvarname=~s/\-/\_/g;
@@ -220,8 +208,7 @@ sub extractor
 		$sqlValues=~s/\,\s+$//g;
 		$sqlFields=~s/\,\s+$//g;
 	
-		$maintable = "russianrepository";
-	        print datasets "INSERT into $maintable ($sqlFields) VALUES ($sqlValues);\n" if ($sqlValues=~/\w/i);
+	        print datasets "INSERT into $table ($sqlFields) VALUES ($sqlValues);\n" if ($sqlValues=~/\w/i);
 	   };
 	}
 
@@ -246,9 +233,6 @@ sub getfields
 	$lastID = $i;
    }
 
-   $lastID = 999;
-   $fieldnames{$lastID} = 'base_year';
-   $order{$lastID} = $lastID;
    $lastID = 1000;
    $fieldnames{$lastID} = 'indicator';
    $order{$lastID} = $lastID;

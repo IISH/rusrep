@@ -167,3 +167,5 @@ if ids:
 
 classdata = classupdate()
 result = db.data.insert(classdata)
+db = client.get_database('datacache')
+db.data.drop()
