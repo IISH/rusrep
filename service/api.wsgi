@@ -25,7 +25,12 @@
 # delete this exception statement from all source files in the program,
 # then also delete it in the license file.
 
+import logging
 import sys
-sys.path.insert(0, "/home/clio-infra/public_html/service")
+
+sys.path.insert(0, "/home/dpe/rusrep/service")
+
+logging.basicConfig(level=logging.DEBUG)
+logging.debug(__file__)
 
 from services import app as application

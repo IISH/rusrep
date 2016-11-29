@@ -1,4 +1,9 @@
 from __future__ import absolute_import
+
+import logging
+import os
+import sys
+
 from flask import Flask, Response, request
 import requests
 from twisted.web import http
@@ -10,8 +15,6 @@ import urllib2
 import glob
 import csv
 import xlwt
-import os
-import sys
 import psycopg2
 import psycopg2.extras
 import pprint
@@ -599,6 +602,7 @@ def load_data(cursor, year, datatype, region, debug):
         return jsondata;
 
 app = Flask(__name__)
+logging.debug(__file__)
 
 @app.route('/')
 def test():
