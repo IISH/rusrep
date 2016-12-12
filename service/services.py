@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+
+# FL-12-Dec-2016 use datatype in function documentation()
+
 from __future__ import absolute_import
 
 import logging
@@ -1120,6 +1124,17 @@ def documentation():
     dataverse = connection.get_dataverse('RISTAT')
     settings = DataFilter(request.args)
     papers = []
+    
+    logging.debug("request.args:")
+    logging.debug(request.args)
+    logging.debug("settings:")
+    logging.debug(settings)
+    
+    datatype = int(request.args.get("datatype"))
+    logging.debug("datatype: %s, type: %s" % (datatype, type(datatype)))
+    name_start = "ERRHS_" + str(datatype) + "_"
+    logging.debug("name_start: %s" % name_start)
+    
     for item in dataverse.get_contents():
         handle = str(item['protocol']) + ':' + str(item['authority']) + "/" + str(item['identifier'])
         if handle == clioinfra.config['ristatdocs']:
@@ -1131,6 +1146,28 @@ def documentation():
                 paperitem['id'] = str(files['datafile']['id'])
                 paperitem['name'] = str(files['datafile']['name'])
                 paperitem['url'] = "http://data.sandbox.socialhistoryservices.org/service/download?id=%s" % paperitem['id']
+                logging.debug("paperitem: %s" % paperitem)
+                
+                # check datatype to limit the returned documents
+                name = str(files['datafile']['name'])
+                digit_str = ""
+                ndigits = len(str(datatype))
+                if len(name) >= 6+ndigits:
+                    digit_str = name[6:6+ndigits]
+                #logging.debug("digit_str: %s, type: %s:" % (digit_str, type(digit_str)))
+                
+                try:
+                    digits = int(digit_str)
+                    # check the name
+                    if name.startswith(name_start):
+                        logging.debug("use:  %s:" % name)
+                    else:
+                        logging.debug("skip: %s:" % name)       # wrong digit
+                        continue
+                except:
+                    logging.debug("use:  %s:" % name)           # digit not an int: return the document
+                    pass
+                
                 try:
                     if 'lang' in settings.datafilter:
                         varpat = r"(_%s)" % (settings.datafilter['lang'])
