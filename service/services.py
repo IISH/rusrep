@@ -50,6 +50,11 @@ def connect():
     cparser = ConfigParser.RawConfigParser()
     cpath = "/etc/apache2/russianrep.config"
     cparser.read(cpath)
+    logging.debug("cpath: %s" % cpath)
+    logging.debug("host: %s" % cparser.get('config', 'dbhost'))
+    logging.debug("dbname: %s" % cparser.get('config', 'dbname'))
+    logging.debug("user: %s" % cparser.get('config', 'dblogin'))
+    logging.debug("password: %s" % cparser.get('config', 'dbpassword'))
     
     conn_string = "host='%s' dbname='%s' user='%s' password='%s'" % (cparser.get('config', 'dbhost'), cparser.get('config', 'dbname'), cparser.get('config', 'dblogin'), cparser.get('config', 'dbpassword'))
     
@@ -89,7 +94,7 @@ def json_generator(c, jsondataname, data):
     lang = 'en'
     try:
         qinput = json.loads(request.data)
-        if 'language' in qinput:	
+        if 'language' in qinput:
             lang = qinput['language']
     except:
         skip = 'yes'
@@ -150,7 +155,7 @@ def translatedvocabulary(newfilter):
     dbname = 'vocabulary'
     db = client.get_database(dbname)
     if newfilter:
-        #vocab = db.data.find({"YEAR": thisyear})	
+        #vocab = db.data.find({"YEAR": thisyear})
         vocab = db.data.find(newfilter)
     else:
         vocab = db.data.find()
@@ -376,7 +381,7 @@ def datasetfilter(data, sqlnames, classification):
                 skip = 'yes'
 
         if classification:
-	    #return datafilter
+            #return datafilter
             return json.dumps(datafilter, encoding="utf8", ensure_ascii=False, sort_keys=True, indent=4)
 
 
@@ -450,7 +455,7 @@ def load_classes(cursor):
                                 if toplevel.group(0) != '10':
                                     datarow["levels"] = toplevel.group(0)
         try:
-            if datarow["levels"] > 0:	
+            if datarow["levels"] > 0:
                 datafilter.append(datarow)
         except:
             skip = 'yes'
@@ -967,7 +972,7 @@ def aggr():
             elif name == 'path':
                 fullpath = qinput[name]
                 topsql = 'AND ('
-                for path in fullpath:	
+                for path in fullpath:
                     tmpsql = ' ('
                     for xkey in path:
                         value = path[xkey]
@@ -1039,8 +1044,8 @@ def aggr():
             order = []
             for item in sorted(lineitem):
                 order.append(item)
-            for item in order:	
-                sorteditems[item] = lineitem[item]	
+            for item in order:
+                sorteditems[item] = lineitem[item]
             x = collections.OrderedDict(sorted(sorteditems.items()))
             #return json.dumps(x)
 
@@ -1130,8 +1135,17 @@ def documentation():
     logging.debug("settings:")
     logging.debug(settings)
     
-    datatype = int(request.args.get("datatype"))
+    datatype = ""
+    try:
+        datatype = int(request.args.get("datatype"))
+    except:
+        pass
+    
+    datafilter = settings.datafilter
+    
     logging.debug("datatype: %s, type: %s" % (datatype, type(datatype)))
+    logging.debug("datafilter: %s" % str(datafilter))
+    
     name_start = "ERRHS_" + str(datatype) + "_"
     logging.debug("name_start: %s" % name_start)
     
@@ -1148,25 +1162,23 @@ def documentation():
                 paperitem['url'] = "http://data.sandbox.socialhistoryservices.org/service/download?id=%s" % paperitem['id']
                 logging.debug("paperitem: %s" % paperitem)
                 
-                # check datatype to limit the returned documents
                 name = str(files['datafile']['name'])
-                digit_str = ""
-                ndigits = len(str(datatype))
-                if len(name) >= 6+ndigits:
-                    digit_str = name[6:6+ndigits]
-                #logging.debug("digit_str: %s, type: %s:" % (digit_str, type(digit_str)))
                 
-                try:
-                    digits = int(digit_str)
-                    # check the name
-                    if name.startswith(name_start):
-                        logging.debug("use:  %s:" % name)
-                    else:
-                        logging.debug("skip: %s:" % name)       # wrong digit
-                        continue
-                except:
-                    logging.debug("use:  %s:" % name)           # digit not an int: return the document
-                    pass
+                if datatype != "":      # use datatype to limit the returned documents
+                    # find substring between the first two underscores
+                    sub_name = ""
+                    p1 = name.find("_")
+                    if p1 != -1:
+                        p2 = name.find("_", p1+1)
+                        if p2 != -1:
+                            sub_name = name[p1+1:p2]
+                            logging.debug("sub_name: %s" % sub_name)
+                            try:
+                                sub_digits = int(sub_name)
+                                if sub_digits != datatype:
+                                    continue    # datatype does not match: skip
+                            except:
+                                pass            # allow
                 
                 try:
                     if 'lang' in settings.datafilter:
@@ -1175,6 +1187,8 @@ def documentation():
                         found = pattern.findall(paperitem['name'])
                         if found:
                             papers.append(paperitem)
+                    else:   # paperitem without language specified: add
+                        papers.append(paperitem)
                     
                     if 'topic' in settings.datafilter:
                         varpat = r"(_%s_.+_\d+_+%s.|class|region)" % (settings.datafilter['topic'], settings.datafilter['lang'])
@@ -1188,6 +1202,9 @@ def documentation():
                 except:
                     if 'lang' not in settings.datafilter:
                         papers.append(paperitem)
+    
+    for paper in papers:
+        logging.debug(paper)
     
     return Response(json.dumps(papers),  mimetype='application/json; charset=utf-8')
 
@@ -1274,7 +1291,7 @@ def login(settings=''):
         sql = "select * from datasets.classification where 1=1";
         #datatype='7.01' and base_year='1897' group by histclass1, datatype, value_unit, ter_code, value;
     try:
-        classification = qinput['classification']	
+        classification = qinput['classification']
     except:
         classification = 'historical'
     forbidden = ["classification", "action", "language"]
