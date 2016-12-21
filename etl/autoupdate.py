@@ -1,37 +1,44 @@
 #!/usr/bin/python
+# -*- coding: utf-8 -*-
 
-# VT-07-Jul-2016 latest change by VT
-# FL-19-Dec-2016
+"""
+This script updates the vocabulary files: 
+retrieving them from Dataverse, writing to MongoDB
+The documentation files in PostgreSQL are not used
+
+VT-07-Jul-2016 latest change by VT
+FL-21-Dec-2016
+"""
 
 from __future__ import absolute_import
 
+import json
 import logging
 import os
-import sys
-
-from flask import Flask, Response, request
-import requests
-from twisted.web import http
-import urllib
-import json
-import simplejson
-import tables
-import urllib2
-import glob
-import csv
-import xlwt
-import psycopg2
-import psycopg2.extras
-import pprint
-import collections
-import getopt
-import ConfigParser
 import re
-import os
 import sys
-import unittest
-from vocab import vocabulary, classupdate
+import urllib
+import urllib2
+import simplejson
+
 from pymongo import MongoClient
+from vocab import vocabulary, classupdate
+from xlsx2csv import xlsx2csv
+
+#import collections
+#import ConfigParser
+#import csv
+#import getopt
+#import glob
+#import pprint
+#import psycopg2
+#import psycopg2.extras
+#import requests
+#import tables
+#import unittest
+#import xlwt
+#from flask import Flask, Response, request
+#from twisted.web import http
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname("__file__"), './')))
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname("__file__"), '../')))
@@ -39,12 +46,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname("__file__"), '..
 #print(sys.path)
 #print("pwd:", os.getcwd())
 
-from xlsx2csv import xlsx2csv
+from dataverse import Connection
 
 #from cliocore.configutils import Configuration, Utils, DataFilter
-from service.configutils import Configuration, Utils, DataFilter
-
-from dataverse import Connection
+from service.configutils import Configuration, DataFilter
 
 
 def loadjson(apiurl):
@@ -57,7 +62,7 @@ def loadjson(apiurl):
     dataframe = simplejson.load(f)
     return dataframe
 
-
+"""
 def connect():
     logging.debug("connect()")
     cparser = ConfigParser.RawConfigParser()
@@ -70,11 +75,11 @@ def connect():
     conn = psycopg2.connect(conn_string)
     cursor = conn.cursor()
     return cursor
-
+"""
 
 def alldatasets():
     logging.debug("alldatasets()")
-    cursor = connect()
+    #cursor = connect()
     clioinfra = Configuration()
     host = clioinfra.config['dataverseroot']
     dom = re.match(r'https\:\/\/(.+)$', host)
@@ -82,8 +87,9 @@ def alldatasets():
         host = dom.group(1)
     connection = Connection(host, clioinfra.config['ristatkey'])
     dataverse = connection.get_dataverse('RISTAT')
-    settings = DataFilter('')
-    papers = []
+    
+    #settings = DataFilter('')
+    #papers = []
     kwargs = { 'delimiter' : '|' }
 
     for item in dataverse.get_contents():
@@ -110,9 +116,9 @@ def alldatasets():
     return ''
 
 
-def content():
+def content(handle_name):
     logging.debug("content()")
-    cursor = connect()
+    #cursor = connect()
     clioinfra = Configuration()
     #logging.debug(clioinfra.config)
     
@@ -126,11 +132,14 @@ def content():
     for item in dataverse.get_contents():
         handle = str(item['protocol']) + ':' + str(item['authority']) + "/" + str(item['identifier'])
         logging.debug("handle: %s" % handle)
-        #if handle not in [clioinfra.config['ristatdocs'], clioinfra.config['ristatvoc']]:
-        if handle in clioinfra.config['ristatvoc']:
+        
+        #if handle in clioinfra.config['ristatvoc']:
+        if handle in clioinfra.config[handle_name]:
+            logging.debug("using handle: %s" % handle )
             datasetid = item['id']
             url = "https://" + str(host) + "/api/datasets/" + str(datasetid) + "/?&key=" + str(clioinfra.config['ristatkey'])
             dataframe = loadjson(url)
+            
             for files in dataframe['data']['latestVersion']['files']:
                 paperitem = {}
                 paperitem['id'] = str(files['datafile']['id'])
@@ -140,13 +149,14 @@ def content():
                 paperitem['url'] = "http://data.sandbox.socialhistoryservices.org/service/download?id=%s" % paperitem['id']
                 url = "https://%s/api/access/datafile/%s?&key=%s&show_entity_ids=true&q=authorName:*" % (host, paperitem['id'], clioinfra.config['ristatkey'])
                 filepath = "%s/%s" % (clioinfra.config['tmppath'], paperitem['name'])
-                csvfile = "%s/%s.csv" % (clioinfra.config['tmppath'], paperitem['name'])
-                print url
+                #csvfile = "%s/%s.csv" % (clioinfra.config['tmppath'], paperitem['name'])
+                logging.debug( url )
+                
                 f = urllib.urlopen(url)
                 fh = open(filepath, 'wb')
                 fh.write(f.read())
                 fh.close()
-
+                
                 try:
                     if 'lang' in settings.datafilter:
                         varpat = r"(_%s)" % (settings.datafilter['lang'])
@@ -154,7 +164,7 @@ def content():
                         found = pattern.findall(paperitem['name'])
                         if found:
                             papers.append(paperitem)
-
+                    
                     if 'topic' in settings.datafilter:
                         varpat = r"(_%s_.+_\d+_+%s.|class|region)" % (settings.datafilter['topic'], settings.datafilter['lang'])
                         pattern = re.compile(varpat, re.IGNORECASE)
@@ -171,16 +181,14 @@ def content():
     return (papers, ids)
 
 
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
-    logging.debug(__file__)
-    
-    
+def update_vocabularies():
+    logging.debug("update_vocabularies()")
     #docs = alldatasets()
 
     # Update vocabularies
     logging.debug("Update vocabularies...")
-    (docs, ids) = content()
+    handle_name = "ristatvoc"
+    (docs, ids) = content(handle_name)
     
     logging.debug("keys in ids:")
     for key in ids:
@@ -209,7 +217,7 @@ if __name__ == "__main__":
         bigvocabulary = vocabulary(host, apikey, ids)
         data = json.loads(bigvocabulary.to_json(orient='records'))
         
-        logging.debug("processing %d items..." % len(data))
+        logging.debug("processing %d vocabulary items..." % len(data))
         for item in data:
             #logging.debug(item)
             if 'YEAR' in item:
@@ -227,5 +235,30 @@ if __name__ == "__main__":
     logging.debug("clearing cache")
     db = client.get_database('datacache')
     db.data.drop()      # remove the data; same as: db.drop_collection(dbname)
+
+
+def update_data():
+    logging.debug("update_data()")
+
+    # Update vocabularies
+    logging.debug("Update data...")
+    handle_name = "hdl_population"
+    (docs, ids) = content(handle_name)
     
+    logging.debug("keys in ids:")
+    for key in ids:
+        logging.debug("key: %s, value: %s" % (key, ids[key]))
+        
+    logging.debug("docs:")
+    for doc in docs:
+        logging.debug(doc)
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG)
+    logging.debug(__file__)
+    
+    #update_vocabularies()
+    update_data()
+
 # [eof]
