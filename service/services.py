@@ -4,43 +4,49 @@
 
 from __future__ import absolute_import
 
+import collections
+import ConfigParser
+import json
 import logging
 import os
-import sys
-
-from flask import Flask, Response, request
-import requests
-from twisted.web import http
-from pymongo import MongoClient
-import json
+import pandas as pd
+import random
+import re
 import simplejson
+import sys
 import tables
+import urllib
 import urllib2
-import glob
-import csv
-import xlwt
 import psycopg2
 import psycopg2.extras
-import pprint
-import collections
-import getopt
-import urllib
-import random
-import ConfigParser
-import re
-import os
-import sys
-import unittest
-import pandas as pd
+
+from flask import Flask, Response, request
+from pymongo import MongoClient
 from StringIO import StringIO
-import numpy as np
-from rdflib import Graph, plugin, Namespace, Literal, term, BNode
-from rdflib.serializer import Serializer
-from rdflib.namespace import DC, FOAF
+from rdflib import Graph, Literal, term
+
+#import csv
+#import getopt
+#import glob
+#import numpy as np
+#import pprint
+#import requests
+#import unittest
+#import xlwt
+
+#from rdflib import BNode, Namespace, plugin
+#from rdflib.serializer import Serializer
+#from rdflib.namespace import DC, FOAF
+#from twisted.web import http
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname("__file__"), './')))
-from ristatcore.configutils import Configuration, Utils, DataFilter
+
+from ristatcore.configutils import Configuration, DataFilter
+#from ristatcore.configutils import Utils
+
 from dataverse import Connection
 from excelmaster import aggregate_dataset, preprocessor
+
 
 forbidden = ["classification", "action", "language", "path"]
 
@@ -1203,6 +1209,7 @@ def documentation():
                     if 'lang' not in settings.datafilter:
                         papers.append(paperitem)
     
+    logging.debug("papers in response:")
     for paper in papers:
         logging.debug(paper)
     
