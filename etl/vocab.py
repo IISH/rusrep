@@ -1,22 +1,33 @@
-import re
-import urllib
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
+"""
+VT-06-Jul-2016 latest change by VT
+FL-04-Jan-2017
+"""
+
+import ConfigParser
 import pandas as pd
-from StringIO import StringIO
-import numpy as np
-import vocab
 import psycopg2
 import psycopg2.extras
-import pprint
-import collections
-import getopt
-import ConfigParser
+import re
+import urllib
+
+from StringIO import StringIO
+
+#import numpy as np
+#import collections
+#import getopt
+#import pprint
+#import vocab
+
 
 def vocabulary(host, apikey, ids):
     lexicon = []
     
     for thisid in ids:
-	filename = ids[thisid]
-	filename = re.sub('.tab', '', filename)
+        filename = ids[thisid]
+        filename = re.sub('.tab', '', filename)
         url = "%s/api/access/datafile/%s?&key=%s&show_entity_ids=true&q=authorName:*" % (host, thisid, apikey)    
         f = urllib.urlopen(url)
         data = f.read()
@@ -36,14 +47,16 @@ def vocabulary(host, apikey, ids):
             vocab = dataframe[filtercols]
             newcolumns = []
             for field in vocab:
-		value = mapping[field]
+                value = mapping[field]
                 newcolumns.append(value)
+            
             vocab.columns = newcolumns
             vocab = vocab.dropna()
-	    vocab['vocabulary'] = filename
+            vocab['vocabulary'] = filename
             lexicon.append(vocab)        
     
     return pd.concat(lexicon)
+
 
 def classupdate():
     cparser = ConfigParser.RawConfigParser()
@@ -63,31 +76,32 @@ def classupdate():
             for i in range(len(valuestr)):
                 name = sqlnames[i]
                 value = valuestr[i]
-		#print "%s %s" % (name, value)
-		if value:
-		    classes[name] = str(value)
+                #print "%s %s" % (name, value)
+                if value:
+                     classes[name] = str(value)
 
-	    flagvalue = 0
-	    firstclass = 0
-	    for n in range(10,1,-1):
-		name = "histclass%s" % n
-	 	if name in classes:
-		    if classes[name]:
-		        flagvalue = 1
-			if not firstclass:
-			    firstclass = n
-	 	    if flagvalue == 0:
-		        del classes[name]
+            flagvalue = 0
+            firstclass = 0
+            for n in range(10,1,-1):
+                name = "histclass%s" % n
+                if name in classes:
+                    if classes[name]:
+                        flagvalue = 1
+                        if not firstclass:
+                            firstclass = n
 
-	    # Check comma and add between classes
-	    for n in range(1,firstclass):
+                    if flagvalue == 0:
+                        del classes[name]
+
+            # Check comma and add between classes
+            for n in range(1,firstclass):
                 name = "histclass%s" % n
                 if name not in classes:
-		    classes[name] = '.'
-		   
-	    classes['vocabulary'] = 'historical'
-	    if 'datatype' in classes:
-	        finalclasses.append(classes)
+                    classes[name] = '.'
+
+            classes['vocabulary'] = 'historical'
+            if 'datatype' in classes:
+                finalclasses.append(classes)
 
     sql = "select distinct base_year, value_unit, value_label, datatype, class1, class2, class3, class4, class5, class6, class7, class8, class9, class10 from russianrepository";
     cursor.execute(sql)
@@ -103,10 +117,10 @@ def classupdate():
                     classes[name] = str(value)
 
             flagvalue = 0
-	    firstclass = 0
+            firstclass = 0
             for n in range(10,1,-1):
                 name = "class%s" % n
-		if name in classes:
+                if name in classes:
                     if classes[name]:
                         flagvalue = 1
                         if not firstclass:
@@ -126,3 +140,4 @@ def classupdate():
 
     return finalclasses
 
+# [eof]

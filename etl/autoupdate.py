@@ -7,7 +7,7 @@ retrieving them from Dataverse, writing to MongoDB
 The documentation files in PostgreSQL are not used
 
 VT-07-Jul-2016 latest change by VT
-FL-21-Dec-2016
+FL-04-Jan-2017
 """
 
 from __future__ import absolute_import
@@ -120,20 +120,29 @@ def content(handle_name):
     logging.debug("content()")
     #cursor = connect()
     clioinfra = Configuration()
-    #logging.debug(clioinfra.config)
     
     host = "datasets.socialhistory.org"
     connection = Connection(host, clioinfra.config['ristatkey'])
     dataverse = connection.get_dataverse('RISTAT')
+    
+    logging.debug("title: %s" % dataverse.title)
+    #datasets = dataverse.get_datasets()
+    
     settings = DataFilter('')
     papers = []
     ids = {}
     
+    logging.debug("handle_name: %s" % handle_name )
+    tmppath = os.path.join( clioinfra.config['tmppath'], handle_name)
+    logging.debug("downloading dataverse files to: %s" % tmppath )
+    if not os.path.exists(tmppath):
+        os.makedirs(tmppath)
+    
     for item in dataverse.get_contents():
+        # item dict keys: protocol, authority, persistentUrl, identifier, type, id
         handle = str(item['protocol']) + ':' + str(item['authority']) + "/" + str(item['identifier'])
         logging.debug("handle: %s" % handle)
         
-        #if handle in clioinfra.config['ristatvoc']:
         if handle in clioinfra.config[handle_name]:
             logging.debug("using handle: %s" % handle )
             datasetid = item['id']
@@ -148,7 +157,8 @@ def content(handle_name):
                 paperitem['handle'] = handle
                 paperitem['url'] = "http://data.sandbox.socialhistoryservices.org/service/download?id=%s" % paperitem['id']
                 url = "https://%s/api/access/datafile/%s?&key=%s&show_entity_ids=true&q=authorName:*" % (host, paperitem['id'], clioinfra.config['ristatkey'])
-                filepath = "%s/%s" % (clioinfra.config['tmppath'], paperitem['name'])
+                filepath = "%s/%s" % (tmppath, paperitem['name'])
+                #filepath = "%s/%s" % (clioinfra.config['tmppath'], paperitem['name'])
                 #csvfile = "%s/%s.csv" % (clioinfra.config['tmppath'], paperitem['name'])
                 logging.debug( url )
                 
@@ -185,9 +195,7 @@ def update_vocabularies():
     logging.debug("update_vocabularies()")
     #docs = alldatasets()
 
-    # Update vocabularies
-    logging.debug("Update vocabularies...")
-    handle_name = "ristatvoc"
+    handle_name = "hdl_vocabularies"
     (docs, ids) = content(handle_name)
     
     logging.debug("keys in ids:")
