@@ -236,8 +236,9 @@ def update_vocabularies():
         result = db.data.insert(data)
         #print bigvocabulary.to_json(orient='records')
 
-    logging.debug("inserting data")
+    logging.debug("fetching data from postgresql")
     classdata = classupdate()
+    logging.debug("inserting data in mongodb")
     result = db.data.insert(classdata)
     
     logging.debug("clearing cache")
@@ -260,13 +261,14 @@ def update_data():
     logging.debug("docs:")
     for doc in docs:
         logging.debug(doc)
+    logging.debug("%d documents downloaded from dataverse" % len(docs))
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
     logging.debug(__file__)
     
-    #update_vocabularies()
-    update_data()
+    update_vocabularies()
+    #update_data()
 
 # [eof]

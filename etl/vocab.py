@@ -3,10 +3,11 @@
 
 """
 VT-06-Jul-2016 latest change by VT
-FL-04-Jan-2017
+FL-06-Jan-2017
 """
 
 import ConfigParser
+import logging
 import pandas as pd
 import psycopg2
 import psycopg2.extras
@@ -59,24 +60,30 @@ def vocabulary(host, apikey, ids):
 
 
 def classupdate():
+    logging.debug(__file__)
+    logging.debug("classupdate()")
     cparser = ConfigParser.RawConfigParser()
     cpath = "/etc/apache2/rusrep.config"
+    logging.debug("cpath: %s" % cpath)
     cparser.read(cpath)
     conn_string = "host='%s' dbname='%s' user='%s' password='%s'" % (cparser.get('config', 'dbhost'), cparser.get('config', 'dbname'), cparser.get('config', 'dblogin'), cparser.get('config', 'dbpassword'))
+    logging.debug("conn_string: %s" % conn_string)
     conn = psycopg2.connect(conn_string)
     cursor = conn.cursor()
     sql = "select distinct base_year, value_unit, value_label, datatype, histclass1, histclass2, histclass3, histclass4, histclass5, histclass6, histclass7, histclass8, histclass9, histclass10 from russianrepository";
+    logging.debug("sql: %s" % sql)
     cursor.execute(sql)
     data = cursor.fetchall()
     sqlnames = [desc[0] for desc in cursor.description]
     finalclasses = []
+    
     if data:
         for valuestr in data:
             classes = {}
             for i in range(len(valuestr)):
                 name = sqlnames[i]
                 value = valuestr[i]
-                #print "%s %s" % (name, value)
+                #logging.debug("name: %s, value: %s" % (name, value))
                 if value:
                      classes[name] = str(value)
 
@@ -138,6 +145,7 @@ def classupdate():
             if 'datatype' in classes:
                 finalclasses.append(classes)
 
+    logging.debug("%d entries in finalclasses" % len(finalclasses))
     return finalclasses
 
 # [eof]
