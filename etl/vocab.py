@@ -3,7 +3,7 @@
 
 """
 VT-06-Jul-2016 latest change by VT
-FL-06-Jan-2017
+FL-09-Jan-2017
 """
 
 import ConfigParser
@@ -24,22 +24,24 @@ from StringIO import StringIO
 
 
 def vocabulary(host, apikey, ids):
-    lexicon = []
+    logging.info("%s vocabulary()" % __file__)
     
+    lexicon = []
     for thisid in ids:
         filename = ids[thisid]
         filename = re.sub('.tab', '', filename)
-        url = "%s/api/access/datafile/%s?&key=%s&show_entity_ids=true&q=authorName:*" % (host, thisid, apikey)    
+        logging.info("id: %s, filename: %s" % (thisid, filename))
+        url = "%s/api/access/datafile/%s?&key=%s&show_entity_ids=true&q=authorName:*" % (host, thisid, apikey)
         f = urllib.urlopen(url)
         data = f.read()
         csvio = StringIO(str(data))
-        dataframe = pd.read_csv(csvio, sep='\t', dtype='unicode')        
+        dataframe = pd.read_csv(csvio, sep='\t', dtype='unicode')
     
-        filtercols = []  
+        filtercols = []
         mapping = {}
-        for col in dataframe.columns:    
-            findval = re.search(r'RUS|EN|ID|DATATYPE|YEAR|basisyear', col)    
-            if findval:            
+        for col in dataframe.columns:
+            findval = re.search(r'RUS|EN|ID|DATATYPE|YEAR|basisyear', col)
+            if findval:
                 mapping[col] = findval.group(0)
                 filtercols.append(col)
 
@@ -54,14 +56,14 @@ def vocabulary(host, apikey, ids):
             vocab.columns = newcolumns
             vocab = vocab.dropna()
             vocab['vocabulary'] = filename
-            lexicon.append(vocab)        
+            lexicon.append(vocab)
     
     return pd.concat(lexicon)
 
 
 def classupdate():
-    logging.debug(__file__)
-    logging.debug("classupdate()")
+    logging.info("%s classupdate()" % __file__)
+    
     cparser = ConfigParser.RawConfigParser()
     cpath = "/etc/apache2/rusrep.config"
     logging.debug("cpath: %s" % cpath)

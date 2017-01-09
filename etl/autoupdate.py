@@ -7,7 +7,7 @@ retrieving them from Dataverse, writing to MongoDB
 The documentation files in PostgreSQL are not used
 
 VT-07-Jul-2016 latest change by VT
-FL-04-Jan-2017
+FL-09-Jan-2017
 """
 
 from __future__ import absolute_import
@@ -78,7 +78,7 @@ def connect():
 """
 
 def alldatasets():
-    logging.debug("alldatasets()")
+    logging.debug("%s alldatasets()" % __file__)
     #cursor = connect()
     clioinfra = Configuration()
     host = clioinfra.config['dataverseroot']
@@ -116,8 +116,8 @@ def alldatasets():
     return ''
 
 
-def content(handle_name):
-    logging.debug("content()")
+def download_docs(handle_name):
+    logging.debug("%s download_docs()" % __file__)
     #cursor = connect()
     clioinfra = Configuration()
     
@@ -162,11 +162,13 @@ def content(handle_name):
                 #csvfile = "%s/%s.csv" % (clioinfra.config['tmppath'], paperitem['name'])
                 logging.debug( url )
                 
+                # read dataverse document from url, write contents to filepath
                 f = urllib.urlopen(url)
                 fh = open(filepath, 'wb')
                 fh.write(f.read())
                 fh.close()
                 
+                # FL-09-Jan-2017 should we not filter before downloading?
                 try:
                     if 'lang' in settings.datafilter:
                         varpat = r"(_%s)" % (settings.datafilter['lang'])
@@ -192,11 +194,17 @@ def content(handle_name):
 
 
 def update_vocabularies():
-    logging.debug("update_vocabularies()")
+    logging.info("%s update_vocabularies()" % __file__)
     #docs = alldatasets()
-
+    
     handle_name = "hdl_vocabularies"
-    (docs, ids) = content(handle_name)
+    logging.info("download documents from dataverse for handle name %s ..." % handle_name )
+    (docs, ids) = download_docs(handle_name)
+    ndoc =  len(docs)
+    logging.info("%d documents downloaded from dataverse" % ndoc)
+    if ndoc == 0:
+        logging.info("no documents, nothing to do.")
+        return
     
     logging.debug("keys in ids:")
     for key in ids:
@@ -217,42 +225,50 @@ def update_vocabularies():
     logging.debug("dbname: %s" % dbname)
     
     client = MongoClient()
+    db = client.get_database(dbname)
+    logging.info("drop data in mongodb db %s" % dbname)
+    db.data.drop()      # remove the data; same as: db.drop_collection(dbname)
+    
+    # the vocabulary files have already been downloadeded by download_docs();
+    # vocabulary() downloads them again, and --together with some filetring-- 
+    # appends them to a bigvocabulary
+    bigvocabulary = vocabulary(host, apikey, ids)       # type: <class 'pandas.core.frame.DataFrame'>
+    #print bigvocabulary.to_json(orient='records')
+    data = json.loads(bigvocabulary.to_json(orient='records'))  # type: <type 'list'>
+    
+    logging.debug("processing %d vocabulary items..." % len(data))
+    for item in data:
+        #logging.debug(item)
+        if 'YEAR' in item:
+            item['YEAR'] = re.sub(r'\.0', '', str(item['YEAR']))
+        if 'basisyear':
+            item['basisyear'] = re.sub(r'\.0', '', str(item['basisyear']))
+    
+    logging.info("inserting data in mongodb")
+    result = db.data.insert(data)
 
-    if ids:
-        db = client.get_database(dbname)
-        db.data.drop()      # remove the data; same as: db.drop_collection(dbname)
-        
-        bigvocabulary = vocabulary(host, apikey, ids)
-        data = json.loads(bigvocabulary.to_json(orient='records'))
-        
-        logging.debug("processing %d vocabulary items..." % len(data))
-        for item in data:
-            #logging.debug(item)
-            if 'YEAR' in item:
-                item['YEAR'] = re.sub(r'\.0', '', str(item['YEAR']))
-            if 'basisyear':
-                item['basisyear'] = re.sub(r'\.0', '', str(item['basisyear']))
-        
-        result = db.data.insert(data)
-        #print bigvocabulary.to_json(orient='records')
-
-    logging.debug("fetching data from postgresql")
+    logging.info("fetching classdata from postgresql")
     classdata = classupdate()
-    logging.debug("inserting data in mongodb")
+    
+    logging.info("inserting classdata in mongodb")
     result = db.data.insert(classdata)
     
-    logging.debug("clearing cache")
+    logging.debug("clearing mongodb cache")
     db = client.get_database('datacache')
     db.data.drop()      # remove the data; same as: db.drop_collection(dbname)
 
 
 def update_data():
-    logging.debug("update_data()")
+    logging.info("update_data()")
 
-    # Update vocabularies
-    logging.debug("Update data...")
     handle_name = "hdl_population"
-    (docs, ids) = content(handle_name)
+    logging.info("download documents from dataverse for handle name %s ..." % handle_name )
+    (docs, ids) = download_docs(handle_name)
+    ndoc =  len(docs)
+    logging.info("%d documents downloaded from dataverse" % ndoc)
+    if ndoc == 0:
+        logging.info("no documents, nothing to do.")
+        return
     
     logging.debug("keys in ids:")
     for key in ids:
@@ -261,12 +277,15 @@ def update_data():
     logging.debug("docs:")
     for doc in docs:
         logging.debug(doc)
-    logging.debug("%d documents downloaded from dataverse" % len(docs))
+    
+    
+    
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
-    logging.debug(__file__)
+    #logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
+    logging.info(__file__)
     
     update_vocabularies()
     #update_data()
