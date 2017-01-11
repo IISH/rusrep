@@ -3,7 +3,7 @@
 
 """
 VT-06-Jul-2016 latest change by VT
-FL-09-Jan-2017
+FL-11-Jan-2017
 """
 
 import ConfigParser
@@ -27,10 +27,11 @@ def vocabulary(host, apikey, ids):
     logging.info("%s vocabulary()" % __file__)
     
     lexicon = []
+    len_totvocab = 0
+    
     for thisid in ids:
         filename = ids[thisid]
         filename = re.sub('.tab', '', filename)
-        logging.info("id: %s, filename: %s" % (thisid, filename))
         url = "%s/api/access/datafile/%s?&key=%s&show_entity_ids=true&q=authorName:*" % (host, thisid, apikey)
         f = urllib.urlopen(url)
         data = f.read()
@@ -56,30 +57,49 @@ def vocabulary(host, apikey, ids):
             vocab.columns = newcolumns
             vocab = vocab.dropna()
             vocab['vocabulary'] = filename
+            len_vocab = len(vocab)
+            len_totvocab += len_vocab
             lexicon.append(vocab)
-    
+        
+        logging.info("id: %s, filename: %s, items: %d" % (thisid, filename, len_vocab))
+        
+    logging.info("lexicon contains %d vocabularies containing %d items in total" % (len(lexicon), len_totvocab))
+    # concatenate the vocabularies with pandas
     return pd.concat(lexicon)
 
 
-def classupdate():
+def classupdate(cpath):
     logging.info("%s classupdate()" % __file__)
-    
     cparser = ConfigParser.RawConfigParser()
-    cpath = "/etc/apache2/rusrep.config"
-    logging.debug("cpath: %s" % cpath)
     cparser.read(cpath)
-    conn_string = "host='%s' dbname='%s' user='%s' password='%s'" % (cparser.get('config', 'dbhost'), cparser.get('config', 'dbname'), cparser.get('config', 'dblogin'), cparser.get('config', 'dbpassword'))
+    
+    host = cparser.get('config', 'dbhost')
+    dbname = cparser.get('config', 'dbname')
+    user = cparser.get('config', 'dblogin')
+    password = cparser.get('config', 'dbpassword')
+    table = "russianrepository"
+    
+    conn_string = "host='%s' dbname='%s' user='%s' password='%s'" % (host, dbname, user, password)
     logging.debug("conn_string: %s" % conn_string)
+
     conn = psycopg2.connect(conn_string)
     cursor = conn.cursor()
-    sql = "select distinct base_year, value_unit, value_label, datatype, histclass1, histclass2, histclass3, histclass4, histclass5, histclass6, histclass7, histclass8, histclass9, histclass10 from russianrepository";
-    logging.debug("sql: %s" % sql)
-    cursor.execute(sql)
-    data = cursor.fetchall()
-    sqlnames = [desc[0] for desc in cursor.description]
+    
     finalclasses = []
     
+    # historic data
+    logging.info("fetching historic data from postgresql table %s..." % table)
+    historic_columns = "base_year, value_unit, value_label, datatype, histclass1, histclass2, histclass3, histclass4, histclass5, histclass6, histclass7, histclass8, histclass9, histclass10"
+    sql = "SELECT DISTINCT %s FROM %s" % (historic_columns, table)
+    logging.info("sql: %s" % sql)
+
+    cursor.execute(sql)
+    data = cursor.fetchall()
+    sqlnames = [desc[0] for desc in cursor.description]     # list of the selected column names
+    
+    
     if data:
+        no_dtype = 0
         for valuestr in data:
             classes = {}
             for i in range(len(valuestr)):
@@ -111,12 +131,23 @@ def classupdate():
             classes['vocabulary'] = 'historical'
             if 'datatype' in classes:
                 finalclasses.append(classes)
-
-    sql = "select distinct base_year, value_unit, value_label, datatype, class1, class2, class3, class4, class5, class6, class7, class8, class9, class10 from russianrepository";
+            else:
+                no_dtype += 1
+        
+        logging.info("numbers of historic class records: %d, skipping %d without datatype" % (len(data), no_dtype))
+    
+    # modern data
+    logging.info("fetching modern data from postgresql table %s..." % table)
+    modern_columns = "base_year, value_unit, value_label, datatype, class1, class2, class3, class4, class5, class6, class7, class8, class9, class10"
+    sql = "SELECT DISTINCT %s FROM %s" % (modern_columns, table)
+    logging.info("sql: %s" % sql)
+    
     cursor.execute(sql)
     data = cursor.fetchall()
-    sqlnames = [desc[0] for desc in cursor.description]
+    sqlnames = [desc[0] for desc in cursor.description]     # list of the selected column names
+    
     if data:
+        no_dtype = 0
         for valuestr in data:
             classes = {}
             for i in range(len(valuestr)):
@@ -146,8 +177,12 @@ def classupdate():
             classes['vocabulary'] = 'modern'
             if 'datatype' in classes:
                 finalclasses.append(classes)
-
-    logging.debug("%d entries in finalclasses" % len(finalclasses))
+            else:
+                no_dtype += 1
+        
+        logging.info("numbers of modern class records: %d, skipping %d without datatype" % (len(data), no_dtype))
+        
+    logging.info("total number of class records: %d" % len(finalclasses))
     return finalclasses
 
 # [eof]

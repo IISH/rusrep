@@ -7,7 +7,7 @@ retrieving them from Dataverse, writing to MongoDB
 The documentation files in PostgreSQL are not used
 
 VT-07-Jul-2016 latest change by VT
-FL-09-Jan-2017
+FL-11-Jan-2017
 """
 
 from __future__ import absolute_import
@@ -77,10 +77,10 @@ def connect():
     return cursor
 """
 
-def alldatasets():
+def alldatasets(clioinfra):
     logging.debug("%s alldatasets()" % __file__)
     #cursor = connect()
-    clioinfra = Configuration()
+    
     host = clioinfra.config['dataverseroot']
     dom = re.match(r'https\:\/\/(.+)$', host)
     if dom:
@@ -116,10 +116,11 @@ def alldatasets():
     return ''
 
 
-def download_docs(handle_name):
-    logging.debug("%s download_docs()" % __file__)
+def document_list(clioinfra, handle_name, copy_local):
+    logging.info("%s document_list() copy_local: %s" % (__file__, copy_local))
+    logging.debug("handle_name: %s" % handle_name )
+    
     #cursor = connect()
-    clioinfra = Configuration()
     
     host = "datasets.socialhistory.org"
     connection = Connection(host, clioinfra.config['ristatkey'])
@@ -132,11 +133,11 @@ def download_docs(handle_name):
     papers = []
     ids = {}
     
-    logging.debug("handle_name: %s" % handle_name )
-    tmppath = os.path.join( clioinfra.config['tmppath'], handle_name)
-    logging.debug("downloading dataverse files to: %s" % tmppath )
-    if not os.path.exists(tmppath):
-        os.makedirs(tmppath)
+    if copy_local:
+        tmppath = os.path.join( clioinfra.config['tmppath'], handle_name)
+        logging.debug("downloading dataverse files to: %s" % tmppath )
+        if not os.path.exists(tmppath):
+            os.makedirs(tmppath)
     
     for item in dataverse.get_contents():
         # item dict keys: protocol, authority, persistentUrl, identifier, type, id
@@ -157,16 +158,18 @@ def download_docs(handle_name):
                 paperitem['handle'] = handle
                 paperitem['url'] = "http://data.sandbox.socialhistoryservices.org/service/download?id=%s" % paperitem['id']
                 url = "https://%s/api/access/datafile/%s?&key=%s&show_entity_ids=true&q=authorName:*" % (host, paperitem['id'], clioinfra.config['ristatkey'])
-                filepath = "%s/%s" % (tmppath, paperitem['name'])
-                #filepath = "%s/%s" % (clioinfra.config['tmppath'], paperitem['name'])
-                #csvfile = "%s/%s.csv" % (clioinfra.config['tmppath'], paperitem['name'])
                 logging.debug( url )
                 
-                # read dataverse document from url, write contents to filepath
-                f = urllib.urlopen(url)
-                fh = open(filepath, 'wb')
-                fh.write(f.read())
-                fh.close()
+                if copy_local:
+                    filepath = "%s/%s" % (tmppath, paperitem['name'])
+                    #filepath = "%s/%s" % (clioinfra.config['tmppath'], paperitem['name'])
+                    #csvfile = "%s/%s.csv" % (clioinfra.config['tmppath'], paperitem['name'])
+                    
+                    # read dataverse document from url, write contents to filepath
+                    f = urllib.urlopen(url)
+                    fh = open(filepath, 'wb')
+                    fh.write(f.read())
+                    fh.close()
                 
                 # FL-09-Jan-2017 should we not filter before downloading?
                 try:
@@ -193,15 +196,25 @@ def download_docs(handle_name):
     return (papers, ids)
 
 
-def update_vocabularies():
+
+def update_vocabularies(clioinfra, mongo_client, copy_local=False):
     logging.info("%s update_vocabularies()" % __file__)
-    #docs = alldatasets()
+    
+    """
+    update_vocabularies() updates 3 different sets of data in mongodb:
+    -1- retrieved ERRHS_Vocabulary_*.tab files from dataverse
+    -2- historic class data fetched from postgresql
+    -3- modern class data fetched from postgresql
+    All 3 sets are stored in mongo db = 'vocabulary', collection = 'data'
+    """
+    
+    #docs = alldatasets(clioinfra)
     
     handle_name = "hdl_vocabularies"
-    logging.info("download documents from dataverse for handle name %s ..." % handle_name )
-    (docs, ids) = download_docs(handle_name)
+    logging.info("retrieving documents from dataverse for handle name %s ..." % handle_name )
+    (docs, ids) = document_list(clioinfra, handle_name, copy_local)
     ndoc =  len(docs)
-    logging.info("%d documents downloaded from dataverse" % ndoc)
+    logging.info("%d documents retrieved from dataverse" % ndoc)
     if ndoc == 0:
         logging.info("no documents, nothing to do.")
         return
@@ -216,7 +229,6 @@ def update_vocabularies():
     
     
     # parameters to retrieve the vocabulary files
-    clioinfra = Configuration()
     host = clioinfra.config['dataverseroot']
     apikey = clioinfra.config['ristatkey']
     dbname = clioinfra.config['vocabulary']
@@ -224,50 +236,71 @@ def update_vocabularies():
     logging.debug("apikey: %s" % apikey)
     logging.debug("dbname: %s" % dbname)
     
-    client = MongoClient()
-    db = client.get_database(dbname)
-    logging.info("drop data in mongodb db %s" % dbname)
-    db.data.drop()      # remove the data; same as: db.drop_collection(dbname)
-    
-    # the vocabulary files have already been downloadeded by download_docs();
-    # vocabulary() downloads them again, and --together with some filetring-- 
+    vocab_json = [{}]
+    # the vocabulary files may already have been downloadeded by document_list();
+    # vocabulary() retrieves them again, and --together with some filetring-- 
     # appends them to a bigvocabulary
     bigvocabulary = vocabulary(host, apikey, ids)       # type: <class 'pandas.core.frame.DataFrame'>
     #print bigvocabulary.to_json(orient='records')
-    data = json.loads(bigvocabulary.to_json(orient='records'))  # type: <type 'list'>
+    vocab_json = json.loads(bigvocabulary.to_json(orient='records'))  # type: <type 'list'>
     
-    logging.debug("processing %d vocabulary items..." % len(data))
-    for item in data:
+    """
+    vocab_json0 = vocab_json[0]
+    for key in vocab_json0:
+        logging.info("key: %s, value: %s" % (key, vocab_json0[key]))
+    
+    # there are 7 keys per dictionary entry, e.g vocab_json0:
+    key: basisyear,  value: None
+    key: EN,         value: Male
+    key: vocabulary, value: ERRHS_Vocabulary_modclasses
+    key: DATATYPE,   value: None
+    key: YEAR,       value: None
+    key: RUS,        value: мужчины
+    key: ID,         value: MOD_1.01_1
+    """
+    
+    logging.info("processing %d vocabulary items..." % len(vocab_json))
+    for item in vocab_json:
         #logging.debug(item)
         if 'YEAR' in item:
             item['YEAR'] = re.sub(r'\.0', '', str(item['YEAR']))
-        if 'basisyear':
+        if 'basisyear' in item:
             item['basisyear'] = re.sub(r'\.0', '', str(item['basisyear']))
     
-    logging.info("inserting data in mongodb")
-    result = db.data.insert(data)
-
-    logging.info("fetching classdata from postgresql")
-    classdata = classupdate()
+    db = mongo_client.get_database(dbname)
+    logging.info("delete all documents from collection 'data' in mongodb db '%s'" % dbname)
+    # drop the documents from collection 'data'; same as: db.drop_collection(coll_name)
+    db.data.drop()
     
-    logging.info("inserting classdata in mongodb")
+    logging.info("inserting vocabulary in mongodb")
+    result = db.data.insert(vocab_json)
+
+    cpath = "/etc/apache2/rusrep.config"
+    logging.info("using configuration: %s" % cpath)
+    # classupdate() uses postgresql access parameters from cpath contents
+    classdata = classupdate(cpath)     # fetching historic and modern class data from postgresql table 
+    
+    logging.info("inserting historic and modern class data in mongodb")
+    
+    db = mongo_client.get_database(dbname)
     result = db.data.insert(classdata)
-    
-    logging.debug("clearing mongodb cache")
-    db = client.get_database('datacache')
-    db.data.drop()      # remove the data; same as: db.drop_collection(dbname)
+
+    logging.info("clearing mongodb cache")
+    db = mongo_client.get_database('datacache')
+    db.data.drop()      # remove the collection 'data'
 
 
-def update_data():
-    logging.info("update_data()")
+
+def retrieve_population(copy_local=False):
+    logging.info("retrieve_population()")
 
     handle_name = "hdl_population"
-    logging.info("download documents from dataverse for handle name %s ..." % handle_name )
-    (docs, ids) = download_docs(handle_name)
+    logging.info("retrieving documents from dataverse for handle name %s ..." % handle_name )
+    (docs, ids) = document_list(handle_name, copy_local)
     ndoc =  len(docs)
-    logging.info("%d documents downloaded from dataverse" % ndoc)
+    logging.info("%d documents retrieved from dataverse" % ndoc)
     if ndoc == 0:
-        logging.info("no documents, nothing to do.")
+        logging.info("no documents retrieved.")
         return
     
     logging.debug("keys in ids:")
@@ -277,9 +310,7 @@ def update_data():
     logging.debug("docs:")
     for doc in docs:
         logging.debug(doc)
-    
-    
-    
+
 
 
 if __name__ == "__main__":
@@ -287,7 +318,30 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     logging.info(__file__)
     
-    update_vocabularies()
-    #update_data()
+    # service.configutils.Configuration() uses configpath from service.__init__.py , 
+    # i.e. reads "/etc/apache2/clioinfra.conf"
+    clioinfra    = Configuration()
+    mongo_client = MongoClient()
+    
+    # downloaded vocabulary documents are not used to update the vocabularies, 
+    # they are re-read from dataverse and processed on the fly
+    copy_local = False
+    update_vocabularies(clioinfra, mongo_client, copy_local)
+    
+    copy_local = True
+    #retrieve_population(copy_local)                     # dataverse  => local_disk     OK
+    #store_population(clioinfra, mongo_client)          # ? local_disk => postgresql
+    #update_opulation(clioinfra, mongo_client)          # ? postgresql => mongodb
 
+    """
+    TODO: 
+    how many 'sets' of data are there in russianrepository ?
+    -1- historic class data fetched from postgresql
+    -2- modern class data fetched from postgresql
+    
+    how many 'sets' of data are there in mongodb ?
+    -1- retrieved ERRHS_Vocabulary_*.tab files from dataverse in vocabulary.data
+    -2- historic class data fetched from postgresql in vocabulary.data
+    -3- modern class data fetched from postgresql in vocabulary.data
+    """
 # [eof]
