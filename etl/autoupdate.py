@@ -2,19 +2,26 @@
 # -*- coding: utf-8 -*-
 
 """
-This script updates the vocabulary files: 
-retrieving them from Dataverse, writing to MongoDB
-The documentation files in PostgreSQL are not used
+This script retrieves RiStat files from Dataverse and updates MongoDB. 
+- vocabulary *.tab files are stored locally and/or in MongoDB
+- gets vocabulary data from PostgreSQL and stores it MongoDB
+- transforms binary xlsx spreadsheet files to csv files
+
+Notice: dpe/rusrep/etl contains a xlsx2csv.py copy; 
+better use the curent version from PyPI
 
 VT-07-Jul-2016 latest change by VT
-FL-11-Jan-2017
+FL-13-Jan-2017
 """
 
 from __future__ import absolute_import
 
+import ConfigParser
 import json
 import logging
 import os
+import psycopg2
+import psycopg2.extras
 import re
 import sys
 import urllib
@@ -23,7 +30,7 @@ import simplejson
 
 from pymongo import MongoClient
 from vocab import vocabulary, classupdate
-from xlsx2csv import xlsx2csv
+from xlsx2csv import Xlsx2csv
 
 #import collections
 #import ConfigParser
@@ -31,8 +38,6 @@ from xlsx2csv import xlsx2csv
 #import getopt
 #import glob
 #import pprint
-#import psycopg2
-#import psycopg2.extras
 #import requests
 #import tables
 #import unittest
@@ -77,8 +82,8 @@ def connect():
     return cursor
 """
 
-def alldatasets(clioinfra):
-    logging.debug("%s alldatasets()" % __file__)
+def alldatasets(clioinfra, copy_local):
+    logging.info("%s alldatasets()" % __file__)
     #cursor = connect()
     
     host = clioinfra.config['dataverseroot']
@@ -89,35 +94,51 @@ def alldatasets(clioinfra):
     dataverse = connection.get_dataverse('RISTAT')
     
     #settings = DataFilter('')
-    #papers = []
+    papers = []
     kwargs = { 'delimiter' : '|' }
 
     for item in dataverse.get_contents():
         handle = str(item['protocol']) + ':' + str(item['authority']) + "/" + str(item['identifier'])
-        logging.debug("handle: %s" % handle)
-        if handle not in [clioinfra.config['ristatdocs'], clioinfra.config['ristatvoc']]:
+        
+        #if handle not in [clioinfra.config['hdl_documentation'], clioinfra.config['hdl_vocabularies']]:
+        if handle == clioinfra.config['hdl_population']:
+            logging.info("use:  handle: %s" % handle)
             datasetid = item['id']
             url = "https://" + str(host) + "/api/datasets/" + str(datasetid) + "/?&key=" + str(clioinfra.config['ristatkey'])
             dataframe = loadjson(url)
-            for files in dataframe['data']['latestVersion']['files']:
-                paperitem = {}
-                paperitem['id'] = str(files['datafile']['id'])
-                paperitem['name'] = str(files['datafile']['name'])
-                url = "https://%s/api/access/datafile/%s?&key=%s&show_entity_ids=true&q=authorName:*" % (host, paperitem['id'], clioinfra.config['ristatkey'])
-                filepath = "%s/%s" % (clioinfra.config['tmppath'], paperitem['name'])
-                csvfile = "%s/%s.csv" % (clioinfra.config['tmppath'], paperitem['name'])
-                f = urllib.urlopen(url)    
-                print filepath
-                fh = open(filepath, 'wb')
-                fh.write(f.read())
-                fh.close()
-                outfile = open(csvfile, 'w+')
-                xlsx2csv(filepath, outfile, **kwargs)
-    return ''
+            
+            try:
+                for files in dataframe['data']['latestVersion']['files']:
+                    paperitem = {}
+                    paperitem['id'] = str(files['datafile']['id'])
+                    paperitem['name'] = str(files['datafile']['name'])
+                    url = "https://%s/api/access/datafile/%s?&key=%s&show_entity_ids=true&q=authorName:*" % (host, paperitem['id'], clioinfra.config['ristatkey'])
+                    logging.info( url )
+                    
+                    if copy_local:
+                        filepath = "%s/%s" % (clioinfra.config['tmppath'], paperitem['name'])
+                        csvfile = "%s/%s.csv" % (clioinfra.config['tmppath'], paperitem['name'])
+                        logging.info("filepath: %s" % filepath)
+                        logging.info("csvfile: %s" % csvfile)
+                        
+                        f = urllib.urlopen(url)
+                        fh = open(filepath, 'wb')
+                        fh.write(f.read())
+                        fh.close()
+                        outfile = open(csvfile, 'w+')
+                        Xlsx2csv(filepath, outfile, **kwargs)
+            except:
+                print("alldatasets()")
+                type, value, tb = sys.exc_info()
+                logging.error( "%s" % value )
+            
+        logging.info("skip: handle: %s" % handle)
+    
+    return papers
 
 
-def document_list(clioinfra, handle_name, copy_local):
-    logging.info("%s document_list() copy_local: %s" % (__file__, copy_local))
+def documents_by_handle(clioinfra, handle_name, copy_local=False, to_csv=False):
+    logging.info("%s documents_by_handle() copy_local: %s, to_csv: %s" % (__file__, copy_local, to_csv))
     logging.debug("handle_name: %s" % handle_name )
     
     #cursor = connect()
@@ -132,6 +153,10 @@ def document_list(clioinfra, handle_name, copy_local):
     settings = DataFilter('')
     papers = []
     ids = {}
+    kwargs = {              # for xlsx files
+        'delimiter' : '|', 
+        'lineterminator' : '\n'
+    }
     
     if copy_local:
         tmppath = os.path.join( clioinfra.config['tmppath'], handle_name)
@@ -161,15 +186,26 @@ def document_list(clioinfra, handle_name, copy_local):
                 logging.debug( url )
                 
                 if copy_local:
-                    filepath = "%s/%s" % (tmppath, paperitem['name'])
-                    #filepath = "%s/%s" % (clioinfra.config['tmppath'], paperitem['name'])
-                    #csvfile = "%s/%s.csv" % (clioinfra.config['tmppath'], paperitem['name'])
+                    filename = paperitem['name']
+                    filepath = "%s/%s" % (tmppath, filename)
+                    logging.debug("filepath: %s" % filepath)
                     
                     # read dataverse document from url, write contents to filepath
-                    f = urllib.urlopen(url)
-                    fh = open(filepath, 'wb')
-                    fh.write(f.read())
-                    fh.close()
+                    filein = urllib.urlopen(url)
+                    fileout = open(filepath, 'wb')
+                    fileout.write(filein.read())
+                    fileout.close()
+                    
+                    if to_csv:
+                        root, ext = os.path.splitext(filename)
+                        logging.info(root)
+                        csvpath  = "%s/%s.csv" % (tmppath, root)
+                        logging.debug("csvpath:  %s" % csvpath)
+                        #csvfile = open(csvpath, 'w+')
+                        #xlsx2csv(filepath, csvfile, **kwargs)
+                        Xlsx2csv(filepath, **kwargs).convert(csvpath)
+                        if ext == ".xlsx":
+                            os.remove(filepath) # keep the csv, remove the xlsx
                 
                 # FL-09-Jan-2017 should we not filter before downloading?
                 try:
@@ -208,11 +244,9 @@ def update_vocabularies(clioinfra, mongo_client, copy_local=False):
     All 3 sets are stored in mongo db = 'vocabulary', collection = 'data'
     """
     
-    #docs = alldatasets(clioinfra)
-    
     handle_name = "hdl_vocabularies"
     logging.info("retrieving documents from dataverse for handle name %s ..." % handle_name )
-    (docs, ids) = document_list(clioinfra, handle_name, copy_local)
+    (docs, ids) = documents_by_handle(clioinfra, handle_name, copy_local)
     ndoc =  len(docs)
     logging.info("%d documents retrieved from dataverse" % ndoc)
     if ndoc == 0:
@@ -237,7 +271,7 @@ def update_vocabularies(clioinfra, mongo_client, copy_local=False):
     logging.debug("dbname: %s" % dbname)
     
     vocab_json = [{}]
-    # the vocabulary files may already have been downloadeded by document_list();
+    # the vocabulary files may already have been downloadeded by documents_by_handle();
     # vocabulary() retrieves them again, and --together with some filetring-- 
     # appends them to a bigvocabulary
     bigvocabulary = vocabulary(host, apikey, ids)       # type: <class 'pandas.core.frame.DataFrame'>
@@ -291,12 +325,12 @@ def update_vocabularies(clioinfra, mongo_client, copy_local=False):
 
 
 
-def retrieve_population(copy_local=False):
+def retrieve_population(clioinfra, copy_local=False, to_csv=False):
     logging.info("retrieve_population()")
 
     handle_name = "hdl_population"
     logging.info("retrieving documents from dataverse for handle name %s ..." % handle_name )
-    (docs, ids) = document_list(handle_name, copy_local)
+    (docs, ids) = documents_by_handle(clioinfra, handle_name, copy_local, to_csv)
     ndoc =  len(docs)
     logging.info("%d documents retrieved from dataverse" % ndoc)
     if ndoc == 0:
@@ -312,6 +346,50 @@ def retrieve_population(copy_local=False):
         logging.debug(doc)
 
 
+def store_population(clioinfra):
+    logging.info("store_population()")
+    
+    handle_name = "hdl_population"
+    csvdir = os.path.join( clioinfra.config['tmppath'], handle_name)
+    logging.info("csvfir: %s" % csvdir )
+
+    cpath = "/etc/apache2/rusrep.config"
+    logging.info("using configuration: %s" % cpath)
+
+    cparser = ConfigParser.RawConfigParser()
+    cparser.read(cpath)
+    
+    host = cparser.get('config', 'dbhost')
+    dbname = cparser.get('config', 'dbname')
+    user = cparser.get('config', 'dblogin')
+    password = cparser.get('config', 'dbpassword')
+    #table = "russianrepository"
+    
+    conn_string = "host='%s' dbname='%s' user='%s' password='%s'" % (host, dbname, user, password)
+    logging.info("conn_string: %s" % conn_string)
+
+    connection = psycopg2.connect(conn_string)
+    cursor = connection.cursor()
+
+    dirlist = os.listdir(csvdir) 
+    for filename in dirlist:
+        root, ext = os.path.splitext(filename)
+        if root.startswith("ERRHS_") and ext == ".csv":
+            print("use:  %s" % filename)
+            pathname = os.path.abspath(os.path.join(csvdir, filename))
+            csvfile = open(pathname, 'r')
+            table = root
+            cursor.copy_from(csvfile, table, sep='|')
+            connection.commit()
+            csvfile.close()
+        else:
+            print("skip: %s" % filename)
+
+        break
+
+    cursor.close()
+    connection.close()
+
 
 if __name__ == "__main__":
     #logging.basicConfig(level=logging.DEBUG)
@@ -325,12 +403,13 @@ if __name__ == "__main__":
     
     # downloaded vocabulary documents are not used to update the vocabularies, 
     # they are re-read from dataverse and processed on the fly
-    copy_local = False
-    update_vocabularies(clioinfra, mongo_client, copy_local)
+    #copy_local = False
+    #update_vocabularies(clioinfra, mongo_client, copy_local)
     
     copy_local = True
-    #retrieve_population(copy_local)                     # dataverse  => local_disk     OK
-    #store_population(clioinfra, mongo_client)          # ? local_disk => postgresql
+    to_csv = True
+    #retrieve_population(clioinfra, copy_local, to_csv)  # dataverse  => local_disk     OK
+    store_population(clioinfra)                         # ? local_disk => postgresql
     #update_opulation(clioinfra, mongo_client)          # ? postgresql => mongodb
 
     """
