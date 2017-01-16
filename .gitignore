@@ -1,4 +1,5 @@
 .directory
 *~
+*.conf
 *.pyc
 __pycache__/
