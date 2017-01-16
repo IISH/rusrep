@@ -144,7 +144,11 @@ def documents_by_handle(clioinfra, handle_name, copy_local=False, to_csv=False):
     #cursor = connect()
     
     host = "datasets.socialhistory.org"
-    connection = Connection(host, clioinfra.config['ristatkey'])
+    ristatkey = clioinfra.config['ristatkey']
+    logging.info("host: %s" % host)
+    logging.info("ristatkey: %s" % ristatkey)
+    
+    connection = Connection(host, ristatkey)
     dataverse = connection.get_dataverse('RISTAT')
     
     logging.debug("title: %s" % dataverse.title)
@@ -351,24 +355,35 @@ def store_population(clioinfra):
     
     handle_name = "hdl_population"
     csvdir = os.path.join( clioinfra.config['tmppath'], handle_name)
-    logging.info("csvfir: %s" % csvdir )
+    if not os.path.isdir(csvdir):
+        print("in %s" % __file__)
+        print("csvdir %s DIRECTORY DOES NOT EXIST" % csvdir )
+        print("EXIT" )
+        sys.exit(1)
+    logging.info("using csv directory: %s" % csvdir )
 
-    cpath = "/etc/apache2/rusrep.config"
-    logging.info("using configuration: %s" % cpath)
+    #configpath = "/etc/apache2/russianrep.config"
+    configpath = "/home/fons/projects/CLIO-INFRA/RiStat/rusrep/config/russianrep.config"
+    if not os.path.isfile(configpath):
+        print("in %s" % __file__)
+        print("configpath %s FILE DOES NOT EXIST" % configpath )
+        print("EXIT" )
+        sys.exit(1)
+    logging.info("using configuration: %s" % configpath)
 
-    cparser = ConfigParser.RawConfigParser()
-    cparser.read(cpath)
+    configparser = ConfigParser.RawConfigParser()
+    configparser.read(configpath)
     
-    host = cparser.get('config', 'dbhost')
-    dbname = cparser.get('config', 'dbname')
-    user = cparser.get('config', 'dblogin')
-    password = cparser.get('config', 'dbpassword')
+    host     = configparser.get('config', 'dbhost')
+    dbname   = configparser.get('config', 'dbname')
+    user     = configparser.get('config', 'dblogin')
+    password = configparser.get('config', 'dbpassword')
     #table = "russianrepository"
     
-    conn_string = "host='%s' dbname='%s' user='%s' password='%s'" % (host, dbname, user, password)
-    logging.info("conn_string: %s" % conn_string)
+    connection_string = "host='%s' dbname='%s' user='%s' password='%s'" % (host, dbname, user, password)
+    logging.info("connection_string: %s" % connection_string)
 
-    connection = psycopg2.connect(conn_string)
+    connection = psycopg2.connect(connection_string)
     cursor = connection.cursor()
 
     dirlist = os.listdir(csvdir) 
@@ -385,6 +400,7 @@ def store_population(clioinfra):
         else:
             print("skip: %s" % filename)
 
+        print("break")
         break
 
     cursor.close()
@@ -392,12 +408,10 @@ def store_population(clioinfra):
 
 
 if __name__ == "__main__":
-    #logging.basicConfig(level=logging.DEBUG)
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG)
     logging.info(__file__)
     
-    # service.configutils.Configuration() uses configpath from service.__init__.py , 
-    # i.e. reads "/etc/apache2/clioinfra.conf"
+    # service.configutils.Configuration() uses path to clioinfra.conf from service.__init__.py , 
     clioinfra    = Configuration()
     mongo_client = MongoClient()
     
@@ -408,8 +422,8 @@ if __name__ == "__main__":
     
     copy_local = True
     to_csv = True
-    #retrieve_population(clioinfra, copy_local, to_csv)  # dataverse  => local_disk     OK
-    store_population(clioinfra)                         # ? local_disk => postgresql
+    retrieve_population(clioinfra, copy_local, to_csv)  # dataverse  => local_disk     OK
+    #store_population(clioinfra)                         # ? local_disk => postgresql
     #update_opulation(clioinfra, mongo_client)          # ? postgresql => mongodb
 
     """

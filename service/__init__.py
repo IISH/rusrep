@@ -9,10 +9,15 @@ import sys
 database = 'datasets'
 
 #configpath = "/etc/apache2/russianrep.conf"	# inluded in clioinfra.conf
-configpath = "/etc/apache2/clioinfra.conf"
-if not os.path.isfile(configpath):
+#configpath = "/etc/apache2/clioinfra.conf"
+configpath = "/home/fons/projects/CLIO-INFRA/RiStat/rusrep/config/clioinfra.conf"
+
+if os.path.isfile(configpath):
+    print(__file__)
+    print(" using configpath: %s" % configpath )
+else:
     print("in %s" % __file__)
-    print("configpath %s DOES NOT EXIST" % configpath )
+    print("configpath %s FILE DOES NOT EXIST" % configpath )
     print("EXIT" )
     sys.exit(1)
 
