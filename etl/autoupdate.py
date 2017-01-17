@@ -11,7 +11,7 @@ Notice: dpe/rusrep/etl contains a xlsx2csv.py copy;
 better use the curent version from PyPI
 
 VT-07-Jul-2016 latest change by VT
-FL-13-Jan-2017
+FL-17-Jan-2017
 """
 
 from __future__ import absolute_import
@@ -27,6 +27,7 @@ import sys
 import urllib
 import urllib2
 import simplejson
+import StringIO
 
 from pymongo import MongoClient
 from vocab import vocabulary, classupdate
@@ -145,8 +146,8 @@ def documents_by_handle(clioinfra, handle_name, copy_local=False, to_csv=False):
     
     host = "datasets.socialhistory.org"
     ristatkey = clioinfra.config['ristatkey']
-    logging.info("host: %s" % host)
-    logging.info("ristatkey: %s" % ristatkey)
+    logging.debug("host: %s" % host)
+    logging.debug("ristatkey: %s" % ristatkey)
     
     connection = Connection(host, ristatkey)
     dataverse = connection.get_dataverse('RISTAT')
@@ -163,10 +164,10 @@ def documents_by_handle(clioinfra, handle_name, copy_local=False, to_csv=False):
     }
     
     if copy_local:
-        tmppath = os.path.join( clioinfra.config['tmppath'], handle_name)
-        logging.debug("downloading dataverse files to: %s" % tmppath )
-        if not os.path.exists(tmppath):
-            os.makedirs(tmppath)
+        download_dir = os.path.join( clioinfra.config['tmppath'], handle_name)
+        logging.info("downloading dataverse files to: %s" % download_dir )
+        if not os.path.exists(download_dir):
+            os.makedirs(download_dir)
     
     for item in dataverse.get_contents():
         # item dict keys: protocol, authority, persistentUrl, identifier, type, id
@@ -191,7 +192,7 @@ def documents_by_handle(clioinfra, handle_name, copy_local=False, to_csv=False):
                 
                 if copy_local:
                     filename = paperitem['name']
-                    filepath = "%s/%s" % (tmppath, filename)
+                    filepath = "%s/%s" % (download_dir, filename)
                     logging.debug("filepath: %s" % filepath)
                     
                     # read dataverse document from url, write contents to filepath
@@ -203,7 +204,7 @@ def documents_by_handle(clioinfra, handle_name, copy_local=False, to_csv=False):
                     if to_csv:
                         root, ext = os.path.splitext(filename)
                         logging.info(root)
-                        csvpath  = "%s/%s.csv" % (tmppath, root)
+                        csvpath  = "%s/%s.csv" % (download_dir, root)
                         logging.debug("csvpath:  %s" % csvpath)
                         #csvfile = open(csvpath, 'w+')
                         #xlsx2csv(filepath, csvfile, **kwargs)
@@ -378,7 +379,7 @@ def store_population(clioinfra):
     dbname   = configparser.get('config', 'dbname')
     user     = configparser.get('config', 'dblogin')
     password = configparser.get('config', 'dbpassword')
-    #table = "russianrepository"
+    table    = "russianrepository"
     
     connection_string = "host='%s' dbname='%s' user='%s' password='%s'" % (host, dbname, user, password)
     logging.info("connection_string: %s" % connection_string)
@@ -386,29 +387,167 @@ def store_population(clioinfra):
     connection = psycopg2.connect(connection_string)
     cursor = connection.cursor()
 
+    sql = "truncate %s;" % table
+    logging.info(sql)
+    cursor.execute(sql)
+
     dirlist = os.listdir(csvdir) 
     for filename in dirlist:
         root, ext = os.path.splitext(filename)
         if root.startswith("ERRHS_") and ext == ".csv":
-            print("use:  %s" % filename)
-            pathname = os.path.abspath(os.path.join(csvdir, filename))
-            csvfile = open(pathname, 'r')
-            table = root
-            cursor.copy_from(csvfile, table, sep='|')
+            #table = root.lower()
+            logging.info("use:  %s, table: %s" % (filename, table))
+            in_pathname = os.path.abspath(os.path.join(csvdir, filename))
+            logging.info(in_pathname)
+            #test_csv_file(pathname)
+            
+            #out_pathname = write_psv_file(csvdir, filename)
+            #psv_file = open(out_pathname, 'r')
+            #cursor.copy_from(psv_file, table, sep='|')
+            
+            stringio_file = convert_csv(csvdir, filename)
+            cursor.copy_from(stringio_file, table, sep='|')
             connection.commit()
-            csvfile.close()
+            
+            #csv_strings.close()  # close object and discard memory buffer
+            #csvfile.close()
+            
         else:
-            print("skip: %s" % filename)
+            logging.info("skip: %s" % filename)
 
-        print("break")
-        break
+        #print("break")
+        #break
 
     cursor.close()
     connection.close()
 
 
+
+def test_csv_file(path_name):
+    csv_file = open(path_name, 'r')
+    nlines = 0
+    
+    for line in csv_file:
+        cnt = line.count('|')
+        fields = line.split('|')
+        nfields = len(fields)
+        print("%d: %d" % (nline, nfields))
+        nlines += 1
+        
+    print("%d" % nlines)
+
+
+
+def convert_csv(csvdir, in_filename):
+    field_names = [
+        "indicator_id",
+        "id", 
+        "territory", 
+        "ter_code", 
+        "town", 
+        "district", 
+        "year", 
+        "month", 
+        "value", 
+        "value_unit", 
+        "value_label", 
+        "datatype", 
+        "histclass1", 
+        "histclass2", 
+        "histclass3", 
+        "histclass4", 
+        "histclass5", 
+        "histclass6", 
+        "histclass7", 
+        "histclass8", 
+        "histclass9", 
+        "histclass10", 
+        "class1", 
+        "class2", 
+        "class3", 
+        "class4", 
+        "class5", 
+        "class6", 
+        "class7", 
+        "class8", 
+        "class9", 
+        "class10", 
+        "comment_source", 
+        "source", 
+        "volume", 
+        "page", 
+        "naborshik_id", 
+        "comment_naborshik", 
+        "base_year", 
+        "indicator", 
+        "valuemark"
+    ]
+    
+    in_pathname = os.path.abspath(os.path.join(csvdir, in_filename))
+    csv_file = open( in_pathname, 'r')
+    
+    """
+    root, ext = os.path.splitext(in_filename)
+    out_pathname = os.path.abspath(os.path.join(csvdir, root + ".psv"))
+    print(out_pathname)
+    out_file = open(out_pathname, 'w')
+    """
+    
+    out_file = StringIO.StringIO()      # in-memory file
+    
+    nline = 0
+    for line in csv_file:
+        nline += 1
+        line.rstrip('\n')   # remove trailing \n
+        
+        if nline == 1:
+            continue        # skip header line
+        
+        fields = line.split('|')
+        
+        fields.insert(0, str(nline))    # indicator_id, not in csv file
+        
+        fields.pop()                # table has 3 columns less than csv file
+        fields.pop()                # skip trailing 3 fields
+        fields.pop()
+        """
+        if nline == 2:
+            for i in range(len(fields)):
+                print("%2d %s: %s" % (i, field_names[i], fields[i]))
+        """
+        # i = 38: base_year, must be integer
+        try:
+            x = int(fields[38])
+        except:
+            fields[38] = "0"
+        
+        if fields[40] not in ("true", "false"):
+            fields[40] = "false"
+        
+        short_line = "|".join(fields)
+        """
+        if nline == 2:
+            print("%d fields" % len(fields))
+            print(short_line)
+        
+            for i in range(len(fields)):
+                print("%2d %s: %s" % (i, field_names[i], fields[i]))
+        """
+        out_file.write("%s\n" % short_line )
+    
+    out_file.seek(0)    # start of the stream
+    #out_file.close()    # closed by caller!: closing discards memory buffer
+    csv_file.close()
+    
+    #return out_pathname
+    return out_file
+
+
+
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
+    #log_level = logging.DEBUG
+    log_level = logging.INFO
+    logging.basicConfig(level=log_level)
     logging.info(__file__)
     
     # service.configutils.Configuration() uses path to clioinfra.conf from service.__init__.py , 
@@ -422,8 +561,8 @@ if __name__ == "__main__":
     
     copy_local = True
     to_csv = True
-    retrieve_population(clioinfra, copy_local, to_csv)  # dataverse  => local_disk     OK
-    #store_population(clioinfra)                         # ? local_disk => postgresql
+    #retrieve_population(clioinfra, copy_local, to_csv)  # dataverse  => local_disk     OK
+    store_population(clioinfra)                         # ? local_disk => postgresql
     #update_opulation(clioinfra, mongo_client)          # ? postgresql => mongodb
 
     """
