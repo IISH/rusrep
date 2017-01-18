@@ -11,7 +11,7 @@ Notice: dpe/rusrep/etl contains a xlsx2csv.py copy;
 better use the curent version from PyPI
 
 VT-07-Jul-2016 latest change by VT
-FL-17-Jan-2017
+FL-18-Jan-2017
 """
 
 from __future__ import absolute_import
@@ -439,7 +439,7 @@ def test_csv_file(path_name):
 
 
 def filter_csv(csvdir, in_filename):
-    logging.info("filter_csv)")
+    logging.info("filter_csv()")
     
     column_names = [
         "indicator_id",
@@ -500,14 +500,19 @@ def filter_csv(csvdir, in_filename):
     out_file = StringIO.StringIO()      # in-memory file
     
     nline = 0
+    nskipped = 0
     for line in csv_file:
         nline += 1
         #logging.info("line %d: %s" % (nline, line))
         line = line.strip('\n')   # remove trailing \n
         #logging.info("%d in: %s" % (nline, line))
         #print("# new lines: %d" % line.count('\n'))
-        fields = line.split('|')
         
+        if len(line) == line.count('|'):
+            nskipped += 1
+            continue
+        
+        fields = line.split('|')
         if nline == 1:
             nfields = len(fields)
             logging.debug("# of fields: %d" % nfields)
@@ -563,6 +568,9 @@ def filter_csv(csvdir, in_filename):
     #out_file.close()    # closed by caller!: closing discards memory buffer
     csv_file.close()
     
+    if nskipped != 0:
+        logging.info("%d empty lines (|-only) skipped" % nskipped)
+    
     #return out_pathname
     return out_file
 
@@ -580,13 +588,13 @@ if __name__ == "__main__":
     
     # downloaded vocabulary documents are not used to update the vocabularies, 
     # they are re-read from dataverse and processed on the fly
-    #copy_local = False
-    #update_vocabularies(clioinfra, mongo_client, copy_local)
+    copy_local = False
+    update_vocabularies(clioinfra, mongo_client, copy_local)
     
     copy_local = True
     to_csv = True
     #retrieve_population(clioinfra, copy_local, to_csv)  # dataverse  => local_disk     OK
-    store_population(clioinfra)                         # ? local_disk => postgresql
+    #store_population(clioinfra)                         # ? local_disk => postgresql
     #update_opulation(clioinfra, mongo_client)          # ? postgresql => mongodb
 
     """
