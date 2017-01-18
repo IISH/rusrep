@@ -405,7 +405,7 @@ def store_population(clioinfra):
             #psv_file = open(out_pathname, 'r')
             #cursor.copy_from(psv_file, table, sep='|')
             
-            stringio_file = convert_csv(csvdir, filename)
+            stringio_file = filter_csv(csvdir, filename)
             cursor.copy_from(stringio_file, table, sep='|')
             connection.commit()
             
@@ -438,8 +438,10 @@ def test_csv_file(path_name):
 
 
 
-def convert_csv(csvdir, in_filename):
-    field_names = [
+def filter_csv(csvdir, in_filename):
+    logging.info("filter_csv)")
+    
+    column_names = [
         "indicator_id",
         "id", 
         "territory", 
@@ -482,6 +484,8 @@ def convert_csv(csvdir, in_filename):
         "indicator", 
         "valuemark"
     ]
+    ncolumns = len(column_names)
+    logging.debug("# of columns: %d" % ncolumns)
     
     in_pathname = os.path.abspath(os.path.join(csvdir, in_filename))
     csv_file = open( in_pathname, 'r')
@@ -498,42 +502,62 @@ def convert_csv(csvdir, in_filename):
     nline = 0
     for line in csv_file:
         nline += 1
-        line.rstrip('\n')   # remove trailing \n
-        
-        if nline == 1:
-            continue        # skip header line
-        
+        #logging.info("line %d: %s" % (nline, line))
+        line = line.strip('\n')   # remove trailing \n
+        #logging.info("%d in: %s" % (nline, line))
+        #print("# new lines: %d" % line.count('\n'))
         fields = line.split('|')
         
-        fields.insert(0, str(nline))    # indicator_id, not in csv file
+        if nline == 1:
+            nfields = len(fields)
+            logging.debug("# of fields: %d" % nfields)
+            ndiff = nfields - ncolumns  # NB "indicator_id" is not in the fields
+            #logging.info("ndiff: %d" % ndiff)
+            continue        # skip header line
+        #elif nline > 20:
+        #    break
         
-        fields.pop()                # table has 3 columns less than csv file
-        fields.pop()                # skip trailing 3 fields
-        fields.pop()
+        #print("|".join(fields))
+        if ndiff > 0:
+            npop = 1 + ndiff
+            for _ in range(npop):
+                fields.pop()            # skip trailing n fields
+            #logging.info("# of fields popped: %d" % npop)
+        elif ndiff < 0:
+            napp = abs(ndiff) - 1
+            for _ in range(napp):
+                fields.append("")
+            #logging.info("# of fields added: %d" % napp)
+        
+        # column indicator_id should become the primairy key
+        fields.insert(0, "0")    # prepend indicator_id, not in csv file
+        #print("|".join(fields))
+        
         """
         if nline == 2:
             for i in range(len(fields)):
-                print("%2d %s: %s" % (i, field_names[i], fields[i]))
+                print("%2d %s: %s" % (i, column_names[i], fields[i]))
         """
         # i = 38: base_year, must be integer
         try:
-            x = int(fields[38])
+            dummy = int(fields[38])
         except:
             fields[38] = "0"
         
         if fields[40] not in ("true", "false"):
             fields[40] = "false"
         
-        short_line = "|".join(fields)
+        table_line = "|".join(fields)
         """
         if nline == 2:
             print("%d fields" % len(fields))
             print(short_line)
         
             for i in range(len(fields)):
-                print("%2d %s: %s" % (i, field_names[i], fields[i]))
+                print("%2d %s: %s" % (i, column_names[i], fields[i]))
         """
-        out_file.write("%s\n" % short_line )
+        #logging.info("%d out: %s" % (nline, table_line))
+        out_file.write("%s\n" % table_line )
     
     out_file.seek(0)    # start of the stream
     #out_file.close()    # closed by caller!: closing discards memory buffer
