@@ -593,16 +593,16 @@ if __name__ == "__main__":
     logging.basicConfig(level=log_level)
     logging.info(__file__)
     
-    RUSREP_HOME = os.environ['RUSREP_HOME']
+    RUSREP_HOME = os.environ["RUSREP_HOME"]
     logging.info("RUSREP_HOME: %s" % RUSREP_HOME)
     
-    CLIOINFRA_HOME = os.environ['CLIOINFRA_HOME']
+    CLIOINFRA_HOME = os.environ["CLIOINFRA_HOME"]
     logging.info("CLIOINFRA_HOME: %s" % CLIOINFRA_HOME)
     
     RUSREP_CONFIG_PATH = RUSREP_HOME + "/config/russianrep.config"
     logging.info("RUSREP_CONFIG_PATH: %s" % RUSREP_CONFIG_PATH )
     
-    CLIOINFRA_CONFIG_PATH = CLIOINFRA_HOME + "/config/clioinfra.config"
+    CLIOINFRA_CONFIG_PATH = CLIOINFRA_HOME + "/config/clioinfra.conf"
     logging.info("CLIOINFRA_CONFIG_PATH: %s" % CLIOINFRA_CONFIG_PATH )
     
     # service.configutils.Configuration() uses path to clioinfra.conf from service.__init__.py , 
