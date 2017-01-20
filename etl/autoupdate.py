@@ -598,17 +598,12 @@ if __name__ == "__main__":
     to_csv = True
     #retrieve_population(clioinfra, copy_local, to_csv)  # dataverse  => local_disk     OK
     #store_population(clioinfra)                         # ? local_disk => postgresql
-    #update_opulation(clioinfra, mongo_client)          # ? postgresql => mongodb
+    #update_population(clioinfra, mongo_client)          # ? postgresql => mongodb
 
     """
     TODO: 
-    how many 'sets' of data are there in russianrepository ?
-    -1- historic class data fetched from postgresql
-    -2- modern class data fetched from postgresql
-    
-    how many 'sets' of data are there in mongodb ?
-    -1- retrieved ERRHS_Vocabulary_*.tab files from dataverse in vocabulary.data
-    -2- historic class data fetched from postgresql in vocabulary.data
-    -3- modern class data fetched from postgresql in vocabulary.data
+    remove config path(s) from this script
+    fill update_population() with population stuff from pdate_vocabularies()
+    set contab
     """
 # [eof]
