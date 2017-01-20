@@ -1,5 +1,5 @@
 # VT-13-Jul-2016
-# FL-16-Jan-2017
+# FL-20-Jan-2017
 
 from __future__ import absolute_import
 
@@ -8,9 +8,13 @@ import sys
 
 database = 'datasets'
 
+CLIOINFRA_HOME = os.environ["CLIOINFRA_HOME"]
+CLIOINFRA_CONFIG_PATH = CLIOINFRA_HOME + "/config/clioinfra.config"
+
 #configpath = "/etc/apache2/russianrep.conf"	# inluded in clioinfra.conf
 #configpath = "/etc/apache2/clioinfra.conf"
-configpath = "/home/fons/projects/CLIO-INFRA/RiStat/rusrep/config/clioinfra.conf"
+#configpath = "/home/fons/projects/CLIO-INFRA/RiStat/rusrep/config/clioinfra.conf"
+configpath = CLIOINFRA_CONFIG_PATH
 
 if os.path.isfile(configpath):
     print(__file__)
