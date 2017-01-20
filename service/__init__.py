@@ -6,10 +6,9 @@ from __future__ import absolute_import
 import os
 import sys
 
-database = 'datasets'
+database = "datasets"
 
-CLIOINFRA_HOME = os.environ["CLIOINFRA_HOME"]
-CLIOINFRA_CONFIG_PATH = CLIOINFRA_HOME + "/config/clioinfra.config"
+CLIOINFRA_CONFIG_PATH = os.environ["CLIOINFRA_CONFIG_PATH"]
 
 #configpath = "/etc/apache2/russianrep.conf"	# inluded in clioinfra.conf
 #configpath = "/etc/apache2/clioinfra.conf"
@@ -18,7 +17,7 @@ configpath = CLIOINFRA_CONFIG_PATH
 
 if os.path.isfile(configpath):
     print(__file__)
-    print(" using configpath: %s" % configpath )
+    print("using configpath: %s" % configpath )
 else:
     print("in %s" % __file__)
     print("configpath %s FILE DOES NOT EXIST" % configpath )
