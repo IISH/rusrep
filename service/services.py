@@ -5,6 +5,10 @@
 
 from __future__ import absolute_import
 
+import sys
+reload(sys)  
+sys.setdefaultencoding('utf8')
+
 import collections
 import ConfigParser
 import json
@@ -14,15 +18,11 @@ import pandas as pd
 import random
 import re
 import simplejson
-import sys
 import tables
 import urllib
 import urllib2
 import psycopg2
 import psycopg2.extras
-
-reload(sys)  
-sys.setdefaultencoding('utf8')
 
 from flask import Flask, Response, request
 from pymongo import MongoClient
