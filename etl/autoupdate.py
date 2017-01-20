@@ -11,7 +11,7 @@ Notice: dpe/rusrep/etl contains a xlsx2csv.py copy;
 better use the curent version from PyPI
 
 VT-07-Jul-2016 latest change by VT
-FL-18-Jan-2017
+FL-20-Jan-2017
 """
 
 from __future__ import absolute_import
@@ -68,6 +68,7 @@ def loadjson(apiurl):
     dataframe = simplejson.load(f)
     return dataframe
 
+
 """
 def connect():
     logging.debug("connect()")
@@ -82,6 +83,7 @@ def connect():
     cursor = conn.cursor()
     return cursor
 """
+
 
 def alldatasets(clioinfra, copy_local):
     logging.info("%s alldatasets()" % __file__)
@@ -136,6 +138,7 @@ def alldatasets(clioinfra, copy_local):
         logging.info("skip: handle: %s" % handle)
     
     return papers
+
 
 
 def documents_by_handle(clioinfra, handle_name, copy_local=False, to_csv=False):
@@ -240,13 +243,12 @@ def documents_by_handle(clioinfra, handle_name, copy_local=False, to_csv=False):
 
 def update_vocabularies(clioinfra, mongo_client, copy_local=False):
     logging.info("%s update_vocabularies()" % __file__)
-    
     """
-    update_vocabularies() updates 3 different sets of data in mongodb:
-    -1- retrieved ERRHS_Vocabulary_*.tab files from dataverse
-    -2- historic class data fetched from postgresql
-    -3- modern class data fetched from postgresql
-    All 3 sets are stored in mongo db = 'vocabulary', collection = 'data'
+    update_vocabularies():
+    -1- retrieves ERRHS_Vocabulary_*.tab files from dataverse
+    -2- with copy_local=True stores them locally
+    -3- drops the MogoDB db = 'vocabulary', collection = 'data
+    -4- stores the new data in MogoDB db = 'vocabulary', collection = 'data
     """
     
     handle_name = "hdl_vocabularies"
@@ -311,18 +313,8 @@ def update_vocabularies(clioinfra, mongo_client, copy_local=False):
     # drop the documents from collection 'data'; same as: db.drop_collection(coll_name)
     db.data.drop()
     
-    logging.info("inserting vocabulary in mongodb")
+    logging.info("inserting vocabulary in mongodb '%s'" % dbname)
     result = db.data.insert(vocab_json)
-
-    cpath = "/etc/apache2/rusrep.config"
-    logging.info("using configuration: %s" % cpath)
-    # classupdate() uses postgresql access parameters from cpath contents
-    classdata = classupdate(cpath)     # fetching historic and modern class data from postgresql table 
-    
-    logging.info("inserting historic and modern class data in mongodb")
-    
-    db = mongo_client.get_database(dbname)
-    result = db.data.insert(classdata)
 
     logging.info("clearing mongodb cache")
     db = mongo_client.get_database('datacache')
@@ -352,6 +344,7 @@ def retrieve_population(clioinfra, copy_local=False, to_csv=False):
         logging.debug(doc)
 
 
+
 def store_population(clioinfra):
     logging.info("store_population()")
     
@@ -364,8 +357,7 @@ def store_population(clioinfra):
         sys.exit(1)
     logging.info("using csv directory: %s" % csvdir )
 
-    #configpath = "/etc/apache2/russianrep.config"
-    configpath = "/home/fons/projects/CLIO-INFRA/RiStat/rusrep/config/russianrep.config"
+    configpath = RUSREP_CONFIG_PATH
     if not os.path.isfile(configpath):
         print("in %s" % __file__)
         print("configpath %s FILE DOES NOT EXIST" % configpath )
@@ -397,9 +389,9 @@ def store_population(clioinfra):
         root, ext = os.path.splitext(filename)
         if root.startswith("ERRHS_") and ext == ".csv":
             #table = root.lower()
-            logging.info("use:  %s, table: %s" % (filename, table))
+            logging.info("use:  %s, to table: %s" % (filename, table))
             in_pathname = os.path.abspath(os.path.join(csvdir, filename))
-            logging.info(in_pathname)
+            logging.debug(in_pathname)
             #test_csv_file(pathname)
             
             #out_pathname = write_psv_file(csvdir, filename)
@@ -442,7 +434,7 @@ def test_csv_file(path_name):
 
 
 def filter_csv(csvdir, in_filename):
-    logging.info("filter_csv()")
+    logging.debug("filter_csv()")
     
     column_names = [
         "indicator_id",
@@ -579,31 +571,51 @@ def filter_csv(csvdir, in_filename):
 
 
 
+def update_population(clioinfra, mongo_client):
+    logging.info("store_population()")
+    
+    configpath = RUSREP_CONFIG_PATH
+    logging.info("using configuration: %s" % configpath)
+    # classupdate() uses postgresql access parameters from cpath contents
+    classdata = classupdate(configpath)     # fetching historic and modern class data from postgresql table 
+    
+    dbname = clioinfra.config['vocabulary']
+    logging.info("inserting historic and modern class data in mongodb '%s'" % dbname)
+    
+    db = mongo_client.get_database(dbname)
+    result = db.data.insert(classdata)
+
+
+
 if __name__ == "__main__":
     #log_level = logging.DEBUG
     log_level = logging.INFO
     logging.basicConfig(level=log_level)
     logging.info(__file__)
     
+    RUSREP_HOME = os.environ['RUSREP_HOME']
+    logging.info("RUSREP_HOME: %s" % RUSREP_HOME)
+    RUSREP_CONFIG_PATH = RUSREP_HOME + "/config/russianrep.config"
+    logging.info("RUSREP_CONFIG_PATH: %s" % RUSREP_CONFIG_PATH )
+    
     # service.configutils.Configuration() uses path to clioinfra.conf from service.__init__.py , 
     clioinfra    = Configuration()
     mongo_client = MongoClient()
     
-    # downloaded vocabulary documents are not used to update the vocabularies, 
-    # they are re-read from dataverse and processed on the fly
+    # Downloaded vocabulary documents are not used to update the vocabularies, 
+    # they are processed on the fly, and put in MongoDB
+    # Notice that the MongoDB table is dropped before re-filling, so 
+    # update_vocabularies() must be the first function called in __main__. 
     copy_local = False
     update_vocabularies(clioinfra, mongo_client, copy_local)
     
     copy_local = True
     to_csv = True
-    #retrieve_population(clioinfra, copy_local, to_csv)  # dataverse  => local_disk     OK
-    #store_population(clioinfra)                         # ? local_disk => postgresql
-    #update_population(clioinfra, mongo_client)          # ? postgresql => mongodb
+    retrieve_population(clioinfra, copy_local, to_csv)  # dataverse  => local_disk     OK
+    store_population(clioinfra)                         # ? local_disk => postgresql
+    update_population(clioinfra, mongo_client)          # ? postgresql => mongodb
 
     """
-    TODO: 
-    remove config path(s) from this script
-    fill update_population() with population stuff from pdate_vocabularies()
-    set contab
+    TODO: set crontab
     """
 # [eof]
