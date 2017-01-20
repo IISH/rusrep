@@ -337,10 +337,11 @@ def retrieve_population(clioinfra, copy_local=False, to_csv=False):
     logging.info("retrieving documents from dataverse for handle name %s ..." % handle_name )
     (docs, ids) = documents_by_handle(clioinfra, handle_name, copy_local, to_csv)
     ndoc =  len(docs)
-    logging.info("%d documents retrieved from dataverse" % ndoc)
     if ndoc == 0:
         logging.info("no documents retrieved.")
         return
+    else:
+        logging.info("%d documents for handle %s retrieved from dataverse" % (ndoc, handle_name))
     
     logging.debug("keys in ids:")
     for key in ids:
@@ -417,7 +418,9 @@ def store_population(clioinfra):
 
         #print("break")
         #break
-
+    
+    ndoc = len(dirlist)
+    logging.info("%d documents for handle %s stored in table %s" % (ndoc, handle_name, table))
     cursor.close()
     connection.close()
 

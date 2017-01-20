@@ -1,8 +1,13 @@
 # -*- coding: utf-8 -*-
 
 # FL-12-Dec-2016 use datatype in function documentation()
+# FL-20-Jan-2017 utf8 encoding
 
 from __future__ import absolute_import
+
+import sys
+reload(sys)  
+sys.setdefaultencoding('utf8')
 
 import collections
 import ConfigParser
@@ -13,7 +18,6 @@ import pandas as pd
 import random
 import re
 import simplejson
-import sys
 import tables
 import urllib
 import urllib2
