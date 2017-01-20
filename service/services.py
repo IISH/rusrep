@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 # FL-12-Dec-2016 use datatype in function documentation()
+# FL-20-Jan-2017 utf8 encoding
 
 from __future__ import absolute_import
 
@@ -19,6 +20,9 @@ import urllib
 import urllib2
 import psycopg2
 import psycopg2.extras
+
+reload(sys)  
+sys.setdefaultencoding('utf8')
 
 from flask import Flask, Response, request
 from pymongo import MongoClient
