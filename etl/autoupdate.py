@@ -510,13 +510,27 @@ def filter_csv(csvdir, in_filename):
         fields = line.split('|')
         if nline == 1:
             nfields = len(fields)
+            csvheader_names = map(str.lower, fields)
             logging.debug("# of fields: %d" % nfields)
             ndiff = nfields - ncolumns  # NB "indicator_id" is not in the fields
             #logging.info("ndiff: %d" % ndiff)
-            continue        # skip header line
-        #elif nline > 20:
-        #    break
-        
+            continue        # do not store header line
+        else:
+            # remove dots from trailing '.' filler fields
+            nzap = 0
+            for i in reversed(range(nfields)):
+                #print("%2d %s: %s" % (i, csvheader_names[i], fields[i]))
+                if fields[i] == ".":
+                    fields[i] = ""
+                    nzap += 1
+                else:
+                    break
+            """
+            if nzap != 0:   # i found none, so maybe the traling '.' are added later
+                print(line)
+                print("|".join(fields))
+                sys.exit(0)
+            """
         #print("|".join(fields))
         if ndiff > 0:
             npop = 1 + ndiff
@@ -572,7 +586,7 @@ def filter_csv(csvdir, in_filename):
 
 
 def update_population(clioinfra, mongo_client):
-    logging.info("store_population()")
+    logging.info("update_population()")
     
     configpath = RUSREP_CONFIG_PATH
     logging.info("using configuration: %s" % configpath)
