@@ -515,6 +515,8 @@ def filter_csv(csvdir, in_filename):
             ndiff = nfields - ncolumns  # NB "indicator_id" is not in the fields
             #logging.info("ndiff: %d" % ndiff)
             continue        # do not store header line
+        """
+        # No, do not remove: the dots must be in db; filter on RiStat requests
         else:
             # remove dots from trailing '.' filler fields for histclass & class fields
             nzaphc = 0
@@ -536,7 +538,7 @@ def filter_csv(csvdir, in_filename):
                         nzapc += 1
                     else:
                         break
-            
+            """
             """
             if nzaphc != 0 or nzapc != 0:
                 print("nzaphc: %d, nzapc: %d" % (nzaphc, nzapc))
