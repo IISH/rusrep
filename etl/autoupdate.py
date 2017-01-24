@@ -11,7 +11,7 @@ Notice: dpe/rusrep/etl contains a xlsx2csv.py copy;
 better use the curent version from PyPI
 
 VT-07-Jul-2016 latest change by VT
-FL-20-Jan-2017
+FL-24-Jan-2017
 """
 
 from __future__ import absolute_import
@@ -141,7 +141,7 @@ def alldatasets(clioinfra, copy_local):
 
 
 
-def documents_by_handle(clioinfra, handle_name, copy_local=False, to_csv=False):
+def documents_by_handle(clioinfra, handle_name, copy_local=False, to_csv=False, remove_xlsx=True):
     logging.info("%s documents_by_handle() copy_local: %s, to_csv: %s" % (__file__, copy_local, to_csv))
     logging.debug("handle_name: %s" % handle_name )
     
@@ -212,7 +212,7 @@ def documents_by_handle(clioinfra, handle_name, copy_local=False, to_csv=False):
                         #csvfile = open(csvpath, 'w+')
                         #xlsx2csv(filepath, csvfile, **kwargs)
                         Xlsx2csv(filepath, **kwargs).convert(csvpath)
-                        if ext == ".xlsx":
+                        if remove_xlsx and ext == ".xlsx":
                             os.remove(filepath) # keep the csv, remove the xlsx
                 
                 # FL-09-Jan-2017 should we not filter before downloading?
@@ -241,7 +241,7 @@ def documents_by_handle(clioinfra, handle_name, copy_local=False, to_csv=False):
 
 
 
-def update_vocabularies(clioinfra, mongo_client, copy_local=False):
+def update_vocabularies(clioinfra, mongo_client, copy_local=False, remove_xlsx=True):
     logging.info("%s update_vocabularies()" % __file__)
     """
     update_vocabularies():
@@ -253,7 +253,7 @@ def update_vocabularies(clioinfra, mongo_client, copy_local=False):
     
     handle_name = "hdl_vocabularies"
     logging.info("retrieving documents from dataverse for handle name %s ..." % handle_name )
-    (docs, ids) = documents_by_handle(clioinfra, handle_name, copy_local)
+    (docs, ids) = documents_by_handle(clioinfra, handle_name, copy_local, remove_xlsx)
     ndoc =  len(docs)
     logging.info("%d documents retrieved from dataverse" % ndoc)
     if ndoc == 0:
@@ -322,12 +322,12 @@ def update_vocabularies(clioinfra, mongo_client, copy_local=False):
 
 
 
-def retrieve_population(clioinfra, copy_local=False, to_csv=False):
-    logging.info("retrieve_population()")
+def retrieve_population(clioinfra, copy_local=False, to_csv=False, remove_xlsx=True):
+    logging.info("retrieve_population() %s" % copy_local )
 
     handle_name = "hdl_population"
     logging.info("retrieving documents from dataverse for handle name %s ..." % handle_name )
-    (docs, ids) = documents_by_handle(clioinfra, handle_name, copy_local, to_csv)
+    (docs, ids) = documents_by_handle(clioinfra, handle_name, copy_local, to_csv, remove_xlsx)
     ndoc =  len(docs)
     if ndoc == 0:
         logging.info("no documents retrieved.")
@@ -510,13 +510,42 @@ def filter_csv(csvdir, in_filename):
         fields = line.split('|')
         if nline == 1:
             nfields = len(fields)
+            csvheader_names = map(str.lower, fields)
             logging.debug("# of fields: %d" % nfields)
             ndiff = nfields - ncolumns  # NB "indicator_id" is not in the fields
             #logging.info("ndiff: %d" % ndiff)
-            continue        # skip header line
-        #elif nline > 20:
-        #    break
-        
+            continue        # do not store header line
+        else:
+            # remove dots from trailing '.' filler fields for histclass & class fields
+            nzaphc = 0
+            for i in reversed(range(nfields)):  # histclass fields
+                #print("%2d %s: %s" % (i, csvheader_names[i], fields[i]))
+                if csvheader_names[i].startswith( "histclass" ):
+                    if fields[i] == ".":
+                        fields[i] = ""
+                        nzaphc += 1
+                    else:
+                        break
+            
+            nzapc = 0
+            for i in reversed(range(nfields)):  # class fields
+                #print("%2d %s: %s" % (i, csvheader_names[i], fields[i]))
+                if csvheader_names[i].startswith( "class" ):
+                    if fields[i] == ".":
+                        fields[i] = ""
+                        nzapc += 1
+                    else:
+                        break
+            
+            """
+            if nzaphc != 0 or nzapc != 0:
+                print("nzaphc: %d, nzapc: %d" % (nzaphc, nzapc))
+                #print(line)
+                #print("|".join(fields))
+                for i in range(len(fields)):
+                    print("%2d %s: %s" % (i, csvheader_names[i], fields[i]))
+                sys.exit(0)
+            """
         #print("|".join(fields))
         if ndiff > 0:
             npop = 1 + ndiff
@@ -572,7 +601,7 @@ def filter_csv(csvdir, in_filename):
 
 
 def update_population(clioinfra, mongo_client):
-    logging.info("store_population()")
+    logging.info("update_population()")
     
     configpath = RUSREP_CONFIG_PATH
     logging.info("using configuration: %s" % configpath)
@@ -616,13 +645,11 @@ if __name__ == "__main__":
     copy_local = False
     update_vocabularies(clioinfra, mongo_client, copy_local)
     
-    copy_local = True
+    copy_local = False
     to_csv = True
-    retrieve_population(clioinfra, copy_local, to_csv)  # dataverse  => local_disk     OK
+    remove_xlsx = True
+    retrieve_population(clioinfra, copy_local, to_csv, remove_xlsx) # dataverse  => local_disk
     store_population(clioinfra)                         # ? local_disk => postgresql
     update_population(clioinfra, mongo_client)          # ? postgresql => mongodb
 
-    """
-    TODO: set crontab
-    """
 # [eof]
