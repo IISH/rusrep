@@ -2,6 +2,7 @@
 
 # FL-12-Dec-2016 use datatype in function documentation()
 # FL-20-Jan-2017 utf8 encoding
+# FL-30-Jan-2017 
 
 from __future__ import absolute_import
 
@@ -360,7 +361,7 @@ def datasetfilter(data, sqlnames, classification):
                         except:
                             nextvalue = '.'
 
-                        if (dataline[i] == "." and nextvalue == "."):
+                        if (dataline[i] == '.' and nextvalue == '.'):
                             skip = 'yes'
                         else:
                             toplevel = re.search("(\d+)", name)
@@ -375,7 +376,7 @@ def datasetfilter(data, sqlnames, classification):
                         except:
                             nextvalue = '.'
 
-                        if (dataline[i] == "." and nextvalue == "."):
+                        if (dataline[i] == '.' and nextvalue == '.'):
                             skip = 'yes'
                         else:
                             toplevel = re.search("(\d+)", name)
@@ -436,7 +437,7 @@ def load_classes(cursor):
                     except:
                         nextvalue = '.'
                     
-                    if (dataline[i] == "." and nextvalue == "."):
+                    if (dataline[i] == '.' and nextvalue == '.'):
                         skip = 'yes'
                     else:
                         toplevel = re.search("(\d+)", name)
@@ -455,7 +456,7 @@ def load_classes(cursor):
                     except:
                         nextvalue = '.'
                     
-                    if (dataline[i] == "." and nextvalue == "."):
+                    if (dataline[i] == '.' and nextvalue == '.'):
                         skip = 'yes'
                     else:
                         toplevel = re.search("(\d+)", name)
@@ -498,6 +499,27 @@ def load_classes(cursor):
     return jsondata
 
 
+
+def zap_empty_classes(item):
+    logging.debug("zap_empty_classes()")
+    # trailing empty classes have value ". ", skip them; 
+    # bridging empty classes have value '.', keep them; 
+    #logging.debug(item)
+    
+    new_item = {}
+    for name in item:
+        value = item[name].encode('UTF-8')
+        # skip trailing ". " in hist & modern classes
+        if (name.startswith("histclass") or name.startswith("class")) and value == ". ":
+            #logging.debug("name: %s, value: %s" % (name, value))
+            #value = ""
+            pass
+        else:
+            new_item[name] = value
+    
+    return new_item
+
+
 def translateitem(item, engdata):
     logging.debug("translateitem()")
     logging.debug(item)
@@ -512,6 +534,7 @@ def translateitem(item, engdata):
                 value = engdata[value]
             newitem[name] = value
         item = newitem
+    
     return item
 
 
@@ -522,6 +545,7 @@ def load_vocabulary(vocname):
     db = client.get_database(dbname)
     newfilter = {}
     engdata = {}
+    
     if request.args.get('classification'):
         vocname = request.args.get('classification')
         if vocname == 'historical':
@@ -536,7 +560,7 @@ def load_vocabulary(vocname):
                 thisyear = request.args.get('base_year')
                 newfilter['YEAR'] = thisyear 
         engdata = translatedvocabulary(newfilter)
-        units = translatedvocabulary({"vocabulary": "ERRHS_Vocabulary_units"})
+        units   = translatedvocabulary({"vocabulary": "ERRHS_Vocabulary_units"})
         for item in units:
             engdata[item] = units[item]
 
@@ -552,12 +576,14 @@ def load_vocabulary(vocname):
 
     data = []
     uid = 0
+    logging.debug("processing %d items in vocab %s" % (vocab.count(), vocname))
     for item in vocab:
         del item['_id']
         del item['vocabulary']
         regions = {}
+        
         if vocname == "ERRHS_Vocabulary_regions":
-            uid+=1
+            uid += 1
             regions['region_name'] = item['RUS']
             regions['region_name_eng'] = item['EN']
             regions['region_code'] = item['ID']
@@ -568,10 +594,12 @@ def load_vocabulary(vocname):
             item = regions
             data.append(item)
         elif vocname == 'modern':
+            item = zap_empty_classes(item)
             if engdata:
                 item = translateitem(item, engdata)
             data.append(item)
         elif vocname == 'historical':
+            item = zap_empty_classes(item)
             if engdata:
                 item = translateitem(item, engdata)
             data.append(item)
@@ -672,45 +700,6 @@ def load_data(cursor, year, datatype, region, debug):
     return jsondata
 
 
-app = Flask(__name__)
-logging.debug(__file__)
-
-@app.route('/')
-def test():
-    logging.debug("test()")
-    description = 'Russian Repository API Service v.0.1<br>/service/regions<br>/service/topics<br>/service/data<br>/service/histclasses<br>/service/years<br>/service/maps (reserved)<br>'
-    return description
-
-
-@app.route('/export')
-def export():
-    logging.debug("export()")
-    settings = Configuration()
-    keys = ["intro", "intro_rus", "datatype_intro", "datatype_intro_rus", "note", "note_rus", "downloadpage1", "downloadpage1_rus" "downloadclick", "downloadclick_rus", "warningblank", "warningblank_rus", "mapintro", "mapintro_rus"]
-    exportkeys = {}
-    for ikey in keys:
-        if ikey in settings.config:
-            exportkeys[ikey] = settings.config[ikey]
-    result = json.dumps(exportkeys, encoding="utf8", ensure_ascii=False, sort_keys=True, indent=4)
-    return Response(result,  mimetype='application/json; charset=utf-8')
-
-
-@app.route('/topics')
-def topics():
-    logging.debug("topics()")
-    cursor = connect()
-    data = load_topics(cursor)
-    return Response(data,  mimetype='application/json; charset=utf-8')
-
-
-@app.route('/histclasses')
-def histclasses():
-    logging.debug("histclasses()")
-    cursor = connect()
-    #data = load_histclasses(cursor)
-    data = load_vocabulary('historical')
-    return Response(data,  mimetype='application/json; charset=utf-8')
-
 
 def rdfconvertor(url):
     logging.debug("rdfconvertor()")
@@ -740,29 +729,6 @@ def rdfconvertor(url):
     return g
 
 
-@app.route('/vocab')
-def vocab():
-    logging.debug("vocab()")
-    url = "https://datasets.socialhistory.org/api/access/datafile/586?&key=6f07ea5d-be76-444a-8a20-0ee2f02fda21&show_entity_ids=true&q=authorName:*"
-    g = rdfconvertor(url)
-    showformat = 'json'
-    if request.args.get('format'):
-        showformat = request.args.get('format')
-    if showformat == 'turtle':
-        jsondump = g.serialize(format='n3')
-        return Response(jsondump,  mimetype='application/x-turtle; charset=utf-8')
-    else:
-        jsondump = g.serialize(format='json-ld', indent=4)
-        return Response(jsondump,  mimetype='application/json; charset=utf-8')
-
-
-@app.route('/vocabulary')
-def getvocabulary():
-    logging.debug("getvocabulary()")
-    data = translatedvocabulary()
-    json_string = json.dumps(data, encoding="utf8", ensure_ascii=False, sort_keys=True, indent=4)
-    return Response(json_string,  mimetype='application/json; charset=utf-8')
-
 
 class Histclass(tables.IsDescription):
     histclass1 = tables.StringCol(256,pos=0)
@@ -789,6 +755,73 @@ def get_sql_query(name, value):
     
     logging.debug("sqlquery: %s" % sqlquery)
     return sqlquery
+
+
+def loadjson(apiurl):
+    logging.debug("loadjson()")
+    jsondataurl = apiurl
+
+    req = urllib2.Request(jsondataurl)
+    opener = urllib2.build_opener()
+    f = opener.open(req)
+    dataframe = simplejson.load(f)
+    return dataframe
+
+# ==============================================================================
+app = Flask(__name__)
+logging.debug(__file__)
+
+
+@app.route('/')
+def test():
+    logging.debug("test()")
+    description = 'Russian Repository API Service v.0.1<br>/service/regions<br>/service/topics<br>/service/data<br>/service/histclasses<br>/service/years<br>/service/maps (reserved)<br>'
+    return description
+
+
+@app.route('/export')
+def export():
+    logging.debug("export()")
+    settings = Configuration()
+    keys = ["intro", "intro_rus", "datatype_intro", "datatype_intro_rus", "note", "note_rus", "downloadpage1", "downloadpage1_rus" "downloadclick", "downloadclick_rus", "warningblank", "warningblank_rus", "mapintro", "mapintro_rus"]
+    exportkeys = {}
+    for ikey in keys:
+        if ikey in settings.config:
+            exportkeys[ikey] = settings.config[ikey]
+    result = json.dumps(exportkeys, encoding="utf8", ensure_ascii=False, sort_keys=True, indent=4)
+    return Response(result,  mimetype='application/json; charset=utf-8')
+
+
+@app.route('/topics')
+def topics():
+    logging.debug("topics()")
+    cursor = connect()
+    data = load_topics(cursor)
+    return Response(data,  mimetype='application/json; charset=utf-8')
+
+
+@app.route('/vocab')
+def vocab():
+    logging.debug("vocab()")
+    url = "https://datasets.socialhistory.org/api/access/datafile/586?&key=6f07ea5d-be76-444a-8a20-0ee2f02fda21&show_entity_ids=true&q=authorName:*"
+    g = rdfconvertor(url)
+    showformat = 'json'
+    if request.args.get('format'):
+        showformat = request.args.get('format')
+    if showformat == 'turtle':
+        jsondump = g.serialize(format='n3')
+        return Response(jsondump,  mimetype='application/x-turtle; charset=utf-8')
+    else:
+        jsondump = g.serialize(format='json-ld', indent=4)
+        return Response(jsondump,  mimetype='application/json; charset=utf-8')
+
+
+@app.route('/vocabulary')
+def getvocabulary():
+    logging.debug("getvocabulary()")
+    data = translatedvocabulary()
+    json_string = json.dumps(data, encoding="utf8", ensure_ascii=False, sort_keys=True, indent=4)
+    return Response(json_string,  mimetype='application/json; charset=utf-8')
 
 
 @app.route('/aggregation', methods=['POST', 'GET'])
@@ -1080,17 +1113,6 @@ def aggr():
         return Response(json.dumps(final),  mimetype='application/json; charset=utf-8')
 
 
-def loadjson(apiurl):
-    logging.debug("loadjson()")
-    jsondataurl = apiurl
-
-    req = urllib2.Request(jsondataurl)
-    opener = urllib2.build_opener()
-    f = opener.open(req)
-    dataframe = simplejson.load(f)
-    return dataframe
-
-
 @app.route('/download')
 def download():
     logging.debug("download()")
@@ -1220,10 +1242,19 @@ def documentation():
     return Response(json.dumps(papers),  mimetype='application/json; charset=utf-8')
 
 
+@app.route('/histclasses')
+def histclasses():
+    logging.debug("histclasses()")
+    #cursor = connect()
+    #data = load_histclasses(cursor)
+    data = load_vocabulary('historical')
+    return Response(data,  mimetype='application/json; charset=utf-8')
+
+
 @app.route('/classes')
 def classes():
     logging.debug("classes()")
-    cursor = connect()
+    #cursor = connect()
     #data = load_classes(cursor)
     data = load_vocabulary('modern')
     
@@ -1243,7 +1274,6 @@ def years():
     return Response(data,  mimetype='application/json; charset=utf-8')
 
 
-# REGIONS
 @app.route('/regions')
 def regions():
     logging.debug("regions()")
@@ -1332,6 +1362,26 @@ def maps():
     json_response = json.load(response)
     return Response(json_response,  mimetype='application/json; charset=utf-8')
 
+
+"""
+@app.route('/')                 def test():
+@app.route('/export')           def export():
+@app.route('/topics')           def topics():
+@app.route('/vocab')            def vocab():
+@app.route('/vocabulary')       def getvocabulary():
+@app.route('/aggregation'       def aggregation():
+@app.route('/aggregate'         def aggr():
+@app.route('/download')         def download():
+@app.route('/documentation')    def documentation():
+@app.route('/histclasses')      def histclasses():
+@app.route('/classes')          def classes():
+@app.route('/years')            def years():
+@app.route('/regions')          def regions():
+@app.route('/data')             def data():
+@app.route('/translate')        def translate():
+@app.route('/filter'            def login(settings=''):     # FL filter -> login ?
+@app.route('/maps')             def maps():
+"""
 
 if __name__ == '__main__':
     app.run()

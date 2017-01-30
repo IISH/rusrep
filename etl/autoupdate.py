@@ -11,7 +11,7 @@ Notice: dpe/rusrep/etl contains a xlsx2csv.py copy;
 better use the curent version from PyPI
 
 VT-07-Jul-2016 latest change by VT
-FL-24-Jan-2017
+FL-30-Jan-2017
 """
 
 from __future__ import absolute_import
@@ -516,16 +516,14 @@ def filter_csv(csvdir, in_filename):
             #logging.info("ndiff: %d" % ndiff)
             continue        # do not store header line
         else:
-            pass
-            """
-            # No, do not remove: the dots must be in db; filter on RiStat requests
-            # remove dots from trailing '.' filler fields for histclass & class fields
+            # Keep the "bridging" '.' but replace "trailing" '.' by '. ' (add space)
+            # So the (unordered) '. ' are easily recognizable in the RiStat requests
             nzaphc = 0
             for i in reversed(range(nfields)):  # histclass fields
                 #print("%2d %s: %s" % (i, csvheader_names[i], fields[i]))
                 if csvheader_names[i].startswith( "histclass" ):
                     if fields[i] == ".":
-                        fields[i] = ""
+                        fields[i] = ". "
                         nzaphc += 1
                     else:
                         break
@@ -535,11 +533,10 @@ def filter_csv(csvdir, in_filename):
                 #print("%2d %s: %s" % (i, csvheader_names[i], fields[i]))
                 if csvheader_names[i].startswith( "class" ):
                     if fields[i] == ".":
-                        fields[i] = ""
+                        fields[i] = ". "
                         nzapc += 1
                     else:
                         break
-            """
             """
             if nzaphc != 0 or nzapc != 0:
                 print("nzaphc: %d, nzapc: %d" % (nzaphc, nzapc))
