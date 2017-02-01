@@ -2,7 +2,7 @@
 
 # FL-12-Dec-2016 use datatype in function documentation()
 # FL-20-Jan-2017 utf8 encoding
-# FL-30-Jan-2017 
+# FL-31-Jan-2017 
 
 from __future__ import absolute_import
 
@@ -94,8 +94,8 @@ def classcollector(keywords):
     return (classdict, normaldict)
 
 
-def json_generator(c, jsondataname, data):
-    logging.debug("json_generator() c: %s, jsondataname: %s" % (c, jsondataname))
+def json_generator(cursor, jsondataname, data):
+    logging.debug("json_generator() cursor: %s, jsondataname: %s" % (cursor, jsondataname))
     logging.debug("data: %s" % data )
     
     cparser = ConfigParser.RawConfigParser()
@@ -111,17 +111,24 @@ def json_generator(c, jsondataname, data):
         skip = 'yes'
     logging.debug("language: %s" % lang )
 
-    sqlnames = [desc[0] for desc in c.description]
+    sqlnames  = [desc[0] for desc in cursor.description]
+    forbidden = {'dataactive', 0, 'datarecords', 1}
+    
     jsonlist = []
     jsonhash = {}
     
-    forbidden = {'dataactive', 0, 'datarecords', 1}
-    for valuestr in data:    
+    logging.debug("%d values in data" % len(data))
+    for valuestr in data:
         datakeys = {}
         extravalues = {}
         for i in range(len(valuestr)):
             name = sqlnames[i]
             value = valuestr[i]
+            if value == ". ":
+                #logging.debug("i: %d, name: %s, value: %s" % (i, thisname, value))
+                # ". " marks a trailing dot in histclass or class: skip
+                continue
+                
             if name not in forbidden:
                 datakeys[name] = value
             else:
@@ -556,10 +563,16 @@ def load_vocabulary(vocname):
     if request.args.get('language') == 'en':
         thisyear = ''
         if request.args.get('base_year'):
-            if vocname == 'historical':
-                thisyear = request.args.get('base_year')
-                newfilter['YEAR'] = thisyear 
-        engdata = translatedvocabulary(newfilter)
+            if vocname == 'historical':     # FL why only for 'historical' ?
+                vocab_filter = {}
+                base_year = request.args.get("base_year")
+                if base_year:
+                    vocab_filter["YEAR"] = base_year
+                datatype = request.args.get("datatype")
+                if datatype:
+                    vocab_filter["DATATYPE"] = datatype
+                
+        engdata = translatedvocabulary(vocab_filter)
         units   = translatedvocabulary({"vocabulary": "ERRHS_Vocabulary_units"})
         for item in units:
             engdata[item] = units[item]
@@ -831,7 +844,8 @@ def aggregation():
     
     try:
         qinput = json.loads(request.data)
-        logging.debug(qinput)
+        #logging.debug(qinput)
+        logging.debug("number of keys in request.data: %d" % len(qinput))
         for key in qinput:
             logging.debug("key: %s, value: %s" % (key, qinput[key]))
     except:
@@ -842,28 +856,30 @@ def aggregation():
     cursor = connect()
     forbidden = ["classification", "action", "language", "path"]
     if cursor:
-        #     extra = "%s<br>%s=%s<br>" % (extra, key, value)
+        # extra = "%s<br>%s=%s<br>" % (extra, key, value)
         if 'language' in qinput:
             if qinput['language']== 'en':
-                #engdata = translatedclasses(cursor, request.args)
-                newfilter = {}
-                #if 'year' in qinput:
-                if 'base_year' in qinput:
-                    #thisyear = qinput['year']
-                    thisyear = qinput['base_year']
-                    newfilter['YEAR'] = thisyear
+                vocab_filter = {}
+                base_year = qinput.get("base_year")
+                if base_year:
+                    vocab_filter["YEAR"] = base_year
+                datatype = qinput.get("datatype")
+                if datatype:
+                    vocab_filter["DATATYPE"] = datatype
                 
-                engdata = translatedvocabulary(newfilter)
+                engdata = translatedvocabulary(vocab_filter)
                 units = translatedvocabulary({"vocabulary": "ERRHS_Vocabulary_units"})
+                logging.debug("translatedvocabulary returned %d items" % len(units))
                 for item in units:
                     engdata[item] = units[item]
     
     sql = {}
     sql['condition'] = ''
+    sql['groupby']   = ''
+    sql['where']     = ''
+    sql['internal']  = ''
     knownfield = {}
-    sql['groupby'] = ''
-    sql['where'] = ''
-    sql['internal'] = ''
+    
     if qinput:
         for name in qinput:
             if not name in forbidden:
@@ -872,9 +888,9 @@ def aggregation():
                     #value = engdata[value]['class_rus']
                     value = engdata[value]
                     logging.debug("name: %s, value: %s" % (name, value))
-                #sql['where']+="%s='%s' AND1 " % (name, value)
-                sql['where']+="%s AND " % get_sql_query(name, value)
-                sql['condition']+="%s, " % name
+                #sql['where'] += "%s='%s' AND1 " % (name, value)
+                sql['where'] += "%s AND " % get_sql_query(name, value)
+                sql['condition'] += "%s, " % name
                 knownfield[name] = value
             
             elif name == 'path':
@@ -886,9 +902,14 @@ def aggregation():
                     clearpath = {}
                     for xkey in path:
                         value = path[xkey]
-                        if value != '.':
-                            clearpath[xkey] = value
-                    
+                        
+                        # need to retain '.' in classes, but not in summing
+                        #if value != '.':
+                        #    clearpath[xkey] = value
+                        if value == '.':
+                            value = 0
+                        clearpath[xkey] = value
+                        
                     for xkey in clearpath:
                         value = path[xkey]
                         if value in engdata:
@@ -921,27 +942,29 @@ def aggregation():
     sql['internal'] = sql['internal'][:-3]
 
     #select sum(cast(value as double precision)), value_unit from russianrepository where datatype = '1.02' and year='2002' and histclass2 = '' and histclass1='1' group by histclass1, histclass2, value_unit;
-    sqlquery = "select count(*) as datarecords, count(*) - count(value) as dataactive, sum(cast(value as double precision)) as total, value_unit, ter_code"
+    sqlquery = "SELECT COUNT(*) AS datarecords, COUNT(*) - COUNT(value) AS dataactive, SUM(CAST(value AS DOUBLE PRECISION)) AS total, value_unit, ter_code"
     if sql['where']:
-        sqlquery+=", %s" % sql['condition']
-        sqlquery = sqlquery[:-2]
-        sqlquery+=" from russianrepository where %s" % sql['where']
-        sqlquery = sqlquery[:-4]
+        sqlquery += ", %s" % sql['condition']
+        sqlquery  = sqlquery[:-2]
+        sqlquery += " FROM russianrepository WHERE %s" % sql['where']
+        sqlquery  = sqlquery[:-4]
     if sql['internal']:
-        sqlquery+=" AND (%s) " % sql['internal']
+        sqlquery += " AND (%s) " % sql['internal']
     
-    sqlquery+=" group by value_unit, ter_code, "
+    sqlquery += " GROUP BY value_unit, ter_code, "
     for f in knownfield:
-        sqlquery+="%s," % f
+        sqlquery += "%s," % f
     sqlquery = sqlquery[:-1]
     #return sqlquery
 #    forbidden = {'dataactive', 0, 'datarecords', 1}
-    logging.debug("sqlquery: %s" % sqlquery )
+    logging.debug("sqlquery: %s" % sqlquery)
 
     if sqlquery:
         cursor.execute(sqlquery)
         sqlnames = [desc[0] for desc in cursor.description]
-
+        logging.debug("%d sqlnames:" % len(sqlnames))
+        logging.debug(sqlnames)
+        
         # retrieve the records from the database
         data = cursor.fetchall()
         finaldata = []
@@ -949,17 +972,26 @@ def aggregation():
             finalitem = []
             for i, thisname in enumerate(sqlnames):
                 value = item[i]
+                if value == ". ":
+                    #logging.debug("i: %d, name: %s, value: %s" % (i, thisname, value))
+                    # ". " marks a trailing dot in histclass or class: skip
+                    #continue
+                    pass
+                
             #for value in item:
                 if value in engdata:
                     value = value.encode('UTF-8')
                     value = engdata[value]
                 if thisname not in forbidden:
                     finalitem.append(value)
+            
             finaldata.append(finalitem)
+        
         jsondata = json_generator(cursor, 'data', finaldata)
         
+        logging.debug("jsondata before return Response:")
         logging.debug(jsondata)
-        return Response(jsondata,  mimetype='application/json; charset=utf-8')
+        return Response(jsondata, mimetype='application/json; charset=utf-8')
 
     return str('{}')
 
