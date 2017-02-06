@@ -11,7 +11,7 @@ Notice: dpe/rusrep/etl contains a xlsx2csv.py copy;
 better use the curent version from PyPI
 
 VT-07-Jul-2016 latest change by VT
-FL-03-Feb-2017
+FL-06-Feb-2017
 """
 
 from __future__ import absolute_import
@@ -175,10 +175,11 @@ def documents_by_handle( clioinfra, handle_name, copy_local = False, to_csv = Fa
     for item in dataverse.get_contents():
         # item dict keys: protocol, authority, persistentUrl, identifier, type, id
         handle = str( item[ 'protocol' ] ) + ':' + str( item[ 'authority' ] ) + "/" + str( item[ 'identifier' ] )
-        logging.debug( "handle: %s" % handle )
+        #logging.info( "handle: %s" % handle )
+        clio_handle = clioinfra.config.get( handle_name )
         
-        if handle in clioinfra.config[ handle_name ]:
-            logging.debug( "using handle: %s" % handle )
+        if handle == clio_handle:
+            logging.info( "handle_name: %s, using handle: %s" % ( handle_name, handle ) )
             datasetid = item[ 'id' ]
             url = "https://" + str( host ) + "/api/datasets/" + str( datasetid ) + "/?&key=" + str( clioinfra.config[ 'ristatkey' ] )
             dataframe = loadjson( url )
@@ -206,7 +207,7 @@ def documents_by_handle( clioinfra, handle_name, copy_local = False, to_csv = Fa
                     
                     if to_csv:
                         root, ext = os.path.splitext( filename )
-                        logging.info( root )
+                        logging.info( "%s %s" % ( handle_name, root ) )
                         csvpath  = "%s/%s.csv" % ( download_dir, root )
                         logging.debug( "csvpath:  %s" % csvpath )
                         #csvfile = open( csvpath, 'w+' )
@@ -322,7 +323,7 @@ def update_vocabularies( clioinfra, mongo_client, copy_local = False, remove_xls
 
 
 def retrieve_handle_docs( clioinfra, handle_name, copy_local = False, to_csv = False, remove_xlsx = True ):
-    logging.info( "retrieve_handle_docs() copy_local: %s" % copy_local )
+    logging.info( "\nretrieve_handle_docs() copy_local: %s" % copy_local )
 
     logging.info( "retrieving documents from dataverse for handle name %s ..." % handle_name )
     ( docs, ids ) = documents_by_handle( clioinfra, handle_name, copy_local, to_csv, remove_xlsx )
@@ -435,8 +436,7 @@ def test_csv_file( path_name ):
 def filter_csv( csvdir, in_filename ):
     logging.debug( "filter_csv()" )
     
-    column_names = [
-        "indicator_id",
+    dv_column_names = [
         "id", 
         "territory", 
         "ter_code", 
@@ -474,13 +474,16 @@ def filter_csv( csvdir, in_filename ):
         "page", 
         "naborshik_id", 
         "comment_naborshik", 
-        "base_year", 
-        "indicator", 
-        "valuemark"
+        "base_year"
     ]
     
-    ncolumns = len( column_names )
-    logging.debug( "# of columns: %d" % ncolumns )
+    pg_column_names = list( dv_column_names )
+    pg_column_names.insert( 0, "indicator_id" ) # pre-pended for postgres table
+    pg_column_names.append( "indicator" )       # appended for for postgres table
+    pg_column_names.append( "valuemark" )       # appended for for postgres table
+    
+    ncolumns_dv = len( dv_column_names )
+    logging.debug( "# of dv_columns: %d" % ncolumns_dv )
     
     in_pathname = os.path.abspath( os.path.join( csvdir, in_filename ) )
     csv_file = open( in_pathname, 'r')
@@ -513,36 +516,40 @@ def filter_csv( csvdir, in_filename ):
         fields = line.split( '|' )
         if nline == 1:
             line_header = line
-            nfieldsh = len( fields )    # nfields of header line
-            csvheader_names = map( str.lower, fields )
-            logging.debug( "# of header fields: %d" % nfieldsh )
-            ndiff = nfieldsh - ncolumns  # NB "indicator_id" is not in the fields
+            nfields_header = len( fields )              # nfields of header line
+            csv_header_names = map( str.lower, fields )
+            logging.debug( "# of csv header fields: %d" % nfields_header )
+            ndiff = nfields_header - ncolumns_dv
             #logging.info( "ndiff: %d" % ndiff )
             
-            # check, these 2 fields must be consecutive: "comment_naborshik", "base_year",
-            comment_naborshik_idx = csvheader_names.index( "comment_naborshik" )
-            base_year_idx         = csvheader_names.index( "base_year" )
-            if base_year_idx - comment_naborshik_idx != 1:
-                logging.warning( "skipping bad file %s" % in_filename )
-                logging.warning( "wrong header structure: \n%s" % line_header )
+            # header names must match predefined dv_column_names
+            # (but after base_year there may be several empty columns)
+            skip_file = False
+            for i in range( ncolumns_dv ):
+                if dv_column_names[ i ] != csv_header_names[ i ]:
+                    logging.warning( "skipping bad file %s" % in_filename )
+                    logging.warning( "wrong header structure: \n%s" % line_header )
+                    skip_file = True
+                    break
+            if skip_file:
                 break
-            
+                
             continue        # do not store header line
         else:
             # Keep the bridging '.' but replace trailing '.' by ". " (add a space)
             # So the (unordered) '. ' are easily recognizable in the RiStat requests
             nfields = len( fields )
-            if nfields != nfieldsh:
+            if nfields != nfields_header:
                 logging.warning( "skipping bad data line # %d" % nline )
-                logging.warning( "# of data fields (%d) does not match # of header fields (%d)" % (nfields, nfieldsh ) )
+                logging.warning( "# of data fields (%d) does not match # of header fields (%d)" % (nfields, nfields_header ) )
                 logging.warning( "header: %s" % line_header )
                 logging.warning( "data: %s" % line )
                 continue
             
             nzaphc = 0
             for i in reversed( range( nfields ) ):      # histclass fields
-                #print( "%2d %s: %s" % ( i, csvheader_names[ i ], fields[ i ] ) )
-                if csvheader_names[ i ].startswith( "histclass" ):
+                #print( "%2d %s: %s" % ( i, csv_header_names[ i ], fields[ i ] ) )
+                if csv_header_names[ i ].startswith( "histclass" ):
                     if fields[ i ] == ".":
                         fields[ i ] = ". "
                         nzaphc += 1
@@ -551,8 +558,8 @@ def filter_csv( csvdir, in_filename ):
             
             nzapc = 0
             for i in reversed( range( nfields ) ):  # class fields
-                #print( "%2d %s: %s" % ( i, csvheader_names[ i ], fields[ i ] ) )
-                if csvheader_names[ i ].startswith( "class" ):
+                #print( "%2d %s: %s" % ( i, csv_header_names[ i ], fields[ i ] ) )
+                if csv_header_names[ i ].startswith( "class" ):
                     if fields[ i ] == ".":
                         fields[ i ] = ". "
                         nzapc += 1
@@ -564,13 +571,13 @@ def filter_csv( csvdir, in_filename ):
                 #print( line )
                 #print( "|".join( fields ) )
                 for i in range( len( fields ) ):
-                    print( "%2d %s: %s" % ( i, csvheader_names[ i ], fields[ i ] ) )
+                    print( "%2d %s: %s" % ( i, csv_header_names[ i ], fields[ i ] ) )
                 sys.exit( 0 )
             """
             
             # check comment_source length
             for i in range( nfields ):
-                if csvheader_names[ i ] == "comment_source":
+                if csv_header_names[ i ] == "comment_source":
                     comment = fields[ i ]
                     comment_length = len( comment )
                     comment_length_max = max( comment_length_max, comment_length )
@@ -579,25 +586,21 @@ def filter_csv( csvdir, in_filename ):
             
         #print( "|".join( fields ) )
         if ndiff > 0:
-            npop = 1 + ndiff
+            npop = ndiff
             for _ in range( npop ):
                 fields.pop()            # skip trailing n fields
-            #logging.info( "# of fields popped: %d" % npop )
+            #logging.debug( "# of fields popped: %d" % npop )
         elif ndiff < 0:
             napp = abs( ndiff ) - 1
             for _ in range( napp ):
                 fields.append( "" )
-            #logging.info( "# of fields added: %d" % napp )
+            #logging.debug( "# of fields added: %d" % napp )
+        #print( "# of fields: %d" % len( fields ) )
         
-        """
-        if nline == 2:
-            for i in range( len( fields ) ):
-                print( "%2d %s: %s" % ( i, column_names[ i ], fields[ i ] ) )
-        """
         # base_year, must be integer
         base_year_idx = None
         try:
-            base_year_idx = csvheader_names.index( "base_year" )    # 38, 37, ...?
+            base_year_idx = csv_header_names.index( "base_year" )    # 38, 37, ...?
             try:
                 dummy = int( fields[ base_year_idx ] )
             except:
@@ -605,14 +608,26 @@ def filter_csv( csvdir, in_filename ):
                     fields[ base_year_idx ] = "0"
                 except:
                     logging.info( "%d: in: %s" % ( nline, line ) )
-                    logging.info( "%d out: %s" % ( nline, table_line ) )
+                    logging.info( "%d out: %s" % ( nline, "|".join( fields ) ) )
+                    print( "EXIT" )
+                    sys.exit( 0 )
         except ValueError:
             pass
         
+        #print( 1, "|".join( fields ) )
+        fields.append( "0" )
+        #print( 2, "|".join( fields ) )
+        fields.append( "false" )
+        #print( 3, "|".join( fields ) )
+        
+        """
         # valuemark must be true or false, but is not in the input data
         valuemark_idx = base_year_idx + 2
         if fields[ valuemark_idx ] not in ( "true", "false" ):
             fields[ valuemark_idx ] = "false"
+        """
+        
+        
         
         # column indicator_id should become the primairy key
         fields.insert( 0, "0" )     # prepend indicator_id, not in csv file
@@ -625,7 +640,7 @@ def filter_csv( csvdir, in_filename ):
             print( short_line )
         
             for i in range( len( fields ) ):
-                print( "%2d %s: %s" % ( i, column_names[ i ], fields[ i ] ) )
+                print( "%2d %s: %s" % ( i, dv_column_names[ i ], fields[ i ] ) )
         """
         #logging.info( "%d: in: %s" % ( nline, line ) )
         #logging.info( "%d out: %s" % ( nline, table_line ) )
@@ -637,7 +652,7 @@ def filter_csv( csvdir, in_filename ):
     csv_file.close()
     
     if comment_length_max > comment_length_max_db:
-        logging.info( "comment_length_max: %d, length available %d" % ( comment_length_max, comment_length_max_db ) )
+        logging.info( "WARNING: comment_length_max: %d, length available %d" % ( comment_length_max, comment_length_max_db ) )
     
     if nskipped != 0:
         logging.info( "%d empty lines (|-only) skipped" % nskipped )
@@ -699,11 +714,21 @@ if __name__ == "__main__":
     copy_local  = True
     to_csv      = True
     remove_xlsx = True
-    
-    #handle_names = [ "hdl_population" ]
-    #handle_names = [ "hdl_agriculture" ]
-    handle_names = [ "hdl_population", "hdl_agriculture" ]
-    
+    """
+    handle_names = [ 
+        "hdl_errhs_agriculture", 
+        "hdl_errhs_capital", 
+        "hdl_errhs_industry", 
+        "hdl_errhs_labour", 
+        "hdl_errhs_land", 
+        "hdl_errhs_population", 
+        "hdl_errhs_services" 
+    ]
+    """
+    #handle_names = [ "hdl_errhs_agriculture" ]
+    #handle_names = [ "hdl_errhs_population" ]
+    handle_names = [ "hdl_errhs_land" ]
+        
     for handle_name in handle_names:
         retrieve_handle_docs( clioinfra, handle_name, copy_local, to_csv, remove_xlsx ) # dataverse  => local_disk
     
