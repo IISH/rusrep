@@ -11,7 +11,7 @@ Notice: dpe/rusrep/etl contains a xlsx2csv.py copy;
 better use the curent version from PyPI
 
 VT-07-Jul-2016 latest change by VT
-FL-06-Feb-2017
+FL-07-Feb-2017
 """
 
 from __future__ import absolute_import
@@ -56,6 +56,9 @@ from dataverse import Connection
 
 #from cliocore.configutils import Configuration, Utils, DataFilter
 from service.configutils import Configuration, DataFilter
+
+# column comment_source of postgresql table russianrepository of db ristat
+COMMENT_LENGTH_MAX_DB = 4096
 
 
 def loadjson( apiurl ):
@@ -142,7 +145,7 @@ def alldatasets(clioinfra, copy_local):
 
 
 def documents_by_handle( clioinfra, handle_name, copy_local = False, to_csv = False, remove_xlsx = True ):
-    logging.info( "%s documents_by_handle() copy_local: %s, to_csv: %s" % ( __file__, copy_local, to_csv ) )
+    logging.info( "documents_by_handle() copy_local: %s, to_csv: %s" % ( copy_local, to_csv ) )
     logging.debug( "handle_name: %s" % handle_name )
     
     #cursor = connect()
@@ -175,10 +178,12 @@ def documents_by_handle( clioinfra, handle_name, copy_local = False, to_csv = Fa
     for item in dataverse.get_contents():
         # item dict keys: protocol, authority, persistentUrl, identifier, type, id
         handle = str( item[ 'protocol' ] ) + ':' + str( item[ 'authority' ] ) + "/" + str( item[ 'identifier' ] )
-        #logging.info( "handle: %s" % handle )
+        logging.debug( "handle: %s" % handle )
         clio_handle = clioinfra.config.get( handle_name )
+        logging.debug( "clio_handle: %s" % clio_handle )
         
         if handle == clio_handle:
+            print("YES")
             logging.info( "handle_name: %s, using handle: %s" % ( handle_name, handle ) )
             datasetid = item[ 'id' ]
             url = "https://" + str( host ) + "/api/datasets/" + str( datasetid ) + "/?&key=" + str( clioinfra.config[ 'ristatkey' ] )
@@ -237,7 +242,7 @@ def documents_by_handle( clioinfra, handle_name, copy_local = False, to_csv = Fa
                 except:
                     if 'lang' not in settings.datafilter:
                         papers.append( paperitem )
-
+    
     return ( papers, ids )
 
 
@@ -248,8 +253,7 @@ def update_vocabularies( clioinfra, mongo_client, copy_local = False, remove_xls
     update_vocabularies():
     -1- retrieves ERRHS_Vocabulary_*.tab files from dataverse
     -2- with copy_local=True stores them locally
-    -3- drops the MogoDB db = 'vocabulary', collection = 'data
-    -4- stores the new data in MogoDB db = 'vocabulary', collection = 'data
+    -3- stores the new data in MogoDB db = 'vocabulary', collection = 'data
     """
     
     handle_name = "hdl_vocabularies"
@@ -270,9 +274,9 @@ def update_vocabularies( clioinfra, mongo_client, copy_local = False, remove_xls
         logging.debug( doc )
     
     # parameters to retrieve the vocabulary files
-    host   = clioinfra.config[ 'dataverseroot' ]
-    apikey = clioinfra.config[ 'ristatkey' ]
-    dbname = clioinfra.config[ 'vocabulary' ]
+    host   = clioinfra.config[ "dataverseroot" ]
+    apikey = clioinfra.config[ "ristatkey" ]
+    dbname = clioinfra.config[ "vocabulary" ]
     logging.debug( "host:   %s" % host )
     logging.debug( "apikey: %s" % apikey )
     logging.debug( "dbname: %s" % dbname )
@@ -308,17 +312,10 @@ def update_vocabularies( clioinfra, mongo_client, copy_local = False, remove_xls
         if 'basisyear' in item:
             item[ 'basisyear' ] = re.sub( r'\.0', '', str( item[ 'basisyear' ] ) )
     
-    db = mongo_client.get_database( dbname )
-    logging.info( "delete all documents from collection 'data' in mongodb db '%s'" % dbname )
-    # drop the documents from collection 'data'; same as: db.drop_collection( coll_name )
-    db.data.drop()
-    
-    logging.info( "inserting vocabulary in mongodb '%s'" % dbname )
-    result = db.data.insert( vocab_json )
-
-    logging.info( "clearing mongodb cache" )
-    db = mongo_client.get_database( 'datacache' )
-    db.data.drop()      # remove the collection 'data'
+    dbname_vocab = clioinfra.config[ "vocabulary" ]
+    db_vocab = mongo_client.get_database( dbname_vocab )
+    logging.info( "inserting vocabulary in mongodb '%s'" % dbname_vocab )
+    result = db_vocab.data.insert( vocab_json )
 
 
 
@@ -500,7 +497,6 @@ def filter_csv( csvdir, in_filename ):
     nline = 0
     nskipped = 0
     comment_length_max = 0
-    comment_length_max_db = 1024
     
     for line in csv_file:
         nline += 1
@@ -581,7 +577,7 @@ def filter_csv( csvdir, in_filename ):
                     comment = fields[ i ]
                     comment_length = len( comment )
                     comment_length_max = max( comment_length_max, comment_length )
-                    if comment_length > comment_length_max_db:
+                    if comment_length > COMMENT_LENGTH_MAX_DB:
                         fields[ i ] = ""    # because it is unicode we cannot just chop it
             
         #print( "|".join( fields ) )
@@ -651,8 +647,8 @@ def filter_csv( csvdir, in_filename ):
     #out_file.close()    # closed by caller!: closing discards memory buffer
     csv_file.close()
     
-    if comment_length_max > comment_length_max_db:
-        logging.info( "WARNING: comment_length_max: %d, length available %d" % ( comment_length_max, comment_length_max_db ) )
+    if comment_length_max > COMMENT_LENGTH_MAX_DB:
+        logging.info( "WARNING: comment_length_max: %d, length available %d" % ( comment_length_max, COMMENT_LENGTH_MAX_DB ) )
     
     if nskipped != 0:
         logging.info( "%d empty lines (|-only) skipped" % nskipped )
@@ -678,6 +674,21 @@ def update_handle_docs( clioinfra, mongo_client, handle_name ):
 
 
 
+def clear_dbs( mongo_client ):
+    logging.info( "clear_dbs()" )
+    
+    dbname_vocab = clioinfra.config[ "vocabulary" ]
+    db_vocab = mongo_client.get_database( dbname_vocab )
+    logging.info( "delete all documents from collection 'data' in mongodb db '%s'" % dbname_vocab )
+    # drop the documents from collection 'data'; same as: db.drop_collection( coll_name )
+    db_vocab.data.drop()
+    
+    logging.info( "clearing mongodb cache" )
+    db_cache = mongo_client.get_database( 'datacache' )
+    db_cache.data.drop()      # remove the collection 'data'
+
+
+
 if __name__ == "__main__":
     #log_level = logging.DEBUG
     log_level = logging.INFO
@@ -685,56 +696,51 @@ if __name__ == "__main__":
     #log_level = logging.ERROR
     #log_level = logging.CRITICAL
     
+    DO_VOCAB = True
+    DO_ERRHS = True
+    
     logging.basicConfig( level = log_level )
     logging.info( __file__ )
     
-    RUSREP_HOME = os.environ[ "RUSREP_HOME" ]
-    logging.info( "RUSREP_HOME: %s" % RUSREP_HOME )
-    
-    CLIOINFRA_HOME = os.environ[ "CLIOINFRA_HOME" ]
-    logging.info( "CLIOINFRA_HOME: %s" % CLIOINFRA_HOME )
-    
-    RUSREP_CONFIG_PATH = RUSREP_HOME + "/config/russianrep.config"
-    logging.info( "RUSREP_CONFIG_PATH: %s" % RUSREP_CONFIG_PATH )
-    
-    CLIOINFRA_CONFIG_PATH = CLIOINFRA_HOME + "/config/clioinfra.conf"
+    CLIOINFRA_CONFIG_PATH = os.environ[ "CLIOINFRA_CONFIG_PATH" ]
     logging.info( "CLIOINFRA_CONFIG_PATH: %s" % CLIOINFRA_CONFIG_PATH )
     
-    # service.configutils.Configuration() uses path to clioinfra.conf from service.__init__.py , 
+    RUSREP_CONFIG_PATH = os.environ[ "RUSREP_CONFIG_PATH" ]
+    logging.info( "RUSREP_CONFIG_PATH: %s" % RUSREP_CONFIG_PATH )
+    
     clioinfra    = Configuration()
     mongo_client = MongoClient()
     
-    # Downloaded vocabulary documents are not used to update the vocabularies, 
-    # they are processed on the fly, and put in MongoDB
-    # Notice that the MongoDB table is dropped before re-filling, so 
-    # update_vocabularies() must be the first function called in __main__. 
-    copy_local = False
-    update_vocabularies( clioinfra, mongo_client, copy_local )
+    if DO_VOCAB or DO_ERRHS:
+        clear_dbs( mongo_client )
     
-    copy_local  = True
-    to_csv      = True
-    remove_xlsx = True
-    """
-    handle_names = [ 
-        "hdl_errhs_agriculture", 
-        "hdl_errhs_capital", 
-        "hdl_errhs_industry", 
-        "hdl_errhs_labour", 
-        "hdl_errhs_land", 
-        "hdl_errhs_population", 
-        "hdl_errhs_services" 
-    ]
-    """
-    #handle_names = [ "hdl_errhs_agriculture" ]
-    #handle_names = [ "hdl_errhs_population" ]
-    handle_names = [ "hdl_errhs_land" ]
+    if DO_VOCAB:
+        # Downloaded vocabulary documents are not used to update the vocabularies, 
+        # they are processed on the fly, and put in MongoDB
+        copy_local = False
+        update_vocabularies( clioinfra, mongo_client, copy_local )
+    
+    if DO_ERRHS:
+        copy_local  = True
+        to_csv      = True
+        remove_xlsx = True
         
-    for handle_name in handle_names:
-        retrieve_handle_docs( clioinfra, handle_name, copy_local, to_csv, remove_xlsx ) # dataverse  => local_disk
-    
-    for handle_name in handle_names:
-        store_handle_docs( clioinfra, handle_name )                 # local_disk => postgresql
-    
-    update_handle_docs( clioinfra, mongo_client, handle_name )      # postgresql => mongodb
+        handle_names = [ 
+            "hdl_errhs_agriculture", 
+            "hdl_errhs_capital", 
+            "hdl_errhs_industry", 
+            "hdl_errhs_labour", 
+            "hdl_errhs_land", 
+            "hdl_errhs_population", 
+            "hdl_errhs_services" 
+        ]
+        
+        for handle_name in handle_names:
+            retrieve_handle_docs( clioinfra, handle_name, copy_local, to_csv, remove_xlsx ) # dataverse  => local_disk
+        
+        for handle_name in handle_names:
+            store_handle_docs( clioinfra, handle_name )                 # local_disk => postgresql
+        
+        update_handle_docs( clioinfra, mongo_client, handle_name )      # postgresql => mongodb
 
 # [eof]

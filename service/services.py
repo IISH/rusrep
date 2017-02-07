@@ -2,7 +2,7 @@
 
 # FL-12-Dec-2016 use datatype in function documentation()
 # FL-20-Jan-2017 utf8 encoding
-# FL-31-Jan-2017 
+# FL-07-Feb-2017 
 
 from __future__ import absolute_import
 
@@ -58,22 +58,35 @@ forbidden = ["classification", "action", "language", "path"]
 
 def connect():
     logging.debug("connect()")
-    cparser = ConfigParser.RawConfigParser()
-    cpath = "/etc/apache2/russianrep.config"
-    cparser.read(cpath)
-    logging.debug("cpath: %s" % cpath)
-    logging.debug("host: %s" % cparser.get('config', 'dbhost'))
-    logging.debug("dbname: %s" % cparser.get('config', 'dbname'))
-    logging.debug("user: %s" % cparser.get('config', 'dblogin'))
-    logging.debug("password: %s" % cparser.get('config', 'dbpassword'))
+    configparser = ConfigParser.RawConfigParser()
+    #configpath = "/etc/apache2/russianrep.config"
     
-    conn_string = "host='%s' dbname='%s' user='%s' password='%s'" % (cparser.get('config', 'dbhost'), cparser.get('config', 'dbname'), cparser.get('config', 'dblogin'), cparser.get('config', 'dbpassword'))
+    RUSREP_CONFIG_PATH = os.environ[ "RUSREP_CONFIG_PATH" ]
+    logging.info( "RUSREP_CONFIG_PATH: %s" % RUSREP_CONFIG_PATH )
+    
+    configpath = RUSREP_CONFIG_PATH
+    if not os.path.isfile( configpath ):
+        print( "in %s" % __file__ )
+        print( "configpath %s FILE DOES NOT EXIST" % configpath )
+        print( "EXIT" )
+        sys.exit( 1 )
+    
+    logging.info( "using configuration: %s" % configpath )
+    
+    configparser.read(configpath)
+    logging.debug("cpath:    %s" % configpath)
+    logging.debug("host:     %s" % configparser.get('config', 'dbhost'))
+    logging.debug("dbname:   %s" % configparser.get('config', 'dbname'))
+    logging.debug("user:     %s" % configparser.get('config', 'dblogin'))
+    #logging.debug("password: %s" % configparser.get('config', 'dbpassword'))
+    
+    connection_string = "host='%s' dbname='%s' user='%s' password='%s'" % (configparser.get('config', 'dbhost'), configparser.get('config', 'dbname'), configparser.get('config', 'dblogin'), configparser.get('config', 'dbpassword'))
     
     # get a connection, if a connect cannot be made an exception will be raised here
-    conn = psycopg2.connect(conn_string)
+    connection = psycopg2.connect(connection_string)
     
     # conn.cursor will return a cursor object, you can use this cursor to perform queries
-    cursor = conn.cursor()
+    cursor = connection.cursor()
     
     #(row_count, dataset) = load_regions(cursor, year, datatype, region, debug)
     return cursor

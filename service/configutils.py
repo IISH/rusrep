@@ -25,6 +25,7 @@
 # wish to do so, delete this exception statement from your version. If you
 # delete this exception statement from all source files in the program,
 # then also delete it in the license file.
+
 import urllib2 
 import simplejson
 import json
@@ -34,16 +35,18 @@ import ConfigParser
 import sys
 import ldap
 from flask import Flask, request, redirect
-from . import configpath, FORBIDDENURI, FORBIDDENPIPES, ERROR1, ERROR2
+from . import config_path, FORBIDDENURI, FORBIDDENPIPES, ERROR1, ERROR2
+
 
 class Configuration:
-    def __init__(self):
+    def __init__( self ):
         self.config = {}
-        cparser = ConfigParser.RawConfigParser()
-        cparser.read(configpath)
-        path_items = cparser.items( "config" )
+        configparser = ConfigParser.RawConfigParser()
+        configparser.read( config_path )
+        path_items = configparser.items( "config" )
         for key, value in path_items:
-            self.config[key] = value
+            #print( "key: |%s|, value: |%s|" % ( key, value ) )
+            self.config[ key ] = value
 
         # Extract host for Dataverse connection
         findhost = re.search('(http\:\/\/|https\:\/\/)(.+)', self.config['dataverseroot'])

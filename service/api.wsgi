@@ -25,12 +25,17 @@
 # delete this exception statement from all source files in the program,
 # then also delete it in the license file.
 
+import os
 import logging
 import sys
 
-sys.path.insert(0, "/home/dpe/rusrep/service")
+RUSREP_HOME = "/home/dpe/rusrep"
+RUSREP_CONFIG_PATH = RUSREP_HOME + "/config/russianrep.config"
+os.environ[ "RUSREP_CONFIG_PATH" ] = RUSREP_CONFIG_PATH
 
-logging.basicConfig(level=logging.DEBUG)
-logging.debug(__file__)
+sys.path.insert( 0, RUSREP_HOME + "/service" )
+
+logging.basicConfig( level = logging.DEBUG )
+logging.debug( __file__ )
 
 from services import app as application
