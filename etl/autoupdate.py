@@ -183,7 +183,6 @@ def documents_by_handle( clioinfra, handle_name, copy_local = False, to_csv = Fa
         logging.debug( "clio_handle: %s" % clio_handle )
         
         if handle == clio_handle:
-            print("YES")
             logging.info( "handle_name: %s, using handle: %s" % ( handle_name, handle ) )
             datasetid = item[ 'id' ]
             url = "https://" + str( host ) + "/api/datasets/" + str( datasetid ) + "/?&key=" + str( clioinfra.config[ 'ristatkey' ] )
