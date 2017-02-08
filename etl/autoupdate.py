@@ -386,7 +386,7 @@ def store_handle_docs( clioinfra, handle_name ):
         root, ext = os.path.splitext( filename )
         if root.startswith( "ERRHS_" ) and ext == ".csv":
             #table = root.lower()
-            logging.info( "use:  %s, to table: %s" % ( filename, table ) )
+            logging.info( "use: %s, to table: %s" % ( filename, table ) )
             in_pathname = os.path.abspath( os.path.join( csvdir, filename ) )
             logging.debug( in_pathname )
             #test_csv_file( pathname )
@@ -622,8 +622,6 @@ def filter_csv( csvdir, in_filename ):
         if fields[ valuemark_idx ] not in ( "true", "false" ):
             fields[ valuemark_idx ] = "false"
         """
-        
-        
         
         # column indicator_id should become the primairy key
         fields.insert( 0, "0" )     # prepend indicator_id, not in csv file
