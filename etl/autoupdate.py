@@ -11,12 +11,13 @@ Notice: dpe/rusrep/etl contains a xlsx2csv.py copy;
 better use the curent version from PyPI
 
 VT-07-Jul-2016 latest change by VT
-FL-07-Feb-2017
+FL-08-Feb-2017
 """
 
 from __future__ import absolute_import
 
 import ConfigParser
+import datetime
 import json
 import logging
 import os
@@ -246,7 +247,7 @@ def documents_by_handle( clioinfra, handle_name, copy_local = False, to_csv = Fa
 
 
 
-def update_vocabularies( clioinfra, mongo_client, copy_local = False, remove_xlsx = True ):
+def update_vocabularies( clioinfra, mongo_client, copy_local = False, to_csv = False, remove_xlsx = False):
     logging.info( "%s update_vocabularies()" % __file__ )
     """
     update_vocabularies():
@@ -318,7 +319,7 @@ def update_vocabularies( clioinfra, mongo_client, copy_local = False, remove_xls
 
 
 
-def retrieve_handle_docs( clioinfra, handle_name, copy_local = False, to_csv = False, remove_xlsx = True ):
+def retrieve_handle_docs( clioinfra, handle_name, copy_local = False, to_csv = False, remove_xlsx = False ):
     logging.info( "\nretrieve_handle_docs() copy_local: %s" % copy_local )
 
     logging.info( "retrieving documents from dataverse for handle name %s ..." % handle_name )
@@ -696,10 +697,16 @@ if __name__ == "__main__":
     #log_level = logging.CRITICAL
     
     DO_VOCAB = True
-    DO_ERRHS = True
+    DO_ERRHS = False
     
-    logging.basicConfig( level = log_level )
+    logging_filename = "autoupdate.log"
+    print( os.path.isfile( logging_filename ) )
+    #logging.basicConfig( filename = logging_filename, filemode = 'w', level = log_level )
+    logging.basicConfig( filename = logging_filename, level = log_level )
+    print( os.path.isfile( logging_filename ) )
     logging.info( __file__ )
+    
+    logging.info( "start: %s" % datetime.datetime.now() )
     
     CLIOINFRA_CONFIG_PATH = os.environ[ "CLIOINFRA_CONFIG_PATH" ]
     logging.info( "CLIOINFRA_CONFIG_PATH: %s" % CLIOINFRA_CONFIG_PATH )
@@ -716,7 +723,7 @@ if __name__ == "__main__":
     if DO_VOCAB:
         # Downloaded vocabulary documents are not used to update the vocabularies, 
         # they are processed on the fly, and put in MongoDB
-        copy_local = False
+        copy_local  = True
         update_vocabularies( clioinfra, mongo_client, copy_local )
     
     if DO_ERRHS:
@@ -741,5 +748,7 @@ if __name__ == "__main__":
             store_handle_docs( clioinfra, handle_name )                 # local_disk => postgresql
         
         update_handle_docs( clioinfra, mongo_client, handle_name )      # postgresql => mongodb
+        
+        logging.info( "stop:  %s" % datetime.datetime.now() )
 
 # [eof]

@@ -1,8 +1,9 @@
 # VT-13-Jul-2016
-# FL-07-Feb-2017
+# FL-08-Feb-2017
 
 from __future__ import absolute_import
 
+import logging
 import os
 import sys
 
@@ -11,12 +12,12 @@ database = "datasets"
 config_path = os.environ[ "CLIOINFRA_CONFIG_PATH" ]
 
 if os.path.isfile( config_path ):
-    print( __file__ )
-    print( "using configpath: %s" % config_path )
+    logging.info( __file__ )
+    logging.info( "using configpath: %s" % config_path )
 else:
-    print( "in %s" % __file__ )
-    print( "configpath %s FILE DOES NOT EXIST" % config_path )
-    print( "EXIT" )
+    logging.error( "in %s" % __file__ )
+    logging.error( "configpath %s FILE DOES NOT EXIST" % config_path )
+    logging.error( "EXIT" )
     sys.exit( 1 )
 
 FORBIDDENURI = "(curl|bash|mail|ping|sleep|passwd|cat\s+|cp\s+|mv\s+|certificate|wget|usr|bin|lhost|lport)"
