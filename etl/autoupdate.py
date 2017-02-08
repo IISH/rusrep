@@ -696,17 +696,25 @@ if __name__ == "__main__":
     #log_level = logging.ERROR
     #log_level = logging.CRITICAL
     
+    logging_filename = "autoupdate.log"
+    logging.basicConfig( filename = logging_filename, filemode = 'w', level = log_level )
+    
+    log_level = logging.DEBUG
+    #log_level = logging.INFO
+    #log_level = logging.WARNING
+    #log_level = logging.ERROR
+    #log_level = logging.CRITICAL
+    
     DO_VOCAB = True
-    DO_ERRHS = False
+    DO_ERRHS = True
     
     logging_filename = "autoupdate.log"
-    print( os.path.isfile( logging_filename ) )
     #logging.basicConfig( filename = logging_filename, filemode = 'w', level = log_level )
-    logging.basicConfig( filename = logging_filename, level = log_level )
-    print( os.path.isfile( logging_filename ) )
-    logging.info( __file__ )
+    logging.basicConfig( filename = logging_filename, filemode = 'w', level = log_level )
+    #logging.basicConfig( level = log_level )
     
     logging.info( "start: %s" % datetime.datetime.now() )
+    logging.info( __file__ )
     
     CLIOINFRA_CONFIG_PATH = os.environ[ "CLIOINFRA_CONFIG_PATH" ]
     logging.info( "CLIOINFRA_CONFIG_PATH: %s" % CLIOINFRA_CONFIG_PATH )
@@ -748,7 +756,7 @@ if __name__ == "__main__":
             store_handle_docs( clioinfra, handle_name )                 # local_disk => postgresql
         
         update_handle_docs( clioinfra, mongo_client, handle_name )      # postgresql => mongodb
-        
-        logging.info( "stop:  %s" % datetime.datetime.now() )
+    
+    logging.info( "stop: %s" % datetime.datetime.now() )
 
 # [eof]
