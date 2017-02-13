@@ -955,7 +955,14 @@ def aggregation():
     sql['internal'] = sql['internal'][:-3]
 
     #select sum(cast(value as double precision)), value_unit from russianrepository where datatype = '1.02' and year='2002' and histclass2 = '' and histclass1='1' group by histclass1, histclass2, value_unit;
-    sqlquery = "SELECT COUNT(*) AS datarecords, COUNT(*) - COUNT(value) AS dataactive, SUM(CAST(value AS DOUBLE PRECISION)) AS total, value_unit, ter_code"
+    # value may contain '.'& '. ' entries that cannot be SUMmed
+    # => manually count with python, skipping '.'& '. ' entries
+    #sqlquery = "SELECT COUNT(*) AS datarecords, COUNT(*) - COUNT(value) AS dataactive, SUM(CAST(value AS DOUBLE PRECISION)) AS total, value_unit, ter_code"
+    sqlquery  = "SELECT COUNT(*) AS datarecords" 
+    sqlquery += ", SUM(CAST(value AS DOUBLE PRECISION)) AS total"
+    sqlquery += ", COUNT(*) - COUNT(value) AS dataactive"
+    sqlquery += ", value_unit, ter_code"
+
     if sql['where']:
         sqlquery += ", %s" % sql['condition']
         sqlquery  = sqlquery[:-2]
@@ -963,6 +970,8 @@ def aggregation():
         sqlquery  = sqlquery[:-4]
     if sql['internal']:
         sqlquery += " AND (%s) " % sql['internal']
+    
+    sqlquery += " AND value ~ '^\d+$'"      # regexp (~) to require that value only contains digits
     
     sqlquery += " GROUP BY value_unit, ter_code, "
     for f in knownfield:
