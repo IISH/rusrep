@@ -2,7 +2,7 @@
 
 # FL-12-Dec-2016 use datatype in function documentation()
 # FL-20-Jan-2017 utf8 encoding
-# FL-07-Feb-2017 
+# FL-14-Feb-2017 
 
 from __future__ import absolute_import
 
@@ -44,7 +44,7 @@ from rdflib import Graph, Literal, term
 #from rdflib.namespace import DC, FOAF
 #from twisted.web import http
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname("__file__"), './')))
+sys.path.insert( 0, os.path.abspath( os.path.join( os.path.dirname( "__file__" ), './' ) ) )
 
 from ristatcore.configutils import Configuration, DataFilter
 #from ristatcore.configutils import Utils
@@ -53,13 +53,12 @@ from dataverse import Connection
 from excelmaster import aggregate_dataset, preprocessor
 
 
-forbidden = ["classification", "action", "language", "path"]
+forbidden = [ "classification", "action", "language", "path" ]
 
 
 def connect():
-    logging.debug("connect()")
+    logging.debug( "connect()" )
     configparser = ConfigParser.RawConfigParser()
-    #configpath = "/etc/apache2/russianrep.config"
     
     RUSREP_CONFIG_PATH = os.environ[ "RUSREP_CONFIG_PATH" ]
     logging.info( "RUSREP_CONFIG_PATH: %s" % RUSREP_CONFIG_PATH )
@@ -73,374 +72,397 @@ def connect():
     
     logging.info( "using configuration: %s" % configpath )
     
-    configparser.read(configpath)
-    logging.debug("cpath:    %s" % configpath)
-    logging.debug("host:     %s" % configparser.get('config', 'dbhost'))
-    logging.debug("dbname:   %s" % configparser.get('config', 'dbname'))
-    logging.debug("user:     %s" % configparser.get('config', 'dblogin'))
-    #logging.debug("password: %s" % configparser.get('config', 'dbpassword'))
+    configparser.read( configpath )
+    logging.debug( "configpath: %s" % configpath )
+    host     = configparser.get( 'config', 'dbhost' )
+    dbname   = configparser.get( 'config', 'dbname' )
+    user     = configparser.get( 'config', 'dblogin' )
+    password = configparser.get( 'config', 'dbpassword' )
+    logging.debug( "host:       %s" % host )
+    logging.debug( "dbname:     %s" % dbname )
+    logging.debug( "user:       %s" % user )
+    #logging.debug( "password:   %s" % password )
     
-    connection_string = "host='%s' dbname='%s' user='%s' password='%s'" % (configparser.get('config', 'dbhost'), configparser.get('config', 'dbname'), configparser.get('config', 'dblogin'), configparser.get('config', 'dbpassword'))
+    connection_string = "host='%s' dbname='%s' user='%s' password='%s'" % ( host, dbname, user, password )
     
     # get a connection, if a connect cannot be made an exception will be raised here
-    connection = psycopg2.connect(connection_string)
+    connection = psycopg2.connect( connection_string )
     
     # conn.cursor will return a cursor object, you can use this cursor to perform queries
     cursor = connection.cursor()
     
-    #(row_count, dataset) = load_regions(cursor, year, datatype, region, debug)
+    #( row_count, dataset ) = load_regions( cursor, year, datatype, region, debug )
     return cursor
 
 
-def classcollector(keywords):
-    logging.debug("classcollector()")
-    logging.debug(keywords)
+
+def classcollector( keywords ):
+    logging.debug( "classcollector()" )
+    logging.debug( keywords )
     
-    classdict = {}
+    classdict  = {}
     normaldict = {}
     for item in keywords:
-        classmatch = re.search(r'class', item)
+        classmatch = re.search( r'class', item )
         if classmatch:
-            classdict[item] = keywords[item]
+            classdict[ item ] = keywords[ item ]
         else:
-            normaldict[item] = keywords[item]
-    return (classdict, normaldict)
+            normaldict[ item ] = keywords[ item ]
+    return ( classdict, normaldict )
 
 
-def json_generator(cursor, jsondataname, data):
-    logging.debug("json_generator() cursor: %s, jsondataname: %s" % (cursor, jsondataname))
-    logging.debug("data: %s" % data )
+
+def json_generator( cursor, jsondataname, data ):
+    logging.debug( "json_generator() cursor: %s, jsondataname: %s" % ( cursor, jsondataname ) )
+    logging.debug( "data: %s" % data )
     
-    cparser = ConfigParser.RawConfigParser()
-    cpath = "/etc/apache2/russianrep.config"
-    cparser.read(cpath)
+    configparser = ConfigParser.RawConfigParser()
+    
+    RUSREP_CONFIG_PATH = os.environ[ "RUSREP_CONFIG_PATH" ]
+    logging.info( "RUSREP_CONFIG_PATH: %s" % RUSREP_CONFIG_PATH )
+    
+    configpath = RUSREP_CONFIG_PATH
+    if not os.path.isfile( configpath ):
+        print( "in %s" % __file__ )
+        print( "configpath %s FILE DOES NOT EXIST" % configpath )
+        print( "EXIT" )
+        sys.exit( 1 )
+    
+    configparser.read( configpath )
     
     lang = 'en'
     try:
-        qinput = json.loads(request.data)
+        qinput = json.loads( request.data )
         if 'language' in qinput:
-            lang = qinput['language']
+            lang = qinput[ 'language' ]
     except:
         skip = 'yes'
-    logging.debug("language: %s" % lang )
+    logging.debug( "language: %s" % lang )
 
-    sqlnames  = [desc[0] for desc in cursor.description]
-    forbidden = {'dataactive', 0, 'datarecords', 1}
+    sqlnames  = [ desc[ 0 ] for desc in cursor.description ]
+    forbidden = { 'data_active', 0, 'datarecords', 1 }
     
     jsonlist = []
     jsonhash = {}
     
-    logging.debug("%d values in data" % len(data))
+    logging.debug( "%d values in data" % len( data ) )
     for valuestr in data:
-        datakeys = {}
+        datakeys    = {}
         extravalues = {}
-        for i in range(len(valuestr)):
-            name = sqlnames[i]
-            value = valuestr[i]
+        for i in range( len( valuestr ) ):
+            name  = sqlnames[ i ]
+            value = valuestr[ i ]
             if value == ". ":
-                #logging.debug("i: %d, name: %s, value: %s" % (i, thisname, value))
+                #logging.debug( "i: %d, name: %s, value: %s" % ( i, thisname, value ) )
                 # ". " marks a trailing dot in histclass or class: skip
                 continue
-                
+            
             if name not in forbidden:
-                datakeys[name] = value
+                datakeys[ name ] = value
             else:
-                extravalues[name] = value
+                extravalues[ name ] = value
 
         # If aggregation check data output for 'NA' values
         if 'total' in datakeys:
-            if extravalues['dataactive']:
-                datakeys['total'] = 'NA'
+            if extravalues[ 'data_active' ]:
+                datakeys[ 'total' ] = 'NA'
         
-        (path, output) = classcollector(datakeys)
-        output['path'] = path
-        jsonlist.append(output)
+        ( path, output ) = classcollector( datakeys )
+        output[ 'path' ] = path
+        jsonlist.append( output )
     
     # Cache
     clientcache = MongoClient()
-    dbcache = clientcache.get_database('datacache')
+    dbcache = clientcache.get_database( 'datacache' )
 
-    jsonhash[jsondataname] = jsonlist
-    newkey = str("%05.8f" % random.random())
-    jsonhash['url'] = "%s/service/download?key=%s" % (cparser.get('config', 'root'), newkey)
-    json_string = json.dumps(jsonhash, encoding="utf8", ensure_ascii=False, sort_keys=True, indent=4)
+    jsonhash[ jsondataname ] = jsonlist
+    newkey = str( "%05.8f" % random.random() )
+    jsonhash[ 'url' ] = "%s/service/download?key=%s" % ( configparser.get( 'config', 'root' ), newkey )
+    json_string = json.dumps( jsonhash, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
     
     try:
         thisdata = jsonhash
-        del thisdata['url']
-        thisdata['key'] = newkey
-        thisdata['language'] = lang
-        result = dbcache.data.insert(thisdata)
+        del thisdata[ 'url' ]
+        thisdata[ 'key' ] = newkey
+        thisdata[ 'language' ] = lang
+        result = dbcache.data.insert( thisdata )
     except:
         skip = 'something went wrong...'
 
-    logging.debug(json_string)
+    logging.debug( json_string )
     return json_string
 
 
-def translatedvocabulary(newfilter):
-    logging.debug("translatedvocabulary()")
-    logging.debug(newfilter)
+
+def translatedvocabulary( newfilter ):
+    logging.debug( "translatedvocabulary()" )
+    logging.debug( newfilter )
     
     client = MongoClient()
     dbname = 'vocabulary'
-    db = client.get_database(dbname)
+    db = client.get_database( dbname )
     if newfilter:
-        #vocab = db.data.find({"YEAR": thisyear})
-        vocab = db.data.find(newfilter)
+        #vocab = db.data.find( { "YEAR": thisyear } )
+        vocab = db.data.find( newfilter )
     else:
         vocab = db.data.find()
     
-    data = {}
+    data     = {}
     histdata = {}
     for item in vocab:
         if 'RUS' in item:
             try:
-                item['RUS'] = item['RUS'].encode('UTF-8')
-                item['EN']  = item['EN'].encode('UTF-8')
+                item[ 'RUS' ] = item[ 'RUS' ].encode( 'UTF-8' )
+                item[ 'EN' ]  = item[ 'EN' ] .encode( 'UTF-8' )
                 
-                if item['RUS'].startswith('"') and item['RUS'].endswith('"'):
-                    item['RUS'] = string[1:-1]
-                if item['EN'].startswith('"') and item['EN'].endswith('"'):
-                    item['EN'] = string[1:-1]
+                if item[ 'RUS' ].startswith( '"' ) and item[ 'RUS' ].endswith( '"' ):
+                    item[ 'RUS' ] = string[ 1:-1 ]
+                if item[ 'EN' ].startswith( '"' ) and item[ 'EN' ].endswith( '"' ):
+                    item[ 'EN' ] = string[ 1:-1 ]
                 
-                item['RUS'] = re.sub(r'"', '', item['RUS'])
-                item['EN']  = re.sub(r'"', '', item['EN'])
+                item[ 'RUS' ] = re.sub( r'"', '', item[ 'RUS' ] )
+                item[ 'EN' ]  = re.sub( r'"', '', item[ 'EN' ] )
                 
-                data[item['RUS']] = item['EN']
-                data[item['EN']] = item['RUS'] 
+                data[ item[ 'RUS' ] ] = item[ 'EN' ]
+                data[ item[ 'EN' ] ]  = item[ 'RUS' ] 
                 
-                logging.debug("%s %s" % ( item['EN'], item['RUS']))
+                logging.debug( "%s %s" % ( item[ 'EN' ], item[ 'RUS' ] ) )
             except:
                 skip = 1
     
     return data
 
 
-def translatedclasses(cursor, classinfo):
-    logging.debug("translatedclasses()")
+
+def translatedclasses( cursor, classinfo ):
+    logging.debug( "translatedclasses()" )
     dictdata = {}
     sql = "select * from datasets.classmaps"; # where class_rus in ";
     sqlclass = ''
     for classname in classinfo:
         if sqlclass:
-            sqlclass = "%s, '%s'" % (sqlclass, classinfo[classname])
+            sqlclass = "%s, '%s'" % ( sqlclass, classinfo[ classname ] )
         else:
-            sqlclass = "'%s'" % classinfo[classname]
-    sql = "%s (%s)" % (sql, sqlclass)
+            sqlclass = "'%s'" % classinfo[ classname ]
+    sql = "%s (%s)" % ( sql, sqlclass )
 
-    sql = "select * from datasets.regions";
-    cursor.execute(sql)
+    sql = "select * from datasets.regions"
+    cursor.execute( sql )
     data = cursor.fetchall()
-    sqlnames = [desc[0] for desc in cursor.description]
+    sqlnames = [ desc[ 0 ] for desc in cursor.description ]
     if data:
         for valuestr in data:
             datakeys = {}
-            for i in range(len(valuestr)):
-                name = sqlnames[i]
-                value = valuestr[i]
+            for i in range( len( valuestr ) ):
+                name  = sqlnames[ i ]
+                value = valuestr[ i ]
                 if name == 'region_name':
                     name = 'class_rus'
                 if name == 'region_name_eng':
                     name = 'class_eng'
-                datakeys[name] = value
+                datakeys[ name ] = value
 
-            dictdata[datakeys['class_eng']] = datakeys
-            dictdata[datakeys['class_rus']] = datakeys
+            dictdata[ datakeys[ 'class_eng' ] ] = datakeys
+            dictdata[ datakeys[ 'class_rus' ] ] = datakeys
         
     sql = "select * from datasets.valueunits";
-    cursor.execute(sql)
+    cursor.execute( sql )
     data = cursor.fetchall()
-    sqlnames = [desc[0] for desc in cursor.description]
+    sqlnames = [ desc[ 0 ] for desc in cursor.description ]
     if data:
         for valuestr in data:
             datakeys = {}
-            for i in range(len(valuestr)):
-                name = sqlnames[i]
-                value = valuestr[i]
+            for i in range( len( valuestr ) ):
+                name  = sqlnames[ i ]
+                value = valuestr[ i ]
                 datakeys[name] = value
-            dictdata[datakeys['class_rus']] = datakeys
-            dictdata[datakeys['class_eng']] = datakeys
+            dictdata[ datakeys[ 'class_rus' ] ] = datakeys
+            dictdata[ datakeys[ 'class_eng' ] ] = datakeys
 
     # FIX
-    sql = "select * from datasets.classmaps";
-    cursor.execute(sql)
+    sql = "select * from datasets.classmaps"
+    cursor.execute( sql )
     data = cursor.fetchall()
-    sqlnames = [desc[0] for desc in cursor.description]
+    sqlnames = [ desc[ 0 ] for desc in cursor.description ]
     if data:
         for valuestr in data:
             datakeys = {}
-            for i in range(len(valuestr)):
-               name = sqlnames[i]
-               value = valuestr[i]
+            for i in range( len( valuestr ) ):
+               name  = sqlnames[ i ]
+               value = valuestr[ i ]
                datakeys[name] = value
-            dictdata[datakeys['class_rus']] = datakeys
-            dictdata[datakeys['class_eng']] = datakeys
+            dictdata[ datakeys[ 'class_rus' ] ] = datakeys
+            dictdata[ datakeys[ 'class_eng' ] ] = datakeys
 
     return dictdata
 
 
-def load_years(cursor, datatype):
-    logging.debug("load_years()")
+
+def load_years( cursor, datatype ):
+    logging.debug( "load_years()" )
     clioinfra = Configuration()
-    years = clioinfra.config['years'].split(',')
+    years = clioinfra.config[ 'years' ].split( ',' )
     data = {}
-    #sql = "select * from datasets.years where 1=1";
     sql = "select base_year, count(*) as c from russianrepository where 1=1"
     if datatype:
         sql=sql + " and datatype='%s'" % datatype 
     sql= sql + " group by base_year";
-    cursor.execute(sql)
+    cursor.execute( sql )
     
     # retrieve the records from the database
     data = cursor.fetchall()
     result = {}
     for val in data:
-        if val[0]:
-            result[val[0]] = val[1]
+        if val[ 0 ]:
+            result[ val[ 0 ] ] = val[ 1 ]
     for year in years:
-        if int(year) not in result:
-            result[int(year)] = 0
+        if int( year ) not in result:
+            result[ int( year ) ] = 0
     
-    #jsondata = json_generator(cursor, 'years', result)
-    json_string = json.dumps(result, encoding="utf-8")
+    #jsondata = json_generator( cursor, 'years', result )
+    json_string = json.dumps( result, encoding = "utf-8" )
 
     return json_string
 
 
-def sqlfilter(sql):
-    logging.debug("sqlfilter()")
-    items = ''
+
+def sqlfilter( sql ):
+    logging.debug( "sqlfilter()" )
+    items     = ''
     sqlparams = ''
 
     for key, value in request.args.items():
-        items = request.args.get(key, '')
-        itemlist = items.split(",")
+        items = request.args.get( key, '' )
+        itemlist = items.split( "," )
         if key == 'basisyear':
-            sql += " AND %s LIKE '%s" % ('region_code', itemlist[0])
+            sql += " AND %s LIKE '%s" % ( 'region_code', itemlist[ 0 ] )
             sql += "%'"
         else:
             for item in itemlist:
-                sqlparams = "\'%s\',%s" % (item, sqlparams)
-            sqlparams = sqlparams[:-1]
-            sql += " AND %s in (%s)" % (key, sqlparams)
+                sqlparams = "\'%s\',%s" % ( item, sqlparams )
+            sqlparams = sqlparams[ :-1 ]
+            sql += " AND %s in (%s)" % ( key, sqlparams )
     return sql
 
 
-def sqlconstructor(sql):
-    logging.debug("sqlconstructor()")
-    items = ''
+
+def sqlconstructor( sql ):
+    logging.debug( "sqlconstructor()" )
+    items     = ''
     sqlparams = ''
 
     for key, value in request.args.items():
-        items = request.args.get(key, '')
-        itemlist = items.split(",")
+        items = request.args.get( key, '' )
+        itemlist = items.split( "," )
         if key == 'language':
             skip = 1
         elif key == 'classification':
             skip = 1
         elif key == 'basisyear':
-            sql += " AND %s like '%s'" % ('region_code', sqlparams)
+            sql += " AND %s like '%s'" % ( 'region_code', sqlparams )
         else:
             for item in itemlist:
                 sqlparams = "\'%s\'" % item
-            sql += " AND %s in (%s)" % (key, sqlparams)
+            sql += " AND %s in (%s)" % ( key, sqlparams )
     return sql
 
 
-def load_topics(cursor):
-    logging.debug("load_topics()")
+
+def load_topics( cursor ):
+    logging.debug( "load_topics()" )
     data = {}
-    sql = "select * from datasets.topics where 1=1";
-    sql = sqlfilter(sql) 
+    sql = "select * from datasets.topics where 1=1"
+    sql = sqlfilter( sql ) 
 
     # execute
-    cursor.execute(sql)
+    cursor.execute( sql )
 
     # retrieve the records from the database
     data = cursor.fetchall()
-    jsondata = json_generator(cursor, 'data', data)
+    jsondata = json_generator( cursor, 'data', data )
     
     return jsondata
 
 
-def datasetfilter(data, sqlnames, classification):
-    logging.debug("datasetfilter()")
+
+def datasetfilter( data, sqlnames, classification ):
+    logging.debug( "datasetfilter()" )
     if data:
         # retrieve the records from the database
         datafilter = []
         for dataline in data:
             datarow = {}
-            active = ''
-            for i in range(len(sqlnames)):
-                name = sqlnames[i]
+            active  = ''
+            for i in range( len( sqlnames ) ):
+                name = sqlnames[ i ]
                 if classification == 'historical':
-                    if name.find("class", 0):
+                    if name.find( "class", 0 ):
                         try:
-                            nextvalue = dataline[i+1]
+                            nextvalue = dataline[ i+1 ]
                         except:
                             nextvalue = '.'
 
-                        if (dataline[i] == '.' and nextvalue == '.'):
+                        if ( dataline[ i ] == '.' and nextvalue == '.' ):
                             skip = 'yes'
                         else:
-                            toplevel = re.search("(\d+)", name)
-                            if name.find("histclass10", 0):
-                                datarow[name] = dataline[i]
+                            toplevel = re.search( "(\d+)", name )
+                            if name.find( "histclass10", 0 ):
+                                datarow[ name ] = dataline[ i ]
                                 if toplevel:
-                                    datarow["levels"] = toplevel.group(0)
+                                    datarow[ "levels" ] = toplevel.group( 0 )
                 if classification == 'modern':
-                    if name.find("histclass", 0):
+                    if name.find( "histclass", 0 ):
                         try:
-                            nextvalue = dataline[i+1]
+                            nextvalue = dataline[ i+1 ]
                         except:
                             nextvalue = '.'
 
-                        if (dataline[i] == '.' and nextvalue == '.'):
+                        if ( dataline[i] == '.' and nextvalue == '.' ):
                             skip = 'yes'
                         else:
-                            toplevel = re.search("(\d+)", name)
-                            if name.find("class10", 0):
-                                datarow[name] = dataline[i]
+                            toplevel = re.search( "(\d+)", name )
+                            if name.find( "class10", 0 ):
+                                datarow[ name ] = dataline[ i ]
                                 if toplevel:
-                                    if toplevel.group(0) != '10':
-                                        datarow["levels"] = toplevel.group(0)
+                                    if toplevel.group( 0 ) != '10':
+                                        datarow[ "levels" ] = toplevel.group( 0 )
             try:
-                if datarow["levels"] > 0:
-                    datafilter.append(datarow)
+                if datarow[ "levels" ] > 0:
+                    datafilter.append( datarow )
             except:
                 skip = 'yes'
 
         if classification:
             #return datafilter
-            return json.dumps(datafilter, encoding="utf8", ensure_ascii=False, sort_keys=True, indent=4)
+            return json.dumps( datafilter, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
 
 
-def load_classes(cursor):
-    logging.debug("load_classes()")
+
+def load_classes( cursor ):
+    logging.debug( "load_classes()" )
     data = {}
     engdata = {}
     total = 0
     classification = 'historical'
-    if request.args.get('classification'):
-        classification = request.args.get('classification')
-    if request.args.get('language') == 'en':
-        engdata = translatedclasses(cursor, request.args)
-    if request.args.get('overview'):
-        sql = "select distinct %s, year, datatype from datasets.classification where 1=1" % request.args.get('overview') 
-        sql = sql + " AND %s <> '.'" % request.args.get('overview')
-        if request.args.get('year'):
-            sql = sql + " AND %s = '%s' " % ('year', request.args.get('year'))
-        if request.args.get('datatype'):
-            sql = sql + " AND %s = '%s' " % ('datatype', request.args.get('datatype'))
-    
+    if request.args.get( 'classification' ):
+        classification = request.args.get( 'classification' )
+    if request.args.get( 'language' ) == 'en':
+        engdata = translatedclasses( cursor, request.args )
+        
+    if request.args.get( 'overview' ):
+        sql = "select distinct %s, year, datatype from datasets.classification where 1=1" % request.args.get( 'overview' ) 
+        sql = sql + " AND %s <> '.'" % request.args.get( 'overview' )
+        if request.args.get( 'year' ):
+            sql = sql + " AND %s = '%s' " % ( 'year', request.args.get( 'year' ) )
+        if request.args.get( 'datatype' ):
+            sql = sql + " AND %s = '%s' " % ( 'datatype', request.args.get( 'datatype' ) )
     else:
         sql = "select * from datasets.classification where 1=1";
-        sql = sqlconstructor(sql)
+        sql = sqlconstructor( sql )
 
     # execute
-    cursor.execute(sql)
-    sqlnames = [desc[0] for desc in cursor.description]
+    cursor.execute( sql )
+    sqlnames = [ desc[ 0 ] for desc in cursor.description ]
 
     # retrieve the records from the database
     datafilter = []
@@ -448,51 +470,51 @@ def load_classes(cursor):
     for dataline in data:
         datarow = {}
         active = ''
-        for i in range(len(sqlnames)):
-            name = sqlnames[i]
+        for i in range( len( sqlnames ) ):
+            name = sqlnames[ i ]
             if classification == 'historical':
-                if name.find("class", 0):
+                if name.find( "class", 0 ):
                     try:
-                        nextvalue = dataline[i+1]
+                        nextvalue = dataline[ i+1 ]
                     except:
                         nextvalue = '.'
                     
-                    if (dataline[i] == '.' and nextvalue == '.'):
+                    if ( dataline[i] == '.' and nextvalue == '.' ):
                         skip = 'yes'
                     else:
-                        toplevel = re.search("(\d+)", name)
-                        if name.find("histclass10", 0):
-                            value = dataline[i]
+                        toplevel = re.search( "(\d+)", name )
+                        if name.find( "histclass10", 0 ):
+                            value = dataline[ i ]
                             if value in engdata:
-                                value = engdata[value]['class_eng']
-                            datarow[name] = str(value) 
+                                value = engdata[ value ][ 'class_eng' ]
+                            datarow[ name ] = str( value ) 
                             if toplevel:
-                                datarow["levels"] = toplevel.group(0)
+                                datarow[ "levels" ] = toplevel.group( 0 )
             
             if classification == 'modern':
-                if name.find("histclass", 0):
+                if name.find( "histclass", 0 ):
                     try:
-                        nextvalue = dataline[i+1]
+                        nextvalue = dataline[ i+1 ]
                     except:
                         nextvalue = '.'
                     
-                    if (dataline[i] == '.' and nextvalue == '.'):
+                    if ( dataline[ i ] == '.' and nextvalue == '.' ):
                         skip = 'yes'
                     else:
-                        toplevel = re.search("(\d+)", name)
-                        if name.find("class10", 0):
-                            datarow[name] = dataline[i]
+                        toplevel = re.search( "(\d+)", name )
+                        if name.find( "class10", 0 ):
+                            datarow[ name ] = dataline[ i ]
                             if toplevel:
-                                if toplevel.group(0) != '10':
-                                    datarow["levels"] = toplevel.group(0)
+                                if toplevel.group( 0 ) != '10':
+                                    datarow[ "levels" ] = toplevel.group( 0 )
         try:
-            if datarow["levels"] > 0:
-                datafilter.append(datarow)
+            if datarow[ "levels" ] > 0:
+                datafilter.append( datarow )
         except:
             skip = 'yes'
 
     if classification:
-        return json.dumps(datafilter, encoding="utf8", ensure_ascii=False, sort_keys=True, indent=4)
+        return json.dumps( datafilter, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
 
     jsonlist = []
     jsonhash = {}
@@ -500,201 +522,207 @@ def load_classes(cursor):
     for valuestr in data:
         datakeys = {}
         sortedkeys = []
-        for i in range(len(valuestr)):
-            name = sqlnames[i]
-            value = valuestr[i]
+        for i in range( len( valuestr ) ):
+            name  = sqlnames[ i ]
+            value = valuestr[ i ]
             if classification == 'historical':
-                if not name.find("class", 1):
-                    datakeys[name] = value 
+                if not name.find( "class", 1 ):
+                    datakeys[ name ] = value 
             else:
-                datakeys[name] = value
-        for i in range(10, 1, -1):
+                datakeys[ name ] = value
+        for i in range( 10, 1, -1 ):
             histclass = "histclass%s" % i
             mclass = "class%s" % i
-        jsonlist.append(datakeys)
-    #return str(jsonlist)
+        jsonlist.append( datakeys )
+    #return str( jsonlist )
     
-    jsondata = json_generator(cursor, 'data', data)
+    jsondata = json_generator( cursor, 'data', data )
     
     return jsondata
 
 
 
-def zap_empty_classes(item):
-    logging.debug("zap_empty_classes()")
+def zap_empty_classes( item ):
+    logging.debug( "zap_empty_classes()" )
     # trailing empty classes have value ". ", skip them; 
     # bridging empty classes have value '.', keep them; 
-    #logging.debug(item)
+    #logging.debug( item )
     
     new_item = {}
     for name in item:
-        value = item[name].encode('UTF-8')
+        value = item[ name ].encode( 'UTF-8' )
         # skip trailing ". " in hist & modern classes
-        if (name.startswith("histclass") or name.startswith("class")) and value == ". ":
-            #logging.debug("name: %s, value: %s" % (name, value))
+        if ( name.startswith( "histclass" ) or name.startswith( "class" ) ) and value == ". ":
+            #logging.debug( "name: %s, value: %s" % ( name, value ) )
             #value = ""
             pass
         else:
-            new_item[name] = value
+            new_item[ name ] = value
     
     return new_item
 
 
-def translateitem(item, engdata):
-    logging.debug("translateitem()")
-    logging.debug(item)
-    logging.debug(engdata)
+
+def translateitem( item, engdata ):
+    logging.debug( "translateitem()" )
+    logging.debug( item )
+    logging.debug( engdata )
     
     # Translate first
     newitem = {}
     if engdata:
         for name in item:
-            value = item[name].encode('UTF-8')
+            value = item[ name ].encode( 'UTF-8' )
             if value in engdata:
-                value = engdata[value]
-            newitem[name] = value
+                value = engdata[ value ]
+            newitem[ name ] = value
         item = newitem
     
     return item
 
 
-def load_vocabulary(vocname):
-    logging.debug("load_vocabulary()")
+
+def load_vocabulary( vocname ):
+    logging.debug( "load_vocabulary()" )
+    
     client = MongoClient()
     dbname = 'vocabulary'
-    db = client.get_database(dbname)
+    db = client.get_database( dbname )
     newfilter = {}
     engdata = {}
     
-    if request.args.get('classification'):
-        vocname = request.args.get('classification')
+    if request.args.get( 'classification' ):
+        vocname = request.args.get( 'classification' )
         if vocname == 'historical':
-            newfilter['vocabulary'] = 'ERRHS_Vocabulary_histclasses'
+            newfilter[ 'vocabulary' ] = 'ERRHS_Vocabulary_histclasses'
         else:
-            newfilter['vocabulary'] = 'ERRHS_Vocabulary_modclasses'
+            newfilter[ 'vocabulary' ] = 'ERRHS_Vocabulary_modclasses'
 
-    if request.args.get('language') == 'en':
+    if request.args.get( 'language' ) == 'en':
         thisyear = ''
-        if request.args.get('base_year'):
+        if request.args.get( 'base_year' ):
             if vocname == 'historical':     # FL why only for 'historical' ?
                 vocab_filter = {}
-                base_year = request.args.get("base_year")
+                base_year = request.args.get( "base_year" )
                 if base_year:
-                    vocab_filter["YEAR"] = base_year
-                datatype = request.args.get("datatype")
+                    vocab_filter[ "YEAR" ] = base_year
+                datatype = request.args.get( "datatype" )
                 if datatype:
-                    vocab_filter["DATATYPE"] = datatype
+                    vocab_filter[ "DATATYPE" ] = datatype
                 
-        engdata = translatedvocabulary(vocab_filter)
-        units   = translatedvocabulary({"vocabulary": "ERRHS_Vocabulary_units"})
+        engdata = translatedvocabulary( vocab_filter )
+        units   = translatedvocabulary( { "vocabulary": "ERRHS_Vocabulary_units" } )
         for item in units:
-            engdata[item] = units[item]
+            engdata[ item ] = units[ item ]
 
-    params = {"vocabulary": vocname}
+    params = { "vocabulary": vocname }
     for name in request.args:
         if name not in forbidden:
-            params[name] = request.args.get(name)
+            params[ name ] = request.args.get( name )
 
     if vocname:
-        vocab = db.data.find(params)
+        vocab = db.data.find( params )
     else:
         vocab = db.data.find()
 
     data = []
     uid = 0
-    logging.debug("processing %d items in vocab %s" % (vocab.count(), vocname))
+    logging.debug( "processing %d items in vocab %s" % ( vocab.count(), vocname ) )
     for item in vocab:
-        del item['_id']
-        del item['vocabulary']
+        del item[ '_id' ]
+        del item[ 'vocabulary' ]
         regions = {}
         
         if vocname == "ERRHS_Vocabulary_regions":
             uid += 1
-            regions['region_name'] = item['RUS']
-            regions['region_name_eng'] = item['EN']
-            regions['region_code'] = item['ID']
-            regions['region_id'] = uid
-            regions['region_ord'] = 189702
-            regions['description'] = regions['region_name']
-            regions['active'] = 1
+            regions[ 'region_name' ] = item[ 'RUS' ]
+            regions[ 'region_name_eng' ] = item[ 'EN' ]
+            regions[ 'region_code' ] = item[ 'ID' ]
+            regions[ 'region_id' ] = uid
+            regions[ 'region_ord' ] = 189702
+            regions[ 'description' ] = regions[ 'region_name' ]
+            regions[ 'active' ] = 1
             item = regions
-            data.append(item)
+            data.append( item )
         elif vocname == 'modern':
-            item = zap_empty_classes(item)
+            item = zap_empty_classes( item )
             if engdata:
-                item = translateitem(item, engdata)
-            data.append(item)
+                item = translateitem( item, engdata )
+            data.append( item )
         elif vocname == 'historical':
-            item = zap_empty_classes(item)
+            item = zap_empty_classes( item )
             if engdata:
-                item = translateitem(item, engdata)
-            data.append(item)
+                item = translateitem( item, engdata )
+            data.append( item )
         else:
             # Translate first
             newitem = {}
             if engdata:
                 for name in item:
-                    value = item[name]
+                    value = item[ name ]
                     if value in engdata: 
-                        value = engdata[value]
-                    newitem[name] = value
+                        value = engdata[ value ]
+                    newitem[ name ] = value
                 item = newitem
             
-            (path, output) = classcollector(item)
+            ( path, output ) = classcollector( item )
             if path:
-                output['path'] = path
-                data.append(output)
+                output[ 'path' ] = path
+                data.append( output )
             else:
-                data.append(item)
+                data.append( item )
 
     jsonhash = {}
     if vocname == "ERRHS_Vocabulary_regions":
-        jsonhash['regions'] = data
+        jsonhash[ 'regions' ] = data
     elif vocname == 'modern':
         jsonhash = data
     elif vocname == 'historical':
         jsonhash = data
     else:
-        jsonhash['data'] = data
-    jsondata = json.dumps(jsonhash, encoding="utf8", ensure_ascii=False, sort_keys=True, indent=4)
+        jsonhash[ 'data' ] = data
+    jsondata = json.dumps( jsonhash, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
     return jsondata
 
     return jsonhash
 
 
-def load_histclasses(cursor):
-    logging.debug("load_histclasses()")
+
+def load_histclasses( cursor ):
+    logging.debug( "load_histclasses()" )
     data = {}
-    sql = "select * from datasets.histclasses where 1=1";
-    sql = sqlfilter(sql)
+    sql = "select * from datasets.histclasses where 1=1"
+    sql = sqlfilter( sql )
 
     # execute
-    cursor.execute(sql)
+    cursor.execute( sql )
 
     # retrieve the records from the database
     data = cursor.fetchall()
-    jsondata = json_generator(cursor, 'data', data)
+    jsondata = json_generator( cursor, 'data', data )
 
     return jsondata
 
 
-def load_regions(cursor):
-    logging.debug("load_regions()")
+
+def load_regions( cursor ):
+    logging.debug( "load_regions()" )
     data = {}
-    sql = "select * from datasets.regions where 1=1";
-    sql = sqlfilter(sql)
+    sql = "select * from datasets.regions where 1=1"
+    sql = sqlfilter( sql )
     sql = sql + ';'
     # execute
     #return sql
-    cursor.execute(sql)
+    cursor.execute( sql )
     
     # retrieve the records from the database
     data = cursor.fetchall()
-    jsondata = json_generator(cursor, 'regions', data)
+    jsondata = json_generator( cursor, 'regions', data )
     return jsondata
 
 
-def load_data(cursor, year, datatype, region, debug):
+
+def load_data( cursor, year, datatype, region, debug ):
     logging.debug("load_data()")
     data = {}
     
@@ -703,14 +731,14 @@ def load_data(cursor, year, datatype, region, debug):
     #    for key, value in request.args.iteritems():
     #        extra = "%s<br>%s=%s<br>" % (extra, key, value)
 
-    query = "select * from russianrepository WHERE 1 = 1 ";
-    query = sqlfilter(query)
+    query = "select * from russianrepository WHERE 1 = 1 "
+    query = sqlfilter( query )
     if debug:
         print "DEBUG " + query + " <br>\n"
     query += ' order by territory asc'
     
     # execute
-    cursor.execute(query)
+    cursor.execute( query )
     
     # retrieve the records from the database
     records = cursor.fetchall()
@@ -718,380 +746,416 @@ def load_data(cursor, year, datatype, region, debug):
     row_count = 0
     i = 0
     for row in records:
-            i = i + 1
-            data[i] = row
-            #print row[0]
-    jsondata = json_generator(cursor, 'data', records)
+        i = i + 1
+        data[ i ] = row
+        #print row[ 0 ]
+    jsondata = json_generator( cursor, 'data', records )
     
     return jsondata
 
 
 
-def rdfconvertor(url):
-    logging.debug("rdfconvertor()")
-    f = urllib.urlopen(url)
+def rdfconvertor( url ):
+    logging.debug( "rdfconvertor()" )
+    f = urllib.urlopen( url )
     data = f.read()
-    csvio = StringIO(str(data))
-    dataframe = pd.read_csv(csvio, sep='\t', dtype='unicode')
+    csvio = StringIO( str( data ) )
+    dataframe = pd.read_csv( csvio, sep = '\t', dtype = 'unicode' )
     finalsubset = dataframe
     columns = finalsubset.columns
     rdf = "@prefix ristat: <http://ristat.org/api/vocabulary#> .\n"
     vocaburi = "http://ristat.org/service/vocab#"
     vocaburi = "http://data.sandbox.socialhistoryservices.org/service/vocab#"
-    g=Graph()
+    g = Graph()
 
     for ids in finalsubset.index:
-        item = finalsubset.ix[ids]
-        uri = term.URIRef("%s%s" % (vocaburi, str(item['ID'])))        
+        item = finalsubset.ix[ ids ]
+        uri = term.URIRef( "%s%s" % ( vocaburi, str( item[ 'ID' ] ) ) )
         if uri:
             for col in columns:
                 if col is not 'ID':
-                    if item[col]:
-                        c = term.URIRef(col)
-                        g.add((uri, c, Literal(str(item[col]))))
-                        rdf+="ristat:%s " % item['ID']
-                        rdf+="ristat:%s ristat:%s." % (col, item[col])
-                    rdf+="\n"
+                    if item[ col ]:
+                        c = term.URIRef( col )
+                        g.add( ( uri, c, Literal( str( item[ col ] ) ) ) )
+                        rdf += "ristat:%s " % item[ 'ID' ]
+                        rdf += "ristat:%s ristat:%s." % ( col, item[ col ] )
+                    rdf += "\n"
     return g
 
 
 
-class Histclass(tables.IsDescription):
-    histclass1 = tables.StringCol(256,pos=0)
-    histclass2 = tables.StringCol(256,pos=0)
-    histclass3 = tables.StringCol(256,pos=0)
+class Histclass( tables.IsDescription ):
+    histclass1 = tables.StringCol( 256, pos = 0 )
+    histclass2 = tables.StringCol( 256, pos = 0 )
+    histclass3 = tables.StringCol( 256, pos = 0 )
 
 
-def get_sql_query(name, value):
-    logging.debug("get_sql_query() name: %s, value: %s" % (name, value))
+
+def get_sql_query( name, value ):
+    logging.debug( "get_sql_query() name: %s, value: %s" % ( name, value ) )
     
-    sqlquery = ''
-    result = re.match("\[(.+)\]", value)
+    sql_query = ''
+    result = re.match( "\[(.+)\]", value )
     if result:
-        query = result.group(1)
-        ids = query.split(',')
+        query = result.group( 1 )
+        ids = query.split( ',' )
         for param in ids:
-            param=re.sub("u'", "'", str(param))
-            sqlquery+="%s," % param
-        if sqlquery:
-            sqlquery = sqlquery[:-1]
-            sqlquery = "%s in (%s)" % (name, sqlquery)
+            param=re.sub( "u'", "'", str( param ) )
+            sql_query += "%s," % param
+        if sql_query:
+            sql_query = sql_query[ :-1 ]
+            sql_query = "%s in (%s)" % ( name, sql_query )
     else:
-        sqlquery = "%s = '%s'" % (name, value)
+        sql_query = "%s = '%s'" % ( name, value )
     
-    logging.debug("sqlquery: %s" % sqlquery)
-    return sqlquery
+    logging.debug( "sql_query: %s" % sql_query )
+    return sql_query
 
 
-def loadjson(apiurl):
-    logging.debug("loadjson()")
+
+def loadjson( apiurl ):
+    logging.debug( "loadjson()" )
     jsondataurl = apiurl
 
-    req = urllib2.Request(jsondataurl)
+    req = urllib2.Request( jsondataurl )
     opener = urllib2.build_opener()
-    f = opener.open(req)
-    dataframe = simplejson.load(f)
+    f = opener.open( req )
+    dataframe = simplejson.load( f )
     return dataframe
 
+
 # ==============================================================================
-app = Flask(__name__)
-logging.debug(__file__)
+app = Flask( __name__ )
+logging.debug( __file__ )
 
 
-@app.route('/')
+@app.route( '/' )
 def test():
-    logging.debug("test()")
+    logging.debug( "test()" )
     description = 'Russian Repository API Service v.0.1<br>/service/regions<br>/service/topics<br>/service/data<br>/service/histclasses<br>/service/years<br>/service/maps (reserved)<br>'
     return description
 
 
-@app.route('/export')
+
+@app.route( '/export' )
 def export():
-    logging.debug("export()")
+    logging.debug( "export()" )
     settings = Configuration()
-    keys = ["intro", "intro_rus", "datatype_intro", "datatype_intro_rus", "note", "note_rus", "downloadpage1", "downloadpage1_rus" "downloadclick", "downloadclick_rus", "warningblank", "warningblank_rus", "mapintro", "mapintro_rus"]
+    keys = [ "intro", "intro_rus", "datatype_intro", "datatype_intro_rus", "note", "note_rus", "downloadpage1", "downloadpage1_rus" "downloadclick", "downloadclick_rus", "warningblank", "warningblank_rus", "mapintro", "mapintro_rus" ]
     exportkeys = {}
     for ikey in keys:
         if ikey in settings.config:
-            exportkeys[ikey] = settings.config[ikey]
-    result = json.dumps(exportkeys, encoding="utf8", ensure_ascii=False, sort_keys=True, indent=4)
-    return Response(result,  mimetype='application/json; charset=utf-8')
+            exportkeys[ ikey ] = settings.config[ ikey ]
+    result = json.dumps( exportkeys, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
+    return Response( result,  mimetype = 'application/json; charset=utf-8' )
 
 
-@app.route('/topics')
+
+@app.route( '/topics' )
 def topics():
-    logging.debug("topics()")
+    logging.debug( "topics()" )
     cursor = connect()
-    data = load_topics(cursor)
-    return Response(data,  mimetype='application/json; charset=utf-8')
+    data = load_topics( cursor )
+    return Response( data,  mimetype = 'application/json; charset=utf-8' )
 
 
-@app.route('/vocab')
+
+@app.route( '/vocab' )
 def vocab():
-    logging.debug("vocab()")
+    logging.debug( "vocab()" )
     url = "https://datasets.socialhistory.org/api/access/datafile/586?&key=6f07ea5d-be76-444a-8a20-0ee2f02fda21&show_entity_ids=true&q=authorName:*"
-    g = rdfconvertor(url)
+    g = rdfconvertor( url )
     showformat = 'json'
-    if request.args.get('format'):
-        showformat = request.args.get('format')
+    if request.args.get( 'format' ):
+        showformat = request.args.get( 'format' )
     if showformat == 'turtle':
-        jsondump = g.serialize(format='n3')
-        return Response(jsondump,  mimetype='application/x-turtle; charset=utf-8')
+        jsondump = g.serialize( format = 'n3' )
+        return Response( jsondump, mimetype = 'application/x-turtle; charset=utf-8' )
     else:
-        jsondump = g.serialize(format='json-ld', indent=4)
-        return Response(jsondump,  mimetype='application/json; charset=utf-8')
+        jsondump = g.serialize( format = 'json-ld', indent = 4 )
+        return Response( jsondump, mimetype = 'application/json; charset=utf-8' )
 
 
-@app.route('/vocabulary')
+
+@app.route( '/vocabulary' )
 def getvocabulary():
-    logging.debug("getvocabulary()")
+    logging.debug( "getvocabulary()" )
     data = translatedvocabulary()
-    json_string = json.dumps(data, encoding="utf8", ensure_ascii=False, sort_keys=True, indent=4)
-    return Response(json_string,  mimetype='application/json; charset=utf-8')
+    json_string = json.dumps( data, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
+    return Response( json_string, mimetype = 'application/json; charset=utf-8' )
 
 
-@app.route('/aggregation', methods=['POST', 'GET'])
+
+@app.route( '/aggregation', methods = ['POST', 'GET' ] )
 def aggregation():
-    logging.debug("aggregation()")
+    logging.debug( "aggregation()" )
     thisyear = ''
     
     try:
-        qinput = json.loads(request.data)
-        #logging.debug(qinput)
-        logging.debug("number of keys in request.data: %d" % len(qinput))
+        qinput = json.loads( request.data )
+        logging.debug( "number of keys in request.data: %d" % len( qinput ) )
         for key in qinput:
-            logging.debug("key: %s, value: %s" % (key, qinput[key]))
+            logging.debug( "key: %s, value: %s" % ( key, qinput[ key ] ) )
     except:
-        logging.debug("no request.data")
+        logging.debug( "no request.data" )
         return '{}'
     
     engdata = {}
     cursor = connect()
-    forbidden = ["classification", "action", "language", "path"]
+    forbidden = [ "classification", "action", "language", "path" ]
+    
     if cursor:
         # extra = "%s<br>%s=%s<br>" % (extra, key, value)
         if 'language' in qinput:
-            if qinput['language']== 'en':
+            if qinput[ 'language' ]== 'en':
                 vocab_filter = {}
-                base_year = qinput.get("base_year")
+                base_year = qinput.get( "base_year" )
                 if base_year:
-                    vocab_filter["YEAR"] = base_year
-                datatype = qinput.get("datatype")
+                    vocab_filter[ "YEAR" ] = base_year
+                datatype = qinput.get( "datatype" )
                 if datatype:
-                    vocab_filter["DATATYPE"] = datatype
+                    vocab_filter[ "DATATYPE" ] = datatype
                 
-                engdata = translatedvocabulary(vocab_filter)
-                units = translatedvocabulary({"vocabulary": "ERRHS_Vocabulary_units"})
-                logging.debug("translatedvocabulary returned %d items" % len(units))
+                engdata = translatedvocabulary( vocab_filter )
+                units = translatedvocabulary( { "vocabulary": "ERRHS_Vocabulary_units" } )
+                logging.debug( "translatedvocabulary returned %d items" % len( units ) )
                 for item in units:
-                    engdata[item] = units[item]
+                    engdata[ item ] = units[ item ]
     
+    known_fields = {}
     sql = {}
-    sql['condition'] = ''
-    sql['groupby']   = ''
-    sql['where']     = ''
-    sql['internal']  = ''
-    knownfield = {}
+    sql[ "condition" ] = ''
+    sql[ "order_by" ]  = ''
+    sql[ "group_by" ]  = ''
+    sql[ "where" ]     = ''
+    sql[ "internal" ]  = ''
     
     if qinput:
         for name in qinput:
             if not name in forbidden:
-                value = str(qinput[name])
+                value = str( qinput[ name ] )
                 if value in engdata:
-                    #value = engdata[value]['class_rus']
-                    value = engdata[value]
-                    logging.debug("name: %s, value: %s" % (name, value))
-                #sql['where'] += "%s='%s' AND1 " % (name, value)
-                sql['where'] += "%s AND " % get_sql_query(name, value)
-                sql['condition'] += "%s, " % name
-                knownfield[name] = value
+                    #value = engdata[ value ][ 'class_rus' ]
+                    value = engdata[ value ]
+                    logging.debug( "name: %s, value: %s" % ( name, value ) )
+                
+                #sql[ 'where' ] += "%s='%s' AND1 " % ( name, value )
+                sql[ 'where' ] += "%s AND " % get_sql_query( name, value )
+                sql[ 'condition' ] += "%s, " % name
+                known_fields[ name ] = value
             
             elif name == 'path':
-                fullpath = qinput[name]
+                fullpath = qinput[ name ]
                 topsql = 'AND ('
                 for path in fullpath:
                     tmpsql = ' ('
                     sqllocal = {}
                     clearpath = {}
                     for xkey in path:
-                        value = path[xkey]
+                        value = path[ xkey ]
                         
                         # need to retain '.' in classes, but not in summing
-                        #if value != '.':
-                        #    clearpath[xkey] = value
                         if value == '.':
                             value = 0
-                        clearpath[xkey] = value
+                        clearpath[ xkey ] = value
                         
                     for xkey in clearpath:
-                        value = path[xkey]
+                        value = path[ xkey ]
                         if value in engdata:
-                            logging.debug("xkey: %s, value: %s" % (xkey, value))
-                            #value = engdata[value]['class_rus']
-                            value = engdata[value]
-                            logging.debug("xkey: %s, value: %s" % (xkey, value))
-                            logging.debug("xkey: %s, value: %s" % (xkey, bytearray(value)))
-                        sqllocal[xkey]="%s='%s', " % (xkey, value)
-                        if not knownfield.has_key(xkey):
-                            knownfield[xkey] = value
-                            sql['condition']+="%s, " % xkey
+                            logging.debug( "xkey: %s, value: %s" % ( xkey, value ) )
+                            #value = engdata[ value ][ 'class_rus' ]
+                            value = engdata[ value ]
+                            logging.debug( "xkey: %s, value: %s" % ( xkey, value ) )
+                            logging.debug( "xkey: %s, value: %s" % ( xkey, bytearray( value ) ) )
+                        sqllocal[ xkey ] = "%s='%s', " % ( xkey, value )
+                        if not known_fields.has_key( xkey ):
+                            known_fields[ xkey ] = value
+                            sql[ 'condition' ] += "%s, " % xkey
                         
                         if value in engdata:
-                            #value = str(engdata[value]['class_rus'])
-                            value = str(engdata[value])
+                            #value = str( engdata[ value ][ 'class_rus' ] )
+                            value = str( engdata[ value ] )
                         try:
-                            tmpsql+= " %s = '%s' AND " % (xkey, value.decode('utf-8'))
+                            tmpsql += " %s = '%s' AND " % ( xkey, value.decode( 'utf-8' ) )
                         except:
-                            tmpsql+= " %s = '%s' AND " % (xkey, value)
-                    tmpsql+='1=1 ) '
-                    topsql+=tmpsql + " OR "
+                            tmpsql += " %s = '%s' AND " % ( xkey, value )
+                    
+                    tmpsql += '1=1 ) '
+                    topsql += tmpsql + " OR "
                     if sqllocal:
-                        sql['internal']+=' ('
+                        sql[ 'internal' ] += ' ('
                         for key in sqllocal:
-                            sqllocal[key] = sqllocal[key][:-2]
-                            sql['internal']+="%s AND " % sqllocal[key]
-                        sql['internal'] = sql['internal'][:-4]
-                        sql['internal']+=') OR'
-    sql['internal'] = sql['internal'][:-3]
+                            sqllocal[ key ] = sqllocal[ key ][ :-2 ]
+                            sql[ 'internal' ] += "%s AND " % sqllocal[ key ]
+                        sql[ 'internal' ] = sql[ 'internal' ][ :-4 ]
+                        sql[ 'internal' ] += ') OR'
+    
+    sql[ 'internal' ] = sql[ 'internal' ][ :-3 ]
 
     #select sum(cast(value as double precision)), value_unit from russianrepository where datatype = '1.02' and year='2002' and histclass2 = '' and histclass1='1' group by histclass1, histclass2, value_unit;
     # value may contain '.'& '. ' entries that cannot be SUMmed
     # => manually count with python, skipping '.'& '. ' entries
-    #sqlquery = "SELECT COUNT(*) AS datarecords, COUNT(*) - COUNT(value) AS dataactive, SUM(CAST(value AS DOUBLE PRECISION)) AS total, value_unit, ter_code"
-    sqlquery  = "SELECT COUNT(*) AS datarecords" 
-    sqlquery += ", SUM(CAST(value AS DOUBLE PRECISION)) AS total"
-    sqlquery += ", COUNT(*) - COUNT(value) AS dataactive"
-    sqlquery += ", value_unit, ter_code"
+    #sql_query = "SELECT COUNT(*) AS datarecords, COUNT(*) - COUNT(value) AS data_active, SUM(CAST(value AS DOUBLE PRECISION)) AS total, value_unit, ter_code"
+    sql_query  = "SELECT COUNT(*) AS datarecords" 
+    sql_query += ", SUM(CAST(value AS DOUBLE PRECISION)) AS total"
+    sql_query += ", COUNT(*) AS count"
+    sql_query += ", COUNT(*) - COUNT(value) AS data_active"
+    sql_query += ", value_unit, ter_code"
 
-    if sql['where']:
-        sqlquery += ", %s" % sql['condition']
-        sqlquery  = sqlquery[:-2]
-        sqlquery += " FROM russianrepository WHERE %s" % sql['where']
-        sqlquery  = sqlquery[:-4]
-    if sql['internal']:
-        sqlquery += " AND (%s) " % sql['internal']
+    if sql[ 'where' ]:
+        sql_query += ", %s" % sql[ 'condition' ]
+        sql_query  = sql_query[ :-2 ]
+        sql_query += " FROM russianrepository WHERE %s" % sql[ 'where' ]
+        sql_query  = sql_query[ :-4 ]
+    if sql[ 'internal' ]:
+        sql_query += " AND (%s) " % sql[ 'internal' ]
     
-    sqlquery += " AND value ~ '^\d+$'"      # regexp (~) to require that value only contains digits
+    sql_query += " AND value ~ '^\d+$'"      # regexp (~) to require that value only contains digits
     
-    sqlquery += " GROUP BY value_unit, ter_code, "
-    for f in knownfield:
-        sqlquery += "%s," % f
-    sqlquery = sqlquery[:-1]
-    #return sqlquery
-#    forbidden = {'dataactive', 0, 'datarecords', 1}
-    logging.debug("sqlquery: %s" % sqlquery)
+    sql[ "group_by" ] = " GROUP BY value_unit, ter_code, "
+    for field in known_fields:
+        sql[ "group_by" ] += "%s," % field
+    sql[ "group_by" ] = sql[ "group_by" ][ :-1 ]
+    logging.debug( "group_by: %s" % sql[ "group_by" ] )
+    sql_query += sql[ "group_by" ]
 
-    if sqlquery:
-        cursor.execute(sqlquery)
-        sqlnames = [desc[0] for desc in cursor.description]
-        logging.debug("%d sqlnames:" % len(sqlnames))
-        logging.debug(sqlnames)
+    # ordering by the db: applied to the russian contents, so the ordering of 
+    # the english translation will not be perfect, but at least grouped. 
+    logging.debug( "known_fields: %s" % str( known_fields ) )
+    sql[ "order_by" ] = " ORDER BY "
+    class_list = []
+    for i in range( 1, 6 ):
+        ikey = u"histclass%d" % i
+        if known_fields.get( ikey ):
+            class_list.append( ikey )
+    for i in range( 1, 6 ):
+        ikey = u"class%d" % i
+        if known_fields.get( ikey ):
+            class_list.append( ikey )
+    for iclass in class_list:
+        if sql[ "order_by" ] != " ORDER BY ":
+            sql[ "order_by" ] += ", "
+        sql[ "order_by" ] += "%s" % iclass
+    logging.debug( "order_by: %s" % sql[ "order_by" ] )
+    sql_query += " %s" % sql[ "order_by" ]
+
+    logging.debug( "sql_query: %s" % sql_query )
+    print( len( sql_query ) )
+    print( sql_query )
+
+    if sql_query:
+        cursor.execute( sql_query )
+        sqlnames = [ desc[ 0 ] for desc in cursor.description ]
+        logging.debug( "%d sqlnames:" % len( sqlnames ) )
+        logging.debug( sqlnames )
         
         # retrieve the records from the database
         data = cursor.fetchall()
         finaldata = []
         for item in data:
             finalitem = []
-            for i, thisname in enumerate(sqlnames):
-                value = item[i]
+            for i, thisname in enumerate( sqlnames ):
+                value = item[ i ]
                 if value == ". ":
-                    #logging.debug("i: %d, name: %s, value: %s" % (i, thisname, value))
+                    #logging.debug( "i: %d, name: %s, value: %s" % ( i, thisname, value ) )
                     # ". " marks a trailing dot in histclass or class: skip
                     #continue
                     pass
                 
             #for value in item:
                 if value in engdata:
-                    value = value.encode('UTF-8')
-                    value = engdata[value]
+                    value = value.encode( 'UTF-8' )
+                    value = engdata[ value ]
                 if thisname not in forbidden:
-                    finalitem.append(value)
+                    finalitem.append( value )
             
-            finaldata.append(finalitem)
+            finaldata.append( finalitem )
         
-        jsondata = json_generator(cursor, 'data', finaldata)
+        jsondata = json_generator( cursor, 'data', finaldata )
         
-        logging.debug("jsondata before return Response:")
-        logging.debug(jsondata)
-        return Response(jsondata, mimetype='application/json; charset=utf-8')
+        logging.debug( "jsondata before return Response:" )
+        logging.debug( jsondata )
+        return Response( jsondata, mimetype = 'application/json; charset=utf-8' )
 
-    return str('{}')
+    return str( '{}' )
 
 
-@app.route('/aggregate', methods=['POST', 'GET'])
+
+@app.route( '/aggregate', methods = [ 'POST', 'GET' ] )
 def aggr():
-    logging.debug("aggr()")
+    logging.debug( "aggr()" )
     data = {}
     sqlfields = ''
     sqlkeys = ''
     engdata = {}
     cursor = connect()
     total = 0
+    
     try:
-        qinput = json.loads(request.data)
+        qinput = json.loads( request.data )
     except:
         return '{}'
 
-    forbidden = ["classification", "action", "language", "path"]
+    forbidden = [ "classification", "action", "language", "path" ]
     if cursor:
         #     extra = "%s<br>%s=%s<br>" % (extra, key, value)
         if 'language' in qinput:
-            if qinput['language']== 'en':
-                engdata = translatedclasses(cursor, request.args)
+            if qinput[ 'language' ] == 'en':
+                engdata = translatedclasses( cursor, request.args )
         
-        #return str(engdata)
+        #return str( engdata )
         for key in qinput:
             if key not in forbidden:
-                value = qinput[key]
+                value = qinput[ key ]
                 if sqlfields:
-                    sqlfields = "%s, %s" % (sqlfields, key)
-                    sqlkeys = "%s, %s" % (sqlkeys, key)
+                    sqlfields = "%s, %s" % ( sqlfields, key )
+                    sqlkeys   = "%s, %s" % ( sqlkeys, key )
                 else:
                     sqlfields = key
-                    sqlkeys = key
+                    sqlkeys   = key
         
         sql = "select sum(cast(value as double precision)) as value, value_unit, territory, year, histclass1, histclass2, histclass3, histclass4, histclass5, histclass6, histclass7, histclass8, histclass9, histclass10, %s from russianrepository where 1=1" % sqlfields
         for name in qinput:
             if not name in forbidden:
-                value = str(qinput[name])
+                value = str( qinput[ name ] )
                 if value in engdata:
-                    value = engdata[value]['class_rus']
-                if value[0] != "[":
-                    sql+= " AND %s = '%s'" % (name, qinput[name])
+                    value = engdata[ value ][ 'class_rus' ]
+                if value[ 0 ] != "[":
+                    sql+= " AND %s = '%s'" % ( name, qinput[ name ] )
                 else:
                     orvalue = ''
-                    for val in qinput[name]:
+                    for val in qinput[ name ]:
                         if val in engdata:
-                            val = engdata[val]['class_rus']
-                        orvalue+=" '%s'," % (val)
-                    orvalue = orvalue[:-1]
-                    sql+= " AND %s IN (%s)" % (name, orvalue)
+                            val = engdata[ val ][ 'class_rus' ]
+                        orvalue += " '%s'," % ( val )
+                    orvalue = orvalue[ :-1 ]
+                    sql+= " AND %s IN (%s)" % ( name, orvalue )
             elif name == 'path':
-                fullpath = qinput[name]
+                fullpath = qinput[ name ]
                 topsql = 'AND ('
                 for path in fullpath:
                     tmpsql = ' ('
                     for xkey in path:
-                        value = path[xkey]
+                        value = path[ xkey ]
                         if value in engdata:
-                            value = str(engdata[value]['class_rus'])
+                            value = str( engdata[ value ][ 'class_rus' ] )
                         try:
-                            tmpsql+= " %s = '%s' AND " % (xkey, value.decode('utf-8'))
+                            tmpsql += " %s = '%s' AND " % ( xkey, value.decode( 'utf-8' ) )
                         except:
-                            tmpsql+= " %s = '%s' AND " % (xkey, value)
-                    tmpsql+='1=1 ) '
-                    topsql+=tmpsql + " OR "
-                topsql = topsql[:-3]
-                topsql+=')'
-                sql+=topsql
+                            tmpsql += " %s = '%s' AND " % ( xkey, value )
+                    tmpsql += '1=1 ) '
+                    topsql += tmpsql + " OR "
+                topsql = topsql[ :-3 ]
+                topsql += ')'
+                sql += topsql
 
-        #sql = sqlconstructor(sql)
+        #sql = sqlconstructor( sql )
         wheresql = "group by histclass1, histclass2, histclass3, histclass4, histclass5, histclass6, histclass7, histclass8, histclass9, histclass10, territory, year, %s, value_unit, value" % sqlkeys
-        sql = "%s %s" % (sql, wheresql)
+        sql = "%s %s" % ( sql, wheresql )
 
         # execute
-        cursor.execute(sql)
-        sqlnames = [desc[0] for desc in cursor.description]
+        cursor.execute( sql )
+        sqlnames = [ desc[ 0 ] for desc in cursor.description ]
 
         # retrieve the records from the database
         data = cursor.fetchall()
@@ -1099,168 +1163,170 @@ def aggr():
         chain = {}
         regions = {}
         
-        class inchain(object):
-            def __init__(self,name):
+        class inchain( object ):
+            def __init__( self, name ):
                 self.name = name
 
         hclasses = {}
         for row in data:
             lineitem = {}
             dataitem = {}
-            for i in range(0, len(sqlnames)):
-                if row[i] != None:
-                    value = row[i]
-                    dataitem[sqlnames[i]] = value
+            for i in range( 0, len( sqlnames ) ):
+                if row[ i ] != None:
+                    value = row[ i ]
+                    dataitem[ sqlnames[ i ] ] = value
 
-            if dataitem['value'] != None:
-                location = dataitem['territory']
+            if dataitem[ 'value' ] != None:
+                location = dataitem[ 'territory' ]
                 if location in engdata:
-                    location = engdata[location]['class_eng']
+                    location = engdata[ location ][ 'class_eng' ]
 
                 if location in regions:
-                    regions[location]+=dataitem['value']
+                    regions[ location ] += dataitem[ 'value' ]
                 else:
-                    regions[location] = dataitem['value']
+                    regions[ location ] = dataitem[ 'value' ]
 
-            for i in range(0, len(sqlnames)):
-                if row[i] != None:
-                    value = row[i]
+            for i in range( 0, len( sqlnames ) ):
+                if row[ i ] != None:
+                    value = row[ i ]
                     if value in engdata:
-                        value = engdata[value]['class_eng']
+                        value = engdata[ value ][ 'class_eng' ]
 
-                    if sqlnames[i] == 'value':
-                        if float(value).is_integer():
-                            value = int(value)
-                    lineitem[sqlnames[i]] = value 
+                    if sqlnames[ i ] == 'value':
+                        if float( value ).is_integer():
+                            value = int( value )
+                    lineitem[ sqlnames[ i ] ] = value 
             try:
-                total+=float(lineitem['value'])
+                total += float( lineitem[ 'value' ] )
             except:
                 itotal = 'NA'
 
             sorteditems = {}
             order = []
-            for item in sorted(lineitem):
-                order.append(item)
+            for item in sorted( lineitem ):
+                order.append( item )
             for item in order:
-                sorteditems[item] = lineitem[item]
-            x = collections.OrderedDict(sorted(sorteditems.items()))
-            #return json.dumps(x)
+                sorteditems[ item ] = lineitem[ item ]
+            x = collections.OrderedDict( sorted( sorteditems.items() ) )
+            #return json.dumps( x )
 
             vocab = {}
-            for i in range(1,10):
-                histkey = "histclass%s" % str(i)
+            for i in range( 1,10 ):
+                histkey = "histclass%s" % str( i )
                 if histkey in x:
-                    vocab[histkey] = x[histkey]
-                    del x[histkey]
+                    vocab[ histkey ] = x[ histkey ]
+                    del x[ histkey ]
             
-            x['histclases'] = vocab
-            result.append(x)
+            x[ 'histclases' ] = vocab
+            result.append( x )
         
-        #jsondata = json_generator(cursor, 'data', result)
+        #jsondata = json_generator( cursor, 'data', result )
         #result = hclasses
         final = {}
-        final['url'] = 'http://data.sandbox.socialhistoryservices.org/service/download?id=1144&filetype=excel'
-        final['total'] = total
-        final['regions'] = regions
-        final['data'] = result
+        final[ 'url' ] = 'http://data.sandbox.socialhistoryservices.org/service/download?id=1144&filetype=excel'
+        final[ 'total' ] = total
+        final[ 'regions' ] = regions
+        final[ 'data' ] = result
         
-        return Response(json.dumps(final),  mimetype='application/json; charset=utf-8')
+        return Response( json.dumps( final ),  mimetype = 'application/json; charset=utf-8' )
 
 
-@app.route('/download')
+
+@app.route( '/download' )
 def download():
-    logging.debug("download()")
+    logging.debug( "download()" )
     clioinfra = Configuration()
 
-    if request.args.get('id'):
+    if request.args.get( 'id' ):
         host = "datasets.socialhistory.org"
         url = "https://%s/api/access/datafile/%s?&key=%s&show_entity_ids=true&q=authorName:*" % (host, request.args.get('id'), clioinfra.config['ristatkey'])
-        f = urllib2.urlopen(url)
+        f = urllib2.urlopen( url )
         pdfdata = f.read()
         filetype = "application/pdf"
-        if request.args.get('filetype') == 'excel':
+        if request.args.get( 'filetype' ) == 'excel':
             filetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        return Response(pdfdata, mimetype=filetype)
+        return Response( pdfdata, mimetype = filetype )
     
-    if request.args.get('key'):
+    if request.args.get( 'key' ):
         clientcache = MongoClient()
         datafilter = {}
-        datafilter['key'] = request.args.get('key')
-        (lexicon, regions) = preprocessor(datafilter)
-        fullpath = "%s/%s.xlsx" % (clioinfra.config['tmppath'],request.args.get('key'))
-        filename = aggregate_dataset(fullpath, lexicon, regions)
-        with open(filename, 'rb') as f:
+        datafilter[ 'key' ] = request.args.get( 'key' )
+        ( lexicon, regions ) = preprocessor( datafilter )
+        fullpath = "%s/%s.xlsx" % ( clioinfra.config[ 'tmppath' ],request.args.get( 'key' ) )
+        filename = aggregate_dataset( fullpath, lexicon, regions )
+        with open( filename, 'rb' ) as f:
             datacontents = f.read()
         filetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        return Response(datacontents, mimetype=filetype)
+        return Response( datacontents, mimetype = filetype )
 
-        dbcache = clientcache.get_database('datacache')
-        result = dbcache.data.find({"key": str(request.args.get('key')) })
+        dbcache = clientcache.get_database( 'datacache' )
+        result = dbcache.data.find( { "key": str( request.args.get( 'key' ) ) } )
         for item in result:
-            del item['key']
-            del item['_id']
-            dataset = json.dumps(item, encoding="utf8", ensure_ascii=False, sort_keys=True, indent=4)
-            return Response(dataset,  mimetype='application/json; charset=utf-8')
+            del item[ 'key' ]
+            del item[ '_id' ]
+            dataset = json.dumps( item, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
+            return Response( dataset,  mimetype = 'application/json; charset=utf-8' )
     else:
         return 'Not found'
 
 
-@app.route('/documentation')
+
+@app.route( '/documentation' )
 def documentation():
-    logging.debug("documentation()")
+    logging.debug( "documentation()" )
     cursor = connect()
     clioinfra = Configuration()
     host = "datasets.socialhistory.org"
-    connection = Connection(host, clioinfra.config['ristatkey'])
-    dataverse = connection.get_dataverse('RISTAT')
-    settings = DataFilter(request.args)
+    connection = Connection( host, clioinfra.config[ 'ristatkey' ] )
+    dataverse = connection.get_dataverse( 'RISTAT' )
+    settings = DataFilter( request.args )
     papers = []
     
-    logging.debug("request.args:")
-    logging.debug(request.args)
-    logging.debug("settings:")
-    logging.debug(settings)
+    logging.debug( "request.args:" )
+    logging.debug( request.args )
+    logging.debug( "settings:" )
+    logging.debug( settings )
     
     datatype = ""
     try:
-        datatype = int(request.args.get("datatype"))
+        datatype = int( request.args.get( "datatype" ) )
     except:
         pass
     
     datafilter = settings.datafilter
     
-    logging.debug("datatype: %s, type: %s" % (datatype, type(datatype)))
-    logging.debug("datafilter: %s" % str(datafilter))
+    logging.debug( "datatype: %s, type: %s" % ( datatype, type( datatype ) ) )
+    logging.debug( "datafilter: %s" % str( datafilter ) )
     
-    name_start = "ERRHS_" + str(datatype) + "_"
-    logging.debug("name_start: %s" % name_start)
+    name_start = "ERRHS_" + str( datatype ) + "_"
+    logging.debug( "name_start: %s" % name_start )
     
     for item in dataverse.get_contents():
-        handle = str(item['protocol']) + ':' + str(item['authority']) + "/" + str(item['identifier'])
-        if handle == clioinfra.config['ristatdocs']:
-            datasetid = item['id']
-            url = "https://" + str(host) + "/api/datasets/" + str(datasetid) + "/?&key=" + str(clioinfra.config['ristatkey'])
-            dataframe = loadjson(url)
-            for files in dataframe['data']['latestVersion']['files']:
+        handle = str( item[ 'protocol' ] ) + ':' + str( item[ 'authority' ] ) + "/" + str( item[ 'identifier' ] )
+        if handle == clioinfra.config[ 'ristatdocs' ]:
+            datasetid = item[ 'id' ]
+            url = "https://" + str( host ) + "/api/datasets/" + str( datasetid ) + "/?&key=" + str( clioinfra.config[ 'ristatkey' ] )
+            dataframe = loadjson( url )
+            for files in dataframe[ 'data' ][ 'latestVersion' ][ 'files' ]:
                 paperitem = {}
-                paperitem['id'] = str(files['datafile']['id'])
-                paperitem['name'] = str(files['datafile']['name'])
-                paperitem['url'] = "http://data.sandbox.socialhistoryservices.org/service/download?id=%s" % paperitem['id']
-                logging.debug("paperitem: %s" % paperitem)
+                paperitem[ 'id' ] = str( files[ 'datafile' ][ 'id' ] )
+                paperitem[ 'name' ] = str( files[ 'datafile' ][ 'name' ] )
+                paperitem[ 'url' ] = "http://data.sandbox.socialhistoryservices.org/service/download?id=%s" % paperitem[ 'id' ]
+                logging.debug( "paperitem: %s" % paperitem )
                 
-                name = str(files['datafile']['name'])
+                name = str( files[ 'datafile' ][ 'name' ] )
                 
                 if datatype != "":      # use datatype to limit the returned documents
                     # find substring between the first two underscores
                     sub_name = ""
-                    p1 = name.find("_")
+                    p1 = name.find( "_" )
                     if p1 != -1:
-                        p2 = name.find("_", p1+1)
+                        p2 = name.find( "_", p1+1 )
                         if p2 != -1:
-                            sub_name = name[p1+1:p2]
-                            logging.debug("sub_name: %s" % sub_name)
+                            sub_name = name[ p1+1:p2 ]
+                            logging.debug( "sub_name: %s" % sub_name )
                             try:
-                                sub_digits = int(sub_name)
+                                sub_digits = int( sub_name )
                                 if sub_digits != datatype:
                                     continue    # datatype does not match: skip
                             except:
@@ -1268,111 +1334,118 @@ def documentation():
                 
                 try:
                     if 'lang' in settings.datafilter:
-                        varpat = r"(_%s)" % (settings.datafilter['lang'])
-                        pattern = re.compile(varpat, re.IGNORECASE)
-                        found = pattern.findall(paperitem['name'])
+                        varpat = r"(_%s)" % ( settings.datafilter[ 'lang' ] )
+                        pattern = re.compile( varpat, re.IGNORECASE )
+                        found = pattern.findall( paperitem[ 'name' ] )
                         if found:
-                            papers.append(paperitem)
+                            papers.append( paperitem )
                     else:   # paperitem without language specified: add
-                        papers.append(paperitem)
+                        papers.append( paperitem )
                     
                     if 'topic' in settings.datafilter:
-                        varpat = r"(_%s_.+_\d+_+%s.|class|region)" % (settings.datafilter['topic'], settings.datafilter['lang'])
-                        pattern = re.compile(varpat, re.IGNORECASE)
-                        found = pattern.findall(paperitem['name'])
+                        varpat = r"(_%s_.+_\d+_+%s.|class|region)" % ( settings.datafilter[ 'topic' ], settings.datafilter[ 'lang' ] )
+                        pattern = re.compile( varpat, re.IGNORECASE )
+                        found = pattern.findall( paperitem[ 'name' ] )
                         if found:
-                            papers.append(paperitem)
+                            papers.append( paperitem )
                     else:
                         if 'lang' not in settings.datafilter: 
-                            papers.append(paperitem)
+                            papers.append( paperitem )
                 except:
                     if 'lang' not in settings.datafilter:
-                        papers.append(paperitem)
+                        papers.append( paperitem )
     
-    logging.debug("papers in response:")
+    logging.debug( "papers in response:" )
     for paper in papers:
-        logging.debug(paper)
+        logging.debug( paper )
     
-    return Response(json.dumps(papers),  mimetype='application/json; charset=utf-8')
+    return Response( json.dumps( papers ),  mimetype = 'application/json; charset=utf-8' )
 
 
-@app.route('/histclasses')
+
+@app.route( '/histclasses' )
 def histclasses():
-    logging.debug("histclasses()")
+    logging.debug( "histclasses()" )
     #cursor = connect()
-    #data = load_histclasses(cursor)
-    data = load_vocabulary('historical')
-    return Response(data,  mimetype='application/json; charset=utf-8')
+    #data = load_histclasses( cursor )
+    data = load_vocabulary( 'historical' )
+    return Response( data,  mimetype = 'application/json; charset=utf-8' )
 
 
-@app.route('/classes')
+
+@app.route( '/classes' )
 def classes():
-    logging.debug("classes()")
+    logging.debug( "classes()" )
     #cursor = connect()
-    #data = load_classes(cursor)
-    data = load_vocabulary('modern')
+    #data = load_classes( cursor )
+    data = load_vocabulary( 'modern' )
     
-    return Response(data,  mimetype='application/json; charset=utf-8')
+    return Response( data,  mimetype = 'application/json; charset=utf-8' )
 
 
-@app.route('/years')
+
+@app.route( '/years' )
 def years():
-    logging.debug("years()")
+    logging.debug( "years()" )
     cursor = connect()
-    settings = DataFilter(request.args)
+    settings = DataFilter( request.args )
     datatype = ''
     if 'datatype' in settings.datafilter:
-        datatype = settings.datafilter['datatype']
-    data = load_years(cursor, datatype)
+        datatype = settings.datafilter[ 'datatype' ]
+    data = load_years( cursor, datatype )
     
-    return Response(data,  mimetype='application/json; charset=utf-8')
+    return Response( data,  mimetype = 'application/json; charset=utf-8' )
 
 
-@app.route('/regions')
+
+@app.route(' /regions' )
 def regions():
-    logging.debug("regions()")
+    logging.debug( "regions()" )
     cursor = connect()
-    #data = load_regions(cursor)
-    data = load_vocabulary("ERRHS_Vocabulary_regions")
+    #data = load_regions( cursor )
+    data = load_vocabulary( "ERRHS_Vocabulary_regions" )
     
-    return Response(data,  mimetype='application/json; charset=utf-8')
+    return Response( data,  mimetype = 'application/json; charset=utf-8' )
 
 
-@app.route('/data')
+
+@app.route( '/data' )
 def data():
-    logging.debug("data()")
+    logging.debug( "data()" )
     cursor = connect()
     year = 0
     datatype = '1.01'
     region = 0
     debug = 0
-    data = load_data(cursor, year, datatype, region, debug)
+    data = load_data( cursor, year, datatype, region, debug )
     
-    return Response(data,  mimetype='application/json; charset=utf-8')
+    return Response( data,  mimetype = 'application/json; charset=utf-8' )
 
 
-@app.route('/translate')
+
+@app.route( '/translate' )
 def translate():
-    logging.debug("translate()")
+    logging.debug( "translate()" )
     cursor = connect()
     if cursor:
         data = {}
         sql = "select * from datasets.classmaps where 1=1";
-        sql = sqlfilter(sql)
+        sql = sqlfilter( sql )
 
         # execute
-        cursor.execute(sql)
+        cursor.execute( sql )
 
         # retrieve the records from the database
         data = cursor.fetchall()
-        jsondata = json_generator(cursor, 'data', data)
+        jsondata = json_generator( cursor, 'data', data )
         
-        return Response(jsondata,  mimetype='application/json; charset=utf-8')
+        return Response( jsondata,  mimetype = 'application/json; charset=utf-8' )
 
 
-@app.route('/filter', methods=['POST', 'GET'])
-def login(settings=''):
-    logging.debug("login()")
+
+@app.route( '/filter', methods = [ 'POST', 'GET' ] )
+def login( settings = '' ):
+    logging.debug( "login()" )
     cursor = connect()
     filter = {}
     try:
@@ -1386,35 +1459,36 @@ def login(settings=''):
         sql = "select * from datasets.classification where 1=1";
         #datatype='7.01' and base_year='1897' group by histclass1, datatype, value_unit, ter_code, value;
     try:
-        classification = qinput['classification']
+        classification = qinput[ 'classification' ]
     except:
         classification = 'historical'
-    forbidden = ["classification", "action", "language"]
+    forbidden = [ "classification", "action", "language" ]
     for name in qinput:
         if not name in forbidden:
-            sql+= " AND %s='%s'" % (name, qinput[name])
+            sql+= " AND %s='%s'" % ( name, qinput[ name ] )
 
     #return sql
     if sql:
         # execute
-        cursor.execute(sql)
-        sqlnames = [desc[0] for desc in cursor.description]
+        cursor.execute( sql )
+        sqlnames = [ desc[ 0 ] for desc in cursor.description ]
 
         data = cursor.fetchall()
-        jsondata = datasetfilter(data, sqlnames, classification)
-        return Response(jsondata,  mimetype='application/json; charset=utf-8')
+        jsondata = datasetfilter( data, sqlnames, classification )
+        return Response( jsondata,  mimetype = 'application/json; charset=utf-8' )
     else:
         return ''
 
 
+
 # http://bl.ocks.org/mbostock/raw/4090846/us.json
-@app.route('/maps')
+@app.route( '/maps' )
 def maps():
-    logging.debug("maps()")
+    logging.debug( "maps()" )
     donors_choose_url = "http://bl.ocks.org/mbostock/raw/4090846/us.json"
-    response = urllib2.urlopen(donors_choose_url)
-    json_response = json.load(response)
-    return Response(json_response,  mimetype='application/json; charset=utf-8')
+    response = urllib2.urlopen( donors_choose_url )
+    json_response = json.load( response )
+    return Response( json_response,  mimetype = 'application/json; charset=utf-8' )
 
 
 """
