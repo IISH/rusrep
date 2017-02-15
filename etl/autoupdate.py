@@ -11,7 +11,7 @@ Notice: dpe/rusrep/etl contains a xlsx2csv.py copy;
 better use the curent version from PyPI
 
 VT-07-Jul-2016 latest change by VT
-FL-08-Feb-2017
+FL-15-Feb-2017
 """
 
 from __future__ import absolute_import
@@ -341,6 +341,44 @@ def retrieve_handle_docs( clioinfra, handle_name, copy_local = False, to_csv = F
 
 
 
+def clear_postgres( clioinfra ):
+    logging.info( "clear_postgres()" )
+
+    configpath = RUSREP_CONFIG_PATH
+    if not os.path.isfile( configpath ):
+        print( "in %s" % __file__ )
+        print( "configpath %s FILE DOES NOT EXIST" % configpath )
+        print( "EXIT" )
+        sys.exit( 1 )
+    
+    logging.info( "using configuration: %s" % configpath )
+
+    configparser = ConfigParser.RawConfigParser()
+    configparser.read( configpath )
+    
+    host     = configparser.get( 'config', 'dbhost' )
+    dbname   = configparser.get( 'config', 'dbname' )
+    dbtable  = configparser.get( 'config', 'dbtable' )
+    user     = configparser.get( 'config', 'dblogin' )
+    password = configparser.get( 'config', 'dbpassword' )
+    
+    connection_string = "host = '%s' dbname = '%s' user = '%s' password = '%s'" % ( host, dbname, user, password )
+    logging.info( "connection_string: %s" % connection_string )
+
+    connection = psycopg2.connect( connection_string )
+    cursor = connection.cursor()
+
+    sql = "TRUNCATE %s;" % dbtable
+    logging.info( sql )
+    
+    cursor.execute( sql )
+    connection.commit()
+    
+    cursor.close()
+    connection.close()
+
+
+
 def store_handle_docs( clioinfra, handle_name ):
     logging.info( "store_handle_docs() %s" % handle_name )
     
@@ -367,9 +405,9 @@ def store_handle_docs( clioinfra, handle_name ):
     
     host     = configparser.get( 'config', 'dbhost' )
     dbname   = configparser.get( 'config', 'dbname' )
+    dbtable  = configparser.get( 'config', 'dbtable' )
     user     = configparser.get( 'config', 'dblogin' )
     password = configparser.get( 'config', 'dbpassword' )
-    table    = "russianrepository"
     
     connection_string = "host = '%s' dbname = '%s' user = '%s' password = '%s'" % ( host, dbname, user, password )
     logging.info( "connection_string: %s" % connection_string )
@@ -377,26 +415,21 @@ def store_handle_docs( clioinfra, handle_name ):
     connection = psycopg2.connect( connection_string )
     cursor = connection.cursor()
 
-    sql = "truncate %s;" % table
-    logging.info( sql )
-    cursor.execute( sql )
-
     dirlist = os.listdir( csvdir ) 
     for filename in dirlist:
         root, ext = os.path.splitext( filename )
         if root.startswith( "ERRHS_" ) and ext == ".csv":
-            #table = root.lower()
-            logging.info( "use: %s, to table: %s" % ( filename, table ) )
+            logging.info( "use: %s, to table: %s" % ( filename, dbtable ) )
             in_pathname = os.path.abspath( os.path.join( csvdir, filename ) )
             logging.debug( in_pathname )
             #test_csv_file( pathname )
             
             #out_pathname = write_psv_file( csvdir, filename )
             #psv_file = open( out_pathname, 'r' )
-            #cursor.copy_from( psv_file, table, sep ='|' )
+            #cursor.copy_from( psv_file, dbtable, sep ='|' )
             
             stringio_file = filter_csv( csvdir, filename )
-            cursor.copy_from( stringio_file, table, sep = '|' )
+            cursor.copy_from( stringio_file, dbtable, sep = '|' )
             connection.commit()
             
             #csv_strings.close()  # close object and discard memory buffer
@@ -409,7 +442,7 @@ def store_handle_docs( clioinfra, handle_name ):
         #break
     
     ndoc = len( dirlist )
-    logging.info( "%d documents for handle %s stored in table %s" % ( ndoc, handle_name, table ) )
+    logging.info( "%d documents for handle %s stored in table %s" % ( ndoc, handle_name, dbtable ) )
     cursor.close()
     connection.close()
 
@@ -572,13 +605,23 @@ def filter_csv( csvdir, in_filename ):
             """
             
             # check comment_source length
-            for i in range( nfields ):
-                if csv_header_names[ i ] == "comment_source":
-                    comment = fields[ i ]
-                    comment_length = len( comment )
-                    comment_length_max = max( comment_length_max, comment_length )
-                    if comment_length > COMMENT_LENGTH_MAX_DB:
-                        fields[ i ] = ""    # because it is unicode we cannot just chop it
+            comment_pos = csv_header_names.index( "comment_source" )
+            comment = fields[ comment_pos ]
+            comment_length = len( comment )
+            comment_length_max = max( comment_length_max, comment_length )
+            if comment_length > COMMENT_LENGTH_MAX_DB:
+                fields[ omment_pos ] = ""   # because it is unicode we cannot just chop it
+                logging.warning( "too long comment in line:" )
+                logging.warning( line )
+            
+            # check missing datatype
+            datatype_pos = csv_header_names.index( "datatype" )
+            datatype = fields[ datatype_pos ]
+            if len( datatype ) == 0 or datatype == '.':
+                logging.warning( "missing datatype in line:" )
+                logging.warning( line )
+            else:   # chop spurious decimals of stupid spreadsheets
+                fields[ datatype_pos ] = "%4.2f" % float( datatype )
             
         #print( "|".join( fields ) )
         if ndiff > 0:
@@ -656,7 +699,7 @@ def filter_csv( csvdir, in_filename ):
 
 
 
-def update_handle_docs( clioinfra, mongo_client, handle_name ):
+def update_handle_docs( clioinfra, mongo_client ):
     logging.info( "update_handle_docs()" )
     
     configpath = RUSREP_CONFIG_PATH
@@ -672,8 +715,8 @@ def update_handle_docs( clioinfra, mongo_client, handle_name ):
 
 
 
-def clear_dbs( mongo_client ):
-    logging.info( "clear_dbs()" )
+def clear_mongo( mongo_client ):
+    logging.info( "clear_mongo()" )
     
     dbname_vocab = clioinfra.config[ "vocabulary" ]
     db_vocab = mongo_client.get_database( dbname_vocab )
@@ -688,23 +731,24 @@ def clear_dbs( mongo_client ):
 
 
 if __name__ == "__main__":
+    log_file = True
+    
     #log_level = logging.DEBUG
     log_level = logging.INFO
     #log_level = logging.WARNING
     #log_level = logging.ERROR
     #log_level = logging.CRITICAL
     
-    logging_filename = "autoupdate.log"
-    logging.basicConfig( filename = logging_filename, filemode = 'w', level = log_level )
+    if log_file:
+        logging_filename = "autoupdate.log"
+        logging.basicConfig( filename = logging_filename, filemode = 'w', level = log_level )
+    else:
+        logging.basicConfig( level = log_level )
     
-    log_level = logging.DEBUG
-    #log_level = logging.INFO
-    #log_level = logging.WARNING
-    #log_level = logging.ERROR
-    #log_level = logging.CRITICAL
-    
-    DO_VOCAB = True
-    DO_ERRHS = True
+    DO_VOCABULARY = True        # vocabulary: dataverse  => mongodb
+    DO_RETRIEVE   = True        # ERRHS data: dataverse  => local_disk, as csv
+    DO_POSTGRES   = True        # ERRHS data: local_disk => postgresql
+    DO_MONGODB    = True        # ERRHS data: postgresql => mongodb
     
     logging_filename = "autoupdate.log"
     #logging.basicConfig( filename = logging_filename, filemode = 'w', level = log_level )
@@ -723,37 +767,40 @@ if __name__ == "__main__":
     clioinfra    = Configuration()
     mongo_client = MongoClient()
     
-    if DO_VOCAB or DO_ERRHS:
-        clear_dbs( mongo_client )
+    if DO_VOCABULARY or DO_MONGODB:
+        clear_mongo( mongo_client )
     
-    if DO_VOCAB:
+    if DO_VOCABULARY:
         # Downloaded vocabulary documents are not used to update the vocabularies, 
         # they are processed on the fly, and put in MongoDB
-        copy_local  = True
+        copy_local  = True      # to inspect
         update_vocabularies( clioinfra, mongo_client, copy_local )
     
-    if DO_ERRHS:
+    handle_names = [ 
+        "hdl_errhs_agriculture", 
+        "hdl_errhs_capital", 
+        "hdl_errhs_industry", 
+        "hdl_errhs_labour", 
+        "hdl_errhs_land", 
+        "hdl_errhs_population", 
+        "hdl_errhs_services" 
+    ]
+    #handle_names = [ "hdl_errhs_agriculture" ]
+    
+    if DO_RETRIEVE:
         copy_local  = True
         to_csv      = True
         remove_xlsx = True
-        
-        handle_names = [ 
-            "hdl_errhs_agriculture", 
-            "hdl_errhs_capital", 
-            "hdl_errhs_industry", 
-            "hdl_errhs_labour", 
-            "hdl_errhs_land", 
-            "hdl_errhs_population", 
-            "hdl_errhs_services" 
-        ]
-        
         for handle_name in handle_names:
             retrieve_handle_docs( clioinfra, handle_name, copy_local, to_csv, remove_xlsx ) # dataverse  => local_disk
-        
+    
+    if DO_POSTGRES:
+        clear_postgres( clioinfra )
         for handle_name in handle_names:
             store_handle_docs( clioinfra, handle_name )                 # local_disk => postgresql
-        
-        update_handle_docs( clioinfra, mongo_client, handle_name )      # postgresql => mongodb
+    
+    if DO_MONGODB:
+        update_handle_docs( clioinfra, mongo_client )                   # postgresql => mongodb
     
     logging.info( "stop: %s" % datetime.datetime.now() )
 
