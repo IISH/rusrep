@@ -1398,7 +1398,7 @@ def years():
 
 
 
-@app.route(' /regions' )
+@app.route( '/regions' )
 def regions():
     logging.debug( "regions()" )
     cursor = connect()
