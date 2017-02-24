@@ -11,10 +11,19 @@ Notice: dpe/rusrep/etl contains a xlsx2csv.py copy;
 better use the curent version from PyPI
 
 VT-07-Jul-2016 latest change by VT
-FL-15-Feb-2017
+FL-24-Feb-2017
 """
 
-from __future__ import absolute_import
+from __future__ import absolute_import     # VT
+"""
+# future-0.16.0 imports for Python 2/3 compatibility
+from __future__ import ( absolute_import, division, print_function, unicode_literals )
+from builtins import ( ascii, bytes, chr, dict, filter, hex, input, int, list, map, 
+    next, object, oct, open, pow, range, round, super, str, zip )
+  File "/home/dpe/rusrep/etl/xlsx2csv.py", line 240, in _convert
+    writer = csv.writer(outfile, quoting=csv.QUOTE_MINIMAL, delimiter=self.options['delimiter'], lineterminator=self.options['lineterminator'])
+TypeError: argument 1 must have a "write" method
+"""
 
 import ConfigParser
 import datetime
@@ -157,6 +166,7 @@ def documents_by_handle( clioinfra, handle_name, copy_local = False, to_csv = Fa
     logging.debug( "ristatkey: %s" % ristatkey )
     
     connection = Connection( host, ristatkey )
+    
     dataverse  = connection.get_dataverse( 'RISTAT' )
     
     logging.debug( "title: %s" % dataverse.title )
@@ -746,8 +756,8 @@ if __name__ == "__main__":
         logging.basicConfig( level = log_level )
     
     DO_VOCABULARY = True        # vocabulary: dataverse  => mongodb
-    DO_RETRIEVE   = True        # ERRHS data: dataverse  => local_disk, as csv
-    DO_POSTGRES   = True        # ERRHS data: local_disk => postgresql
+    DO_RETRIEVE   = True        # ERRHS data: dataverse  => local_disk, xlsx -> csv
+    DO_POSTGRES   = True        # ERRHS data: local_disk => postgresql, csv -> table
     DO_MONGODB    = True        # ERRHS data: postgresql => mongodb
     
     logging_filename = "autoupdate.log"

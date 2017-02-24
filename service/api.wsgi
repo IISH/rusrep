@@ -25,17 +25,25 @@
 # delete this exception statement from all source files in the program,
 # then also delete it in the license file.
 
-import os
 import logging
-import sys
+from os import environ
+from sys import path, version
+
+"""
+# setup the virtual environment for the web server
+activate_this = "/data/opt/python2713/bin/activate_this.py"
+execfile( activate_this, dict( __file__ = activate_this ) ) # Py2
+#exec( open( activate_this ).read() )                       # Py3
+"""
 
 RUSREP_HOME = "/home/dpe/rusrep"
 RUSREP_CONFIG_PATH = RUSREP_HOME + "/config/russianrep.config"
-os.environ[ "RUSREP_CONFIG_PATH" ] = RUSREP_CONFIG_PATH
+environ[ "RUSREP_CONFIG_PATH" ] = RUSREP_CONFIG_PATH
 
-sys.path.insert( 0, RUSREP_HOME + "/service" )
+path.insert( 0, RUSREP_HOME + "/service" )
 
 logging.basicConfig( level = logging.DEBUG )
 logging.debug( __file__ )
+logging.debug( "Python version: %s" % version )
 
 from services import app as application
