@@ -11,7 +11,7 @@ Notice: dpe/rusrep/etl contains a xlsx2csv.py copy;
 better use the curent version from PyPI
 
 VT-07-Jul-2016 latest change by VT
-FL-24-Feb-2017
+FL-01-Mar-2017
 """
 
 from __future__ import absolute_import     # VT
@@ -378,7 +378,7 @@ def clear_postgres( clioinfra ):
     connection = psycopg2.connect( connection_string )
     cursor = connection.cursor()
 
-    sql = "TRUNCATE %s;" % dbtable
+    sql = "TRUNCATE TABLE %s;" % dbtable
     logging.info( sql )
     
     cursor.execute( sql )
@@ -697,6 +697,8 @@ def filter_csv( csvdir, in_filename ):
     out_file.seek( 0)   # start of the stream
     #out_file.close()    # closed by caller!: closing discards memory buffer
     csv_file.close()
+    
+    logging.info( "%d lines written to csv file" % nline )
     
     if comment_length_max > COMMENT_LENGTH_MAX_DB:
         logging.info( "WARNING: comment_length_max: %d, length available %d" % ( comment_length_max, COMMENT_LENGTH_MAX_DB ) )
