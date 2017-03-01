@@ -20,6 +20,7 @@ from __future__ import absolute_import     # VT
 from __future__ import ( absolute_import, division, print_function, unicode_literals )
 from builtins import ( ascii, bytes, chr, dict, filter, hex, input, int, list, map, 
     next, object, oct, open, pow, range, round, super, str, zip )
+
   File "/home/dpe/rusrep/etl/xlsx2csv.py", line 240, in _convert
     writer = csv.writer(outfile, quoting=csv.QUOTE_MINIMAL, delimiter=self.options['delimiter'], lineterminator=self.options['lineterminator'])
 TypeError: argument 1 must have a "write" method
@@ -30,6 +31,7 @@ import datetime
 import json
 import logging
 import os
+import pandas as pd
 import psycopg2
 import psycopg2.extras
 import re
@@ -175,10 +177,11 @@ def documents_by_handle( clioinfra, handle_name, copy_local = False, to_csv = Fa
     settings = DataFilter( '' )
     papers = []
     ids = {}
-    kwargs = {              # for xlsx files
-        'delimiter' : '|', 
-        'lineterminator' : '\n'
-    }
+    
+    kwargs_xlsx2csv = { 'delimiter' : '|', 'lineterminator' : '\n' }
+    
+    sep = str(u'|').encode('utf-8')
+    kwargs_pandas   = { 'sep' : sep, 'line_terminator' : '\n' }
     
     if copy_local:
         download_dir = os.path.join( clioinfra.config[ 'tmppath' ], handle_name )
@@ -225,9 +228,11 @@ def documents_by_handle( clioinfra, handle_name, copy_local = False, to_csv = Fa
                         logging.info( "%s %s" % ( handle_name, root ) )
                         csvpath  = "%s/%s.csv" % ( download_dir, root )
                         logging.debug( "csvpath:  %s" % csvpath )
-                        #csvfile = open( csvpath, 'w+' )
-                        #xlsx2csv( filepath, csvfile, **kwargs )
-                        Xlsx2csv( filepath, **kwargs ).convert( csvpath )
+                        
+                        Xlsx2csv( filepath, **kwargs_xlsx2csv ).convert( csvpath )
+                        #data_xls = pd.read_excel( filepath, index_col = False )
+                        #data_xls.to_csv( csvpath, encoding = 'utf-8', index = False, **kwargs_pandas )
+                        
                         if remove_xlsx and ext == ".xlsx":
                             os.remove( filepath )   # keep the csv, remove the xlsx
                 
@@ -797,6 +802,7 @@ if __name__ == "__main__":
         "hdl_errhs_population", 
         "hdl_errhs_services" 
     ]
+    
     #handle_names = [ "hdl_errhs_agriculture" ]
     
     if DO_RETRIEVE:
