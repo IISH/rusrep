@@ -3,7 +3,7 @@
 # VT-07-Jul-2016 latest change by VT
 # FL-12-Dec-2016 use datatype in function documentation()
 # FL-20-Jan-2017 utf8 encoding
-# FL-24-Feb-2017 
+# FL-03-Mar-2017 
 
 from __future__ import absolute_import      # VT
 """
@@ -14,8 +14,8 @@ from builtins import ( ascii, bytes, chr, dict, filter, hex, input, int, list, m
 """
 
 import sys
-reload(sys)  
-sys.setdefaultencoding('utf8')
+reload( sys )
+sys.setdefaultencoding( "utf8" )
 
 import collections
 import ConfigParser
@@ -855,7 +855,7 @@ def export():
         if ikey in settings.config:
             exportkeys[ ikey ] = settings.config[ ikey ]
     result = json.dumps( exportkeys, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
-    return Response( result,  mimetype = 'application/json; charset=utf-8' )
+    return Response( result, mimetype = 'application/json; charset=utf-8' )
 
 
 
@@ -864,7 +864,7 @@ def topics():
     logging.debug( "topics()" )
     cursor = connect()
     data = load_topics( cursor )
-    return Response( data,  mimetype = 'application/json; charset=utf-8' )
+    return Response( data, mimetype = 'application/json; charset=utf-8' )
 
 
 
@@ -897,6 +897,11 @@ def getvocabulary():
 @app.route( '/aggregation', methods = ['POST', 'GET' ] )
 def aggregation():
     logging.debug( "aggregation()" )
+    
+    python_vertuple = sys.version_info
+    python_version = str( python_vertuple[ 0 ] ) + '.' + str( python_vertuple[ 1 ] ) + '.' + str( python_vertuple[ 2 ] )
+    logging.info( "Python version: %s" % python_version  )
+    
     thisyear = ''
     
     try:
@@ -1279,7 +1284,7 @@ def aggr():
         final[ 'regions' ] = regions
         final[ 'data' ] = result
         
-        return Response( json.dumps( final ),  mimetype = 'application/json; charset=utf-8' )
+        return Response( json.dumps( final ), mimetype = 'application/json; charset=utf-8' )
 
 
 
@@ -1316,7 +1321,7 @@ def download():
             del item[ 'key' ]
             del item[ '_id' ]
             dataset = json.dumps( item, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
-            return Response( dataset,  mimetype = 'application/json; charset=utf-8' )
+            return Response( dataset, mimetype = 'application/json; charset=utf-8' )
     else:
         return 'Not found'
 
@@ -1410,7 +1415,7 @@ def documentation():
     for paper in papers:
         logging.debug( paper )
     
-    return Response( json.dumps( papers ),  mimetype = 'application/json; charset=utf-8' )
+    return Response( json.dumps( papers ), mimetype = 'application/json; charset=utf-8' )
 
 
 
@@ -1420,7 +1425,7 @@ def histclasses():
     #cursor = connect()
     #data = load_histclasses( cursor )
     data = load_vocabulary( 'historical' )
-    return Response( data,  mimetype = 'application/json; charset=utf-8' )
+    return Response( data, mimetype = 'application/json; charset=utf-8' )
 
 
 
@@ -1431,7 +1436,7 @@ def classes():
     #data = load_classes( cursor )
     data = load_vocabulary( 'modern' )
     
-    return Response( data,  mimetype = 'application/json; charset=utf-8' )
+    return Response( data, mimetype = 'application/json; charset=utf-8' )
 
 
 
@@ -1445,7 +1450,7 @@ def years():
         datatype = settings.datafilter[ 'datatype' ]
     data = load_years( cursor, datatype )
     
-    return Response( data,  mimetype = 'application/json; charset=utf-8' )
+    return Response( data, mimetype = 'application/json; charset=utf-8' )
 
 
 
@@ -1456,7 +1461,7 @@ def regions():
     #data = load_regions( cursor )
     data = load_vocabulary( "ERRHS_Vocabulary_regions" )
     
-    return Response( data,  mimetype = 'application/json; charset=utf-8' )
+    return Response( data, mimetype = 'application/json; charset=utf-8' )
 
 
 
@@ -1470,7 +1475,7 @@ def data():
     debug = 0
     data = load_data( cursor, year, datatype, region, debug )
     
-    return Response( data,  mimetype = 'application/json; charset=utf-8' )
+    return Response( data, mimetype = 'application/json; charset=utf-8' )
 
 
 
@@ -1490,7 +1495,7 @@ def translate():
         data = cursor.fetchall()
         json_data = json_generator( cursor, 'data', data )
         
-        return Response( json_data,  mimetype = 'application/json; charset=utf-8' )
+        return Response( json_data, mimetype = 'application/json; charset=utf-8' )
 
 
 
@@ -1526,7 +1531,7 @@ def login( settings = '' ):
 
         data = cursor.fetchall()
         json_data = datasetfilter( data, sql_names, classification )
-        return Response( json_data,  mimetype = 'application/json; charset=utf-8' )
+        return Response( json_data, mimetype = 'application/json; charset=utf-8' )
     else:
         return ''
 
@@ -1539,7 +1544,7 @@ def maps():
     donors_choose_url = "http://bl.ocks.org/mbostock/raw/4090846/us.json"
     response = urllib2.urlopen( donors_choose_url )
     json_response = json.load( response )
-    return Response( json_response,  mimetype = 'application/json; charset=utf-8' )
+    return Response( json_response, mimetype = 'application/json; charset=utf-8' )
 
 
 """
