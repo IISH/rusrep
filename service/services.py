@@ -1005,7 +1005,7 @@ def aggregation():
                         
                     for xkey in clear_path:
                         value = path[ xkey ]
-                        value = str(value)      # ≥5000 : \xe2\x89\xa55000 => u'\\u22655000
+                        value = str( value )    # ≥5000 : \xe2\x89\xa55000 => u'\\u22655000
                         # otherwise, it is not found in eng_data
                         
                         if value in eng_data:
@@ -1027,13 +1027,6 @@ def aggregation():
                         if not known_fields.has_key( xkey ):
                             known_fields[ xkey ] = value
                             sql[ 'condition' ] += "%s, " % xkey
-                        
-                        #if value in eng_data:
-                        #    value = str( eng_data[ value ] )
-                        #try:
-                        #    tmp_sql += " %s = '%s' AND " % ( xkey, value.decode( 'utf-8' ) )
-                        #except:
-                        #    tmp_sql += " %s = '%s' AND " % ( xkey, value )
                     
                     #tmp_sql += '1=1 ) '
                     #top_sql += tmp_sql + " OR "
@@ -1100,8 +1093,6 @@ def aggregation():
     sql_query += " %s" % sql[ "order_by" ]
 
     logging.debug( "sql_query: %s" % sql_query )
-    print( len( sql_query ) )
-    print( sql_query )
 
     if sql_query:
         cursor.execute( sql_query )

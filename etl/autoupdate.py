@@ -11,20 +11,15 @@ Notice: dpe/rusrep/etl contains a xlsx2csv.py copy;
 better use the curent version from PyPI
 
 VT-07-Jul-2016 latest change by VT
-FL-01-Mar-2017
+FL-03-Mar-2017 Py2/Py3 compatibility: using pandas instead of xlsx2csv to create csv files
+FL-03-Mar-2017 Py2/Py3 compatibility: using future-0.16.0
+FL-03-Mar-2017 latest change
 """
 
-from __future__ import absolute_import     # VT
-"""
 # future-0.16.0 imports for Python 2/3 compatibility
 from __future__ import ( absolute_import, division, print_function, unicode_literals )
 from builtins import ( ascii, bytes, chr, dict, filter, hex, input, int, list, map, 
     next, object, oct, open, pow, range, round, super, str, zip )
-
-  File "/home/dpe/rusrep/etl/xlsx2csv.py", line 240, in _convert
-    writer = csv.writer(outfile, quoting=csv.QUOTE_MINIMAL, delimiter=self.options['delimiter'], lineterminator=self.options['lineterminator'])
-TypeError: argument 1 must have a "write" method
-"""
 
 import ConfigParser
 import datetime
@@ -42,8 +37,9 @@ import simplejson
 import StringIO
 
 from pymongo import MongoClient
+from time import time
 from vocab import vocabulary, classupdate
-from xlsx2csv import Xlsx2csv
+#from xlsx2csv import Xlsx2csv
 
 #import collections
 #import ConfigParser
@@ -229,9 +225,9 @@ def documents_by_handle( clioinfra, handle_name, copy_local = False, to_csv = Fa
                         csvpath  = "%s/%s.csv" % ( download_dir, root )
                         logging.debug( "csvpath:  %s" % csvpath )
                         
-                        Xlsx2csv( filepath, **kwargs_xlsx2csv ).convert( csvpath )
-                        #data_xls = pd.read_excel( filepath, index_col = False )
-                        #data_xls.to_csv( csvpath, encoding = 'utf-8', index = False, **kwargs_pandas )
+                        #Xlsx2csv( filepath, **kwargs_xlsx2csv ).convert( csvpath )
+                        data_xls = pd.read_excel( filepath, index_col = False )
+                        data_xls.to_csv( csvpath, encoding = 'utf-8', index = False, **kwargs_pandas )
                         
                         if remove_xlsx and ext == ".xlsx":
                             os.remove( filepath )   # keep the csv, remove the xlsx
@@ -356,6 +352,45 @@ def retrieve_handle_docs( clioinfra, handle_name, copy_local = False, to_csv = F
 
 
 
+def row_count( clioinfra ):
+    logging.debug( "row_count()" )
+
+    configpath = RUSREP_CONFIG_PATH
+    if not os.path.isfile( configpath ):
+        print( "in %s" % __file__ )
+        print( "configpath %s FILE DOES NOT EXIST" % configpath )
+        print( "EXIT" )
+        sys.exit( 1 )
+    
+    logging.debug( "using configuration: %s" % configpath )
+
+    configparser = ConfigParser.RawConfigParser()
+    configparser.read( configpath )
+    
+    host     = configparser.get( 'config', 'dbhost' )
+    dbname   = configparser.get( 'config', 'dbname' )
+    dbtable  = configparser.get( 'config', 'dbtable' )
+    user     = configparser.get( 'config', 'dblogin' )
+    password = configparser.get( 'config', 'dbpassword' )
+    
+    connection_string = "host = '%s' dbname = '%s' user = '%s' password = '%s'" % ( host, dbname, user, password )
+    logging.debug( "connection_string: %s" % connection_string )
+    connection = psycopg2.connect( connection_string )
+    
+    cursor = connection.cursor()
+    sql = "SELECT COUNT(*) FROM %s;" % dbtable
+    logging.info( sql )
+    cursor.execute( sql )
+    data = cursor.fetchall()
+    count = data[0][0]
+    logging.info( "row count: %d" % count )
+    
+    connection.commit()
+    cursor.close()
+    connection.close()
+
+
+
 def clear_postgres( clioinfra ):
     logging.info( "clear_postgres()" )
 
@@ -385,10 +420,9 @@ def clear_postgres( clioinfra ):
 
     sql = "TRUNCATE TABLE %s;" % dbtable
     logging.info( sql )
-    
     cursor.execute( sql )
-    connection.commit()
     
+    connection.commit()
     cursor.close()
     connection.close()
 
@@ -445,7 +479,6 @@ def store_handle_docs( clioinfra, handle_name ):
             
             stringio_file = filter_csv( csvdir, filename )
             cursor.copy_from( stringio_file, dbtable, sep = '|' )
-            connection.commit()
             
             #csv_strings.close()  # close object and discard memory buffer
             #csvfile.close()
@@ -458,6 +491,8 @@ def store_handle_docs( clioinfra, handle_name ):
     
     ndoc = len( dirlist )
     logging.info( "%d documents for handle %s stored in table %s" % ( ndoc, handle_name, dbtable ) )
+    
+    connection.commit()
     cursor.close()
     connection.close()
 
@@ -481,6 +516,7 @@ def test_csv_file( path_name ):
 def filter_csv( csvdir, in_filename ):
     logging.debug( "filter_csv()" )
     
+    # dataverse column names
     dv_column_names = [
         "id", 
         "territory", 
@@ -522,10 +558,12 @@ def filter_csv( csvdir, in_filename ):
         "base_year"
     ]
     
+    # some extra columns in postgres table
     pg_column_names = list( dv_column_names )
     pg_column_names.insert( 0, "indicator_id" ) # pre-pended for postgres table
     pg_column_names.append( "indicator" )       # appended for for postgres table
     pg_column_names.append( "valuemark" )       # appended for for postgres table
+    pg_column_names.append( "timestamp" )       # appended for for postgres table
     
     ncolumns_dv = len( dv_column_names )
     logging.debug( "# of dv_columns: %d" % ncolumns_dv )
@@ -561,7 +599,10 @@ def filter_csv( csvdir, in_filename ):
         if nline == 1:
             line_header = line
             nfields_header = len( fields )              # nfields of header line
-            csv_header_names = map( str.lower, fields )
+            
+            # need a list as result, otherwise error in comparison below: 
+            # TypeError: 'itertools.imap' object has no attribute '__getitem__'
+            csv_header_names = list( map( str.lower, fields ) )
             logging.debug( "# of csv header fields: %d" % nfields_header )
             ndiff = nfields_header - ncolumns_dv
             #logging.info( "ndiff: %d" % ndiff )
@@ -669,9 +710,9 @@ def filter_csv( csvdir, in_filename ):
             pass
         
         #print( 1, "|".join( fields ) )
-        fields.append( "0" )
+        fields.append( "0" )                # indicator field, not in csv file
         #print( 2, "|".join( fields ) )
-        fields.append( "false" )
+        fields.append( "false" )            # valuemark field, not in csv file
         #print( 3, "|".join( fields ) )
         
         """
@@ -681,8 +722,10 @@ def filter_csv( csvdir, in_filename ):
             fields[ valuemark_idx ] = "false"
         """
         
+        fields.append( "now()" )            # timestamp field, not in csv file
+        
         # column indicator_id should become the primairy key
-        fields.insert( 0, "0" )     # prepend indicator_id, not in csv file
+        fields.insert( 0, "0" )             # prepend indicator_id field, not in csv file
         #print( "|".join( fields ) )
         
         table_line = "|".join( fields )
@@ -747,6 +790,22 @@ def clear_mongo( mongo_client ):
 
 
 
+def format_secs( seconds ):
+    nmin, nsec  = divmod( seconds, 60 )
+    nhour, nmin = divmod( nmin, 60 )
+
+    if nhour > 0:
+        str_elapsed = "%d:%02d:%02d (hh:mm:ss)" % ( nhour, nmin, nsec )
+    else:
+        if nmin > 0:
+            str_elapsed = "%02d:%02d (mm:ss)" % ( nmin, nsec )
+        else:
+            str_elapsed = "%d (sec)" % nsec
+
+    return str_elapsed
+
+
+
 if __name__ == "__main__":
     log_file = True
     
@@ -772,8 +831,13 @@ if __name__ == "__main__":
     logging.basicConfig( filename = logging_filename, filemode = 'w', level = log_level )
     #logging.basicConfig( level = log_level )
     
+    time0 = time()      # seconds since the epoch
     logging.info( "start: %s" % datetime.datetime.now() )
     logging.info( __file__ )
+    
+    python_vertuple = sys.version_info
+    python_version = str( python_vertuple[ 0 ] ) + '.' + str( python_vertuple[ 1 ] ) + '.' + str( python_vertuple[ 2 ] )
+    logging.info( "Python version: %s" % python_version  )
     
     CLIOINFRA_CONFIG_PATH = os.environ[ "CLIOINFRA_CONFIG_PATH" ]
     logging.info( "CLIOINFRA_CONFIG_PATH: %s" % CLIOINFRA_CONFIG_PATH )
@@ -792,7 +856,7 @@ if __name__ == "__main__":
         # they are processed on the fly, and put in MongoDB
         copy_local  = True      # to inspect
         update_vocabularies( clioinfra, mongo_client, copy_local )
-    
+    #"""
     handle_names = [ 
         "hdl_errhs_agriculture", 
         "hdl_errhs_capital", 
@@ -802,7 +866,7 @@ if __name__ == "__main__":
         "hdl_errhs_population", 
         "hdl_errhs_services" 
     ]
-    
+    #"""
     #handle_names = [ "hdl_errhs_agriculture" ]
     
     if DO_RETRIEVE:
@@ -813,13 +877,18 @@ if __name__ == "__main__":
             retrieve_handle_docs( clioinfra, handle_name, copy_local, to_csv, remove_xlsx ) # dataverse  => local_disk
     
     if DO_POSTGRES:
+        row_count( clioinfra )
         clear_postgres( clioinfra )
+        row_count( clioinfra )
         for handle_name in handle_names:
             store_handle_docs( clioinfra, handle_name )                 # local_disk => postgresql
-    
+        row_count( clioinfra )
+        
     if DO_MONGODB:
         update_handle_docs( clioinfra, mongo_client )                   # postgresql => mongodb
     
     logging.info( "stop: %s" % datetime.datetime.now() )
+    str_elapsed = format_secs( time() - time0 )
+    logging.info( "processing took %s" % str_elapsed )
 
 # [eof]
