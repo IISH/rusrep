@@ -528,6 +528,7 @@ def store_handle_docs( clioinfra, handle_name ):
             #csvfile.close()
             
             # debug strange record duplications
+            connection.commit()
             row_count( clioinfra )
             
         else:
@@ -793,7 +794,7 @@ def filter_csv( csv_dir, in_filename ):
     #out_file.close()    # closed by caller!: closing discards memory buffer
     csv_file.close()
     
-    logging.info( "lines written to csv file: %d" % (nline - nskipped) )
+    logging.info( "lines written to csv file: %d (including header line)" % (nline - nskipped) )
     
     if comment_length_max > COMMENT_LENGTH_MAX_DB:
         logging.info( "WARNING: comment_length_max: %d, length available %d" % ( comment_length_max, COMMENT_LENGTH_MAX_DB ) )
