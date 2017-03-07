@@ -13,7 +13,7 @@ better use the curent version from PyPI
 VT-07-Jul-2016 latest change by VT
 FL-03-Mar-2017 Py2/Py3 compatibility: using pandas instead of xlsx2csv to create csv files
 FL-03-Mar-2017 Py2/Py3 compatibility: using future-0.16.0
-FL-03-Mar-2017 latest change
+FL-07-Mar-2017 latest change
 """
 
 # future-0.16.0 imports for Python 2/3 compatibility
@@ -33,11 +33,12 @@ import re
 import sys
 import urllib
 import urllib2
+import shutil
 import simplejson
 import StringIO
 
 from pymongo import MongoClient
-from time import time
+from time import ctime, time
 from vocab import vocabulary, classupdate
 #from xlsx2csv import Xlsx2csv
 
@@ -152,7 +153,37 @@ def alldatasets(clioinfra, copy_local):
 """
 
 
-def documents_by_handle( clioinfra, handle_name, copy_local = False, to_csv = False, remove_xlsx = True ):
+
+def empty_dir( dst_dir ):
+    logging.info( "empty_dir() %s" % dst_dir )
+    
+    for root, sdirs, files in os.walk( dst_dir ):
+        logging.info( "root:  %s" % str( root ) )
+        logging.info( "sdirs: %s" % str( sdirs ) )
+        logging.info( "files: %s" % str( files ) )
+        
+        for f in files:
+            file_path = os.path.join( root, f )
+            mtime = os.path.getmtime( file_path )
+            timestamp = ctime( mtime )
+            logging.info( "removing file: (created: %s) %s" % ( timestamp, file_path ) )
+            #os.unlink( file_path )
+        
+        for d in sdirs:
+            dir_path = os.path.join( root, d )
+            mtime = os.path.getmtime( dir_path )
+            timestamp = ctime( mtime )
+            logging.info( "removing dir: (created: %s) %s" % ( timestamp, dir_path ) )
+            #shutil.rmtree( dir_path )
+        
+        mtime = os.path.getmtime( root )
+        timestamp = ctime( mtime )
+        logging.info( "removing root: (created: %s) %s" % ( timestamp, root ) )
+        #shutil.rmtree( root )
+
+
+
+def documents_by_handle( clioinfra, handle_name, dst_dir, copy_local = False, to_csv = False, remove_xlsx = True ):
     logging.info( "documents_by_handle() copy_local: %s, to_csv: %s" % ( copy_local, to_csv ) )
     logging.debug( "handle_name: %s" % handle_name )
     
@@ -180,10 +211,15 @@ def documents_by_handle( clioinfra, handle_name, copy_local = False, to_csv = Fa
     kwargs_pandas   = { 'sep' : sep, 'line_terminator' : '\n' }
     
     if copy_local:
-        download_dir = os.path.join( clioinfra.config[ 'tmppath' ], handle_name )
+        download_dir = os.path.join( clioinfra.config[ 'tmppath' ], dst_dir, handle_name )
         logging.info( "downloading dataverse files to: %s" % download_dir )
-        if not os.path.exists( download_dir ):
-            os.makedirs( download_dir )
+        if os.path.exists( download_dir ):
+            empty_dir( download_dir )           # remove previous files
+    
+    if dst_dir == "xlsx":
+        csv_dir = os.path.join( clioinfra.config[ 'tmppath' ], "csv", handle_name )
+        if os.path.exists( csv_dir ):
+            empty_dir( csv_dir )                # remove previous files
     
     for item in dataverse.get_contents():
         # item dict keys: protocol, authority, persistentUrl, identifier, type, id
@@ -198,10 +234,12 @@ def documents_by_handle( clioinfra, handle_name, copy_local = False, to_csv = Fa
             url = "https://" + str( host ) + "/api/datasets/" + str( datasetid ) + "/?&key=" + str( clioinfra.config[ 'ristatkey' ] )
             dataframe = loadjson( url )
             
-            for files in dataframe[ 'data' ][ 'latestVersion' ][ 'files' ]:
+            files = dataframe[ 'data' ][ 'latestVersion' ][ 'files' ]
+            logging.info( "number of files: %d" % len( files ) )
+            for dvfile in files:
                 paperitem = {}
-                paperitem[ 'id' ]   = str( files[ 'datafile' ][ 'id' ] )
-                paperitem[ 'name' ] = str( files[ 'datafile' ][ 'name' ] )
+                paperitem[ 'id' ]   = str( dvfile[ 'datafile' ][ 'id' ] )
+                paperitem[ 'name' ] = str( dvfile[ 'datafile' ][ 'name' ] )
                 ids[ paperitem[ 'id'] ] = paperitem[ 'name' ]
                 paperitem[ 'handle' ] = handle
                 paperitem[ 'url' ] = "http://data.sandbox.socialhistoryservices.org/service/download?id=%s" % paperitem[ 'id' ]
@@ -209,6 +247,9 @@ def documents_by_handle( clioinfra, handle_name, copy_local = False, to_csv = Fa
                 logging.debug( url )
                 
                 if copy_local:
+                    if not os.path.exists( download_dir ):
+                        os.makedirs( download_dir )
+            
                     filename = paperitem[ 'name' ]
                     filepath = "%s/%s" % ( download_dir, filename )
                     logging.debug( "filepath: %s" % filepath )
@@ -217,17 +258,22 @@ def documents_by_handle( clioinfra, handle_name, copy_local = False, to_csv = Fa
                     filein = urllib.urlopen( url )
                     fileout = open( filepath, 'wb' )
                     fileout.write( filein.read() )
+                    fileout.flush()
+                    os.fsync( fileout )
                     fileout.close()
                     
                     if to_csv:
+                        if not os.path.exists( csv_dir ):
+                            os.makedirs( csv_dir )
+                        
                         root, ext = os.path.splitext( filename )
                         logging.info( "%s %s" % ( handle_name, root ) )
-                        csvpath  = "%s/%s.csv" % ( download_dir, root )
-                        logging.debug( "csvpath:  %s" % csvpath )
+                        csv_path  = "%s/%s.csv" % ( csv_dir, root )
+                        logging.debug( "csv_path:  %s" % csv_path )
                         
-                        #Xlsx2csv( filepath, **kwargs_xlsx2csv ).convert( csvpath )
+                        #Xlsx2csv( filepath, **kwargs_xlsx2csv ).convert( csv_path )
                         data_xls = pd.read_excel( filepath, index_col = False )
-                        data_xls.to_csv( csvpath, encoding = 'utf-8', index = False, **kwargs_pandas )
+                        data_xls.to_csv( csv_path, encoding = 'utf-8', index = False, **kwargs_pandas )
                         
                         if remove_xlsx and ext == ".xlsx":
                             os.remove( filepath )   # keep the csv, remove the xlsx
@@ -269,7 +315,7 @@ def update_vocabularies( clioinfra, mongo_client, copy_local = False, to_csv = F
     
     handle_name = "hdl_vocabularies"
     logging.info( "retrieving documents from dataverse for handle name %s ..." % handle_name )
-    ( docs, ids ) = documents_by_handle( clioinfra, handle_name, copy_local, remove_xlsx )
+    ( docs, ids ) = documents_by_handle( clioinfra, handle_name, "tab", copy_local, remove_xlsx )
     ndoc =  len( docs )
     logging.info( "%d documents retrieved from dataverse" % ndoc )
     if ndoc == 0:
@@ -334,7 +380,7 @@ def retrieve_handle_docs( clioinfra, handle_name, copy_local = False, to_csv = F
     logging.info( "\nretrieve_handle_docs() copy_local: %s" % copy_local )
 
     logging.info( "retrieving documents from dataverse for handle name %s ..." % handle_name )
-    ( docs, ids ) = documents_by_handle( clioinfra, handle_name, copy_local, to_csv, remove_xlsx )
+    ( docs, ids ) = documents_by_handle( clioinfra, handle_name, "xlsx", copy_local, to_csv, remove_xlsx )
     ndoc =  len( docs )
     if ndoc == 0:
         logging.info( "no documents retrieved." )
@@ -431,14 +477,12 @@ def clear_postgres( clioinfra ):
 def store_handle_docs( clioinfra, handle_name ):
     logging.info( "store_handle_docs() %s" % handle_name )
     
-    csvdir = os.path.join( clioinfra.config[ 'tmppath' ], handle_name )
-    if not os.path.isdir( csvdir ):
-        print( "in %s" % __file__ )
-        print( "csvdir %s DIRECTORY DOES NOT EXIST" % csvdir )
-        print( "EXIT" )
-        sys.exit( 1 )
+    csv_dir  = os.path.join( clioinfra.config[ 'tmppath' ], "csv", handle_name )
+    dir_list = []
+    if os.path.isdir( csv_dir ):
+        dir_list = os.listdir( csv_dir )
     
-    logging.info( "using csv directory: %s" % csvdir )
+    logging.info( "using csv directory: %s" % csv_dir )
 
     configpath = RUSREP_CONFIG_PATH
     if not os.path.isfile( configpath ):
@@ -464,20 +508,19 @@ def store_handle_docs( clioinfra, handle_name ):
     connection = psycopg2.connect( connection_string )
     cursor = connection.cursor()
 
-    dirlist = os.listdir( csvdir ) 
-    for filename in dirlist:
+    for filename in dir_list:
         root, ext = os.path.splitext( filename )
         if root.startswith( "ERRHS_" ) and ext == ".csv":
             logging.info( "use: %s, to table: %s" % ( filename, dbtable ) )
-            in_pathname = os.path.abspath( os.path.join( csvdir, filename ) )
+            in_pathname = os.path.abspath( os.path.join( csv_dir, filename ) )
             logging.debug( in_pathname )
             #test_csv_file( pathname )
             
-            #out_pathname = write_psv_file( csvdir, filename )
+            #out_pathname = write_psv_file( csv_dir, filename )
             #psv_file = open( out_pathname, 'r' )
             #cursor.copy_from( psv_file, dbtable, sep ='|' )
             
-            stringio_file = filter_csv( csvdir, filename )
+            stringio_file = filter_csv( csv_dir, filename )
             cursor.copy_from( stringio_file, dbtable, sep = '|' )
             
             #csv_strings.close()  # close object and discard memory buffer
@@ -489,7 +532,7 @@ def store_handle_docs( clioinfra, handle_name ):
         #print( "break" )
         #break
     
-    ndoc = len( dirlist )
+    ndoc = len( dir_list )
     logging.info( "%d documents for handle %s stored in table %s" % ( ndoc, handle_name, dbtable ) )
     
     connection.commit()
@@ -513,7 +556,7 @@ def test_csv_file( path_name ):
 
 
 
-def filter_csv( csvdir, in_filename ):
+def filter_csv( csv_dir, in_filename ):
     logging.debug( "filter_csv()" )
     
     # dataverse column names
@@ -568,12 +611,12 @@ def filter_csv( csvdir, in_filename ):
     ncolumns_dv = len( dv_column_names )
     logging.debug( "# of dv_columns: %d" % ncolumns_dv )
     
-    in_pathname = os.path.abspath( os.path.join( csvdir, in_filename ) )
+    in_pathname = os.path.abspath( os.path.join( csv_dir, in_filename ) )
     csv_file = open( in_pathname, 'r')
     
     """
     root, ext = os.path.splitext( in_filename )
-    out_pathname = os.path.abspath( os.path.join( csvdir, root + ".psv" ) )
+    out_pathname = os.path.abspath( os.path.join( csv_dir, root + ".psv" ) )
     print( out_pathname )
     out_file = open( out_pathname, 'w' )
     """
@@ -858,13 +901,13 @@ if __name__ == "__main__":
         update_vocabularies( clioinfra, mongo_client, copy_local )
     #"""
     handle_names = [ 
-        "hdl_errhs_agriculture", 
-        "hdl_errhs_capital", 
-        "hdl_errhs_industry", 
-        "hdl_errhs_labour", 
-        "hdl_errhs_land", 
-        "hdl_errhs_population", 
-        "hdl_errhs_services" 
+        "hdl_errhs_agriculture",    # ERRHS_4   9 files
+        "hdl_errhs_capital",        # 
+        "hdl_errhs_industry",       # 
+        "hdl_errhs_labour",         # 
+        "hdl_errhs_land",           # ERRHS_7
+        "hdl_errhs_population",     # ERRHS_1
+        "hdl_errhs_services"        # 
     ]
     #"""
     #handle_names = [ "hdl_errhs_agriculture" ]
@@ -872,7 +915,7 @@ if __name__ == "__main__":
     if DO_RETRIEVE:
         copy_local  = True
         to_csv      = True
-        remove_xlsx = True
+        remove_xlsx = False
         for handle_name in handle_names:
             retrieve_handle_docs( clioinfra, handle_name, copy_local, to_csv, remove_xlsx ) # dataverse  => local_disk
     
@@ -882,7 +925,7 @@ if __name__ == "__main__":
         row_count( clioinfra )
         for handle_name in handle_names:
             store_handle_docs( clioinfra, handle_name )                 # local_disk => postgresql
-        row_count( clioinfra )
+            row_count( clioinfra )
         
     if DO_MONGODB:
         update_handle_docs( clioinfra, mongo_client )                   # postgresql => mongodb
