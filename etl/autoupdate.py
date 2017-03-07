@@ -156,30 +156,31 @@ def alldatasets(clioinfra, copy_local):
 
 def empty_dir( dst_dir ):
     logging.info( "empty_dir() %s" % dst_dir )
+    logging.info( "removing previous downloads" )
     
     for root, sdirs, files in os.walk( dst_dir ):
-        logging.info( "root:  %s" % str( root ) )
-        logging.info( "sdirs: %s" % str( sdirs ) )
-        logging.info( "files: %s" % str( files ) )
+        #logging.info( "root:  %s" % str( root ) )
+        #logging.info( "sdirs: %s" % str( sdirs ) )
+        #logging.info( "files: %s" % str( files ) )
         
         for f in files:
             file_path = os.path.join( root, f )
             mtime = os.path.getmtime( file_path )
             timestamp = ctime( mtime )
             logging.info( "removing file: (created: %s) %s" % ( timestamp, file_path ) )
-            #os.unlink( file_path )
+            os.unlink( file_path )
         
         for d in sdirs:
             dir_path = os.path.join( root, d )
             mtime = os.path.getmtime( dir_path )
             timestamp = ctime( mtime )
             logging.info( "removing dir: (created: %s) %s" % ( timestamp, dir_path ) )
-            #shutil.rmtree( dir_path )
+            shutil.rmtree( dir_path )
         
         mtime = os.path.getmtime( root )
         timestamp = ctime( mtime )
         logging.info( "removing root: (created: %s) %s" % ( timestamp, root ) )
-        #shutil.rmtree( root )
+        shutil.rmtree( root )
 
 
 
@@ -526,6 +527,9 @@ def store_handle_docs( clioinfra, handle_name ):
             #csv_strings.close()  # close object and discard memory buffer
             #csvfile.close()
             
+            # debug strange record duplications
+            row_count( clioinfra )
+            
         else:
             logging.info( "skip: %s" % filename )
 
@@ -634,7 +638,7 @@ def filter_csv( csv_dir, in_filename ):
         #logging.info( "%d in: %s" % ( nline, line ) )
         #print( "# new lines: %d" % line.count( '\n' ) )
         
-        if len( line ) == line.count( '|' ):
+        if len( line ) == line.count( '|' ):    # only separators, no data
             nskipped += 1
             continue
         
@@ -789,13 +793,13 @@ def filter_csv( csv_dir, in_filename ):
     #out_file.close()    # closed by caller!: closing discards memory buffer
     csv_file.close()
     
-    logging.info( "%d lines written to csv file" % nline )
+    logging.info( "lines written to csv file: %d" % (nline - nskipped) )
     
     if comment_length_max > COMMENT_LENGTH_MAX_DB:
         logging.info( "WARNING: comment_length_max: %d, length available %d" % ( comment_length_max, COMMENT_LENGTH_MAX_DB ) )
     
     if nskipped != 0:
-        logging.info( "%d empty lines (|-only) skipped" % nskipped )
+        logging.info( "empty lines (|-only) skipped: %d" % nskipped )
     
     #return out_pathname
     return out_file
