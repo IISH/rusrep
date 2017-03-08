@@ -777,6 +777,7 @@ def filter_csv( csv_dir, in_filename ):
         #print( "|".join( fields ) )
         
         table_line = "|".join( fields )
+        logging.info( "fields in table record: %d" % len( fields ))
         """
         if nline == 2:
             print( "%d fields" % len( fields ) )
