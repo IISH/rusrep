@@ -13,7 +13,7 @@ better use the curent version from PyPI
 VT-07-Jul-2016 latest change by VT
 FL-03-Mar-2017 Py2/Py3 compatibility: using pandas instead of xlsx2csv to create csv files
 FL-03-Mar-2017 Py2/Py3 compatibility: using future-0.16.0
-FL-07-Mar-2017 latest change
+FL-10-Mar-2017 latest change
 """
 
 # future-0.16.0 imports for Python 2/3 compatibility
@@ -23,6 +23,7 @@ from builtins import ( ascii, bytes, chr, dict, filter, hex, input, int, list, m
 
 import ConfigParser
 import datetime
+import getpass
 import json
 import logging
 import os
@@ -163,24 +164,40 @@ def empty_dir( dst_dir ):
         #logging.info( "sdirs: %s" % str( sdirs ) )
         #logging.info( "files: %s" % str( files ) )
         
-        for f in files:
-            file_path = os.path.join( root, f )
-            mtime = os.path.getmtime( file_path )
-            timestamp = ctime( mtime )
-            logging.info( "removing file: (created: %s) %s" % ( timestamp, file_path ) )
-            os.unlink( file_path )
+        for fname in files:
+            file_path = os.path.join( root, fname )
+            # only delete files we recognize
+            if fname.startswith( "ERRHS_" ):
+                mtime = os.path.getmtime( file_path )
+                timestamp = ctime( mtime )
+                logging.info( "removing file: (created: %s) %s" % ( timestamp, file_path ) )
+                try:
+                    os.unlink( file_path )
+                except:
+                    type, value, tb = sys.exc_info()
+                    logging.error( "%s" % value )
         
-        for d in sdirs:
-            dir_path = os.path.join( root, d )
-            mtime = os.path.getmtime( dir_path )
-            timestamp = ctime( mtime )
-            logging.info( "removing dir: (created: %s) %s" % ( timestamp, dir_path ) )
-            shutil.rmtree( dir_path )
+        for dname in sdirs:
+            # only delete dirs we recognize
+            if dname.startswith( "hdl_" ):
+                dir_path = os.path.join( root, dname )
+                mtime = os.path.getmtime( dir_path )
+                timestamp = ctime( mtime )
+                logging.info( "removing dir: (created: %s) %s" % ( timestamp, dir_path ) )
+                try:
+                    shutil.rmtree( dir_path )
+                except:
+                    type, value, tb = sys.exc_info()
+                    logging.error( "%s" % value )
         
         mtime = os.path.getmtime( root )
         timestamp = ctime( mtime )
         logging.info( "removing root: (created: %s) %s" % ( timestamp, root ) )
-        shutil.rmtree( root )
+        try:
+            shutil.rmtree( root )
+        except:
+            type, value, tb = sys.exc_info()
+            logging.error( "%s" % value )
 
 
 
@@ -232,7 +249,11 @@ def documents_by_handle( clioinfra, handle_name, dst_dir, copy_local = False, to
         if handle == clio_handle:
             logging.info( "handle_name: %s, using handle: %s" % ( handle_name, handle ) )
             datasetid = item[ 'id' ]
-            url = "https://" + str( host ) + "/api/datasets/" + str( datasetid ) + "/?&key=" + str( clioinfra.config[ 'ristatkey' ] )
+            url  = "https://" + str( host ) + "/api/datasets/" + str( datasetid )
+            #url += "/?&key=" + str( clioinfra.config[ 'ristatkey' ] )
+            url += "?key=" + str( clioinfra.config[ 'ristatkey' ] )
+            url += "&format=original"
+            
             dataframe = loadjson( url )
             
             files = dataframe[ 'data' ][ 'latestVersion' ][ 'files' ]
@@ -777,7 +798,7 @@ def filter_csv( csv_dir, in_filename ):
         #print( "|".join( fields ) )
         
         table_line = "|".join( fields )
-        logging.info( "fields in table record: %d" % len( fields ))
+        logging.debug( "fields in table record: %d" % len( fields ))
         """
         if nline == 2:
             print( "%d fields" % len( fields ) )
@@ -882,6 +903,7 @@ if __name__ == "__main__":
     
     time0 = time()      # seconds since the epoch
     logging.info( "start: %s" % datetime.datetime.now() )
+    logging.info( "user: %s" % getpass.getuser() )
     logging.info( __file__ )
     
     python_vertuple = sys.version_info
