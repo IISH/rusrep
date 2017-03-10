@@ -1330,10 +1330,18 @@ def download():
 @app.route( '/documentation' )
 def documentation():
     logging.debug( "documentation()" )
-    cursor = connect()
+    #cursor = connect()
+    
+    # TODO should be read from config
+    host = "datasets.socialhistory.org"     # with slava pythons
+    #host = "data.socialhistory.org"        # virtualenv python273
+    logging.debug( "host: %s" % host )
+    
     clioinfra = Configuration()
-    host = "datasets.socialhistory.org"
-    connection = Connection( host, clioinfra.config[ 'ristatkey' ] )
+    ristatkey = clioinfra.config[ "ristatkey" ]
+    logging.debug( "ristatkey: %s" % ristatkey )
+    
+    connection = Connection( host, ristatkey )
     dataverse = connection.get_dataverse( 'RISTAT' )
     settings = DataFilter( request.args )
     papers = []
