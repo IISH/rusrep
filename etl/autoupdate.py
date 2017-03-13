@@ -13,7 +13,7 @@ better use the curent version from PyPI
 VT-07-Jul-2016 latest change by VT
 FL-03-Mar-2017 Py2/Py3 compatibility: using pandas instead of xlsx2csv to create csv files
 FL-03-Mar-2017 Py2/Py3 compatibility: using future-0.16.0
-FL-10-Mar-2017 latest change
+FL-13-Mar-2017 latest change
 """
 
 # future-0.16.0 imports for Python 2/3 compatibility
@@ -69,6 +69,8 @@ from service.configutils import Configuration, DataFilter
 
 # column comment_source of postgresql table russianrepository of db ristat
 COMMENT_LENGTH_MAX_DB = 4096
+# primary key for russianrepository table
+pkey = None
 
 
 def loadjson( apiurl ):
@@ -164,6 +166,8 @@ def empty_dir( dst_dir ):
         #logging.info( "sdirs: %s" % str( sdirs ) )
         #logging.info( "files: %s" % str( files ) )
         
+        if files is not None:
+            files.sort()
         for fname in files:
             file_path = os.path.join( root, fname )
             # only delete files we recognize
@@ -177,6 +181,8 @@ def empty_dir( dst_dir ):
                     type, value, tb = sys.exc_info()
                     logging.error( "%s" % value )
         
+        if sdirs is not None:
+            sdirs.sort()
         for dname in sdirs:
             # only delete dirs we recognize
             if dname.startswith( "hdl_" ):
@@ -497,7 +503,7 @@ def clear_postgres( clioinfra ):
 
 
 def store_handle_docs( clioinfra, handle_name ):
-    logging.info( "store_handle_docs() %s" % handle_name )
+    logging.info( "\nstore_handle_docs() %s" % handle_name )
     
     csv_dir  = os.path.join( clioinfra.config[ 'tmppath' ], "csv", handle_name )
     dir_list = []
@@ -583,6 +589,7 @@ def test_csv_file( path_name ):
 
 
 def filter_csv( csv_dir, in_filename ):
+    global pkey
     logging.debug( "filter_csv()" )
     
     # dataverse column names
@@ -629,10 +636,13 @@ def filter_csv( csv_dir, in_filename ):
     
     # some extra columns in postgres table
     pg_column_names = list( dv_column_names )
-    pg_column_names.insert( 0, "indicator_id" ) # pre-pended for postgres table
+    # FL-13-Mar-2017: dropped column "indicator_id"
+    #pg_column_names.insert( 0, "indicator_id" ) # pre-pended for postgres table
     pg_column_names.append( "indicator" )       # appended for for postgres table
     pg_column_names.append( "valuemark" )       # appended for for postgres table
     pg_column_names.append( "timestamp" )       # appended for for postgres table
+    # FL-13-Mar-2017: added primary key (after "timestamp")
+    pg_column_names.append( "pk" )              # appended for for postgres table
     
     ncolumns_dv = len( dv_column_names )
     logging.debug( "# of dv_columns: %d" % ncolumns_dv )
@@ -677,12 +687,21 @@ def filter_csv( csv_dir, in_filename ):
             #logging.info( "ndiff: %d" % ndiff )
             
             # header names must match predefined dv_column_names
-            # (but after base_year there may be several empty columns)
+            # (but after base_year there may be several empty columns in the input)
             skip_file = False
+            if len( dv_column_names ) > len( csv_header_names ):
+                msg = "skipping bad file %s" % in_filename
+                logging.warning( msg ); print( msg )
+                msg = "wrong header structure: \n%s" % line_header
+                logging.warning( msg ); print( msg )
+                skip_file = True
+                break
             for i in range( ncolumns_dv ):
                 if dv_column_names[ i ] != csv_header_names[ i ]:
-                    logging.warning( "skipping bad file %s" % in_filename )
-                    logging.warning( "wrong header structure: \n%s" % line_header )
+                    msg = "skipping bad file %s" % in_filename
+                    logging.warning( msg ); print( msg )
+                    msg = "wrong header structure: \n%s" % line_header
+                    logging.warning( msg ); print( msg )
                     skip_file = True
                     break
             if skip_file:
@@ -694,10 +713,14 @@ def filter_csv( csv_dir, in_filename ):
             # So the (unordered) '. ' are easily recognizable in the RiStat requests
             nfields = len( fields )
             if nfields != nfields_header:
-                logging.warning( "skipping bad data line # %d" % nline )
-                logging.warning( "# of data fields (%d) does not match # of header fields (%d)" % (nfields, nfields_header ) )
-                logging.warning( "header: %s" % line_header )
-                logging.warning( "data: %s" % line )
+                msg = "skipping bad data line # %d" % nline
+                logging.warning( msg ); print( msg )
+                msg = "# of data fields (%d) does not match # of header fields (%d)" % ( nfields, nfields_header )
+                logging.warning( msg ); print( msg )
+                msg = "header: %s" % line_header
+                logging.warning( msg ); print( msg )
+                msg = "data: %s" % line
+                logging.warning( msg ); print( msg )
                 continue
             
             nzaphc = 0
@@ -736,15 +759,17 @@ def filter_csv( csv_dir, in_filename ):
             comment_length_max = max( comment_length_max, comment_length )
             if comment_length > COMMENT_LENGTH_MAX_DB:
                 fields[ omment_pos ] = ""   # because it is unicode we cannot just chop it
-                logging.warning( "too long comment in line:" )
-                logging.warning( line )
+                msg = "too long comment in line:"
+                logging.warning( msg );  print( msg )
+                logging.warning( line ); print( line )
             
             # check missing datatype
             datatype_pos = csv_header_names.index( "datatype" )
             datatype = fields[ datatype_pos ]
             if len( datatype ) == 0 or datatype == '.':
-                logging.warning( "missing datatype in line:" )
-                logging.warning( line )
+                msg = "missing datatype in line:"
+                logging.warning( msg );  print( msg )
+                logging.warning( line ); print( line )
             else:   # chop spurious decimals of stupid spreadsheets
                 fields[ datatype_pos ] = "%4.2f" % float( datatype )
             
@@ -794,7 +819,15 @@ def filter_csv( csv_dir, in_filename ):
         fields.append( "now()" )            # timestamp field, not in csv file
         
         # column indicator_id should become the primairy key
-        fields.insert( 0, "0" )             # prepend indicator_id field, not in csv file
+        # FL-13-Mar-2017: added primary key after "timestamp"
+        if pkey is None: 
+            pkey = 1
+        fields.append( str( pkey ) )        # global
+        pkey += 1
+        
+        # FL-13-Mar-2017: dropped column "indicator_id"
+        #fields.insert( 0, "0" )             # prepend indicator_id field, not in csv file
+        
         #print( "|".join( fields ) )
         
         table_line = "|".join( fields )
@@ -830,7 +863,7 @@ def filter_csv( csv_dir, in_filename ):
 
 
 def update_handle_docs( clioinfra, mongo_client ):
-    logging.info( "update_handle_docs()" )
+    logging.info( "\nupdate_handle_docs()" )
     
     configpath = RUSREP_CONFIG_PATH
     logging.info( "using configuration: %s" % configpath )
@@ -929,13 +962,13 @@ if __name__ == "__main__":
         update_vocabularies( clioinfra, mongo_client, copy_local )
     #"""
     handle_names = [ 
-        "hdl_errhs_agriculture",    # ERRHS_4   9 files
+        "hdl_errhs_population",     # ERRHS_1   39 files
         "hdl_errhs_capital",        # 
         "hdl_errhs_industry",       # 
+        "hdl_errhs_agriculture",    # ERRHS_4   10 files
         "hdl_errhs_labour",         # 
-        "hdl_errhs_land",           # ERRHS_7
-        "hdl_errhs_population",     # ERRHS_1
-        "hdl_errhs_services"        # 
+        "hdl_errhs_services",       # 
+        "hdl_errhs_land"            # ERRHS_7   10 files
     ]
     #"""
     #handle_names = [ "hdl_errhs_agriculture" ]
@@ -948,18 +981,24 @@ if __name__ == "__main__":
             retrieve_handle_docs( clioinfra, handle_name, copy_local, to_csv, remove_xlsx ) # dataverse  => local_disk
     
     if DO_POSTGRES:
+        logging.StreamHandler().flush()
         row_count( clioinfra )
         clear_postgres( clioinfra )
         row_count( clioinfra )
         for handle_name in handle_names:
             store_handle_docs( clioinfra, handle_name )                 # local_disk => postgresql
+            logging.StreamHandler().flush()
             row_count( clioinfra )
-        
+    
     if DO_MONGODB:
         update_handle_docs( clioinfra, mongo_client )                   # postgresql => mongodb
     
     logging.info( "stop: %s" % datetime.datetime.now() )
     str_elapsed = format_secs( time() - time0 )
     logging.info( "processing took %s" % str_elapsed )
-
+    
+    # This should be called at application exit,
+    # and no further use of the logging system should be made after this call.
+    logging.shutdown()
+    
 # [eof]
