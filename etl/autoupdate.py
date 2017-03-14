@@ -13,7 +13,7 @@ better use the curent version from PyPI
 VT-07-Jul-2016 latest change by VT
 FL-03-Mar-2017 Py2/Py3 compatibility: using pandas instead of xlsx2csv to create csv files
 FL-03-Mar-2017 Py2/Py3 compatibility: using future-0.16.0
-FL-13-Mar-2017 latest change
+FL-14-Mar-2017 latest change
 """
 
 # future-0.16.0 imports for Python 2/3 compatibility
@@ -211,8 +211,6 @@ def documents_by_handle( clioinfra, handle_name, dst_dir, copy_local = False, to
     logging.info( "documents_by_handle() copy_local: %s, to_csv: %s" % ( copy_local, to_csv ) )
     logging.debug( "handle_name: %s" % handle_name )
     
-    #cursor = connect()
-    
     host = "datasets.socialhistory.org"
     ristatkey = clioinfra.config[ 'ristatkey' ]
     logging.debug( "host: %s" % host )
@@ -405,7 +403,8 @@ def update_vocabularies( clioinfra, mongo_client, copy_local = False, to_csv = F
 
 
 def retrieve_handle_docs( clioinfra, handle_name, copy_local = False, to_csv = False, remove_xlsx = False ):
-    logging.info( "\nretrieve_handle_docs() copy_local: %s" % copy_local )
+    logging.info( "" )
+    logging.info( "retrieve_handle_docs() copy_local: %s" % copy_local )
 
     logging.info( "retrieving documents from dataverse for handle name %s ..." % handle_name )
     ( docs, ids ) = documents_by_handle( clioinfra, handle_name, "xlsx", copy_local, to_csv, remove_xlsx )
@@ -503,7 +502,8 @@ def clear_postgres( clioinfra ):
 
 
 def store_handle_docs( clioinfra, handle_name ):
-    logging.info( "\nstore_handle_docs() %s" % handle_name )
+    logging.info( "" )
+    logging.info( "store_handle_docs() %s" % handle_name )
     
     csv_dir  = os.path.join( clioinfra.config[ 'tmppath' ], "csv", handle_name )
     dir_list = []
@@ -863,7 +863,8 @@ def filter_csv( csv_dir, in_filename ):
 
 
 def update_handle_docs( clioinfra, mongo_client ):
-    logging.info( "\nupdate_handle_docs()" )
+    logging.info( "" )
+    logging.info( "update_handle_docs()" )
     
     configpath = RUSREP_CONFIG_PATH
     logging.info( "using configuration: %s" % configpath )
@@ -930,10 +931,14 @@ if __name__ == "__main__":
     DO_MONGODB    = True        # ERRHS data: postgresql => mongodb
     
     logging_filename = "autoupdate.log"
-    #logging.basicConfig( filename = logging_filename, filemode = 'w', level = log_level )
-    logging.basicConfig( filename = logging_filename, filemode = 'w', level = log_level )
-    #logging.basicConfig( level = log_level )
-    
+    #mode = 'w'
+    mode = 'a'      # debugging
+    logging.basicConfig( filename = logging_filename, filemode = mode, level = log_level )
+    # debugging:
+    logging.info( "" )
+    logging.info( "================================================================================" )
+    logging.info( "" )
+
     time0 = time()      # seconds since the epoch
     logging.info( "start: %s" % datetime.datetime.now() )
     logging.info( "user: %s" % getpass.getuser() )
