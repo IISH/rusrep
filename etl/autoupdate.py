@@ -758,7 +758,7 @@ def filter_csv( csv_dir, in_filename ):
             comment_length = len( comment )
             comment_length_max = max( comment_length_max, comment_length )
             if comment_length > COMMENT_LENGTH_MAX_DB:
-                fields[ omment_pos ] = ""   # because it is unicode we cannot just chop it
+                fields[ comment_pos ] = ""      # because it is unicode we cannot just chop it
                 msg = "too long comment in line:"
                 logging.warning( msg );  print( msg )
                 logging.warning( line ); print( line )
