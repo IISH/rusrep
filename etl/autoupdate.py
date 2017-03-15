@@ -13,7 +13,7 @@ better use the curent version from PyPI
 VT-07-Jul-2016 latest change by VT
 FL-03-Mar-2017 Py2/Py3 compatibility: using pandas instead of xlsx2csv to create csv files
 FL-03-Mar-2017 Py2/Py3 compatibility: using future-0.16.0
-FL-14-Mar-2017 latest change
+FL-15-Mar-2017 latest change
 """
 
 # future-0.16.0 imports for Python 2/3 compatibility
@@ -911,6 +911,11 @@ def format_secs( seconds ):
 
 
 if __name__ == "__main__":
+    DO_VOCABULARY = True        # vocabulary: dataverse  => mongodb
+    DO_RETRIEVE   = True        # ERRHS data: dataverse  => local_disk, xlsx -> csv
+    DO_POSTGRES   = True        # ERRHS data: local_disk => postgresql, csv -> table
+    DO_MONGODB    = True        # ERRHS data: postgresql => mongodb
+    
     log_file = True
     
     #log_level = logging.DEBUG
@@ -920,20 +925,13 @@ if __name__ == "__main__":
     #log_level = logging.CRITICAL
     
     if log_file:
+        #mode = 'w'
+        mode = 'a'      # debugging
         logging_filename = "autoupdate.log"
-        logging.basicConfig( filename = logging_filename, filemode = 'w', level = log_level )
+        logging.basicConfig( filename = logging_filename, filemode = mode, level = log_level )
     else:
         logging.basicConfig( level = log_level )
     
-    DO_VOCABULARY = True        # vocabulary: dataverse  => mongodb
-    DO_RETRIEVE   = True        # ERRHS data: dataverse  => local_disk, xlsx -> csv
-    DO_POSTGRES   = True        # ERRHS data: local_disk => postgresql, csv -> table
-    DO_MONGODB    = True        # ERRHS data: postgresql => mongodb
-    
-    logging_filename = "autoupdate.log"
-    #mode = 'w'
-    mode = 'a'      # debugging
-    logging.basicConfig( filename = logging_filename, filemode = mode, level = log_level )
     # debugging:
     logging.info( "" )
     logging.info( "================================================================================" )
