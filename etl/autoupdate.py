@@ -13,7 +13,7 @@ better use the curent version from PyPI
 VT-07-Jul-2016 latest change by VT
 FL-03-Mar-2017 Py2/Py3 compatibility: using pandas instead of xlsx2csv to create csv files
 FL-03-Mar-2017 Py2/Py3 compatibility: using future-0.16.0
-FL-15-Mar-2017 latest change
+FL-17-Mar-2017 latest change
 """
 
 # future-0.16.0 imports for Python 2/3 compatibility
@@ -925,8 +925,8 @@ if __name__ == "__main__":
     #log_level = logging.CRITICAL
     
     if log_file:
-        #mode = 'w'
-        mode = 'a'      # debugging
+        mode = 'w'
+        #mode = 'a'      # debugging
         logging_filename = "autoupdate.log"
         logging.basicConfig( filename = logging_filename, filemode = mode, level = log_level )
     else:
