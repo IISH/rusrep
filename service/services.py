@@ -3,7 +3,7 @@
 # VT-07-Jul-2016 latest change by VT
 # FL-12-Dec-2016 use datatype in function documentation()
 # FL-20-Jan-2017 utf8 encoding
-# FL-03-Mar-2017 
+# FL-24-Mar-2017 
 
 from __future__ import absolute_import      # VT
 """
@@ -27,12 +27,15 @@ import random
 import re
 import simplejson
 import tables
+import time
 import urllib
 import urllib2
 import psycopg2
 import psycopg2.extras
+import zipfile
 
-from flask import Flask, Response, request
+from io import BytesIO
+from flask import Flask, Response, request, send_from_directory, send_file
 from pymongo import MongoClient
 from StringIO import StringIO
 from sys import exc_info
@@ -155,7 +158,7 @@ def json_generator( cursor, json_dataname, data ):
     
     logging.debug( "%d values in data" % len( data ) )
     for value_str in data:
-        data_keys    = {}
+        data_keys   = {}
         extravalues = {}
         for i in range( len( value_str ) ):
             name  = sql_names[ i ]
@@ -186,6 +189,7 @@ def json_generator( cursor, json_dataname, data ):
     json_hash[ json_dataname ] = json_list
     newkey = str( "%05.8f" % random.random() )
     json_hash[ 'url' ] = "%s/service/download?key=%s" % ( configparser.get( 'config', 'root' ), newkey )
+    logging.debug( "json_hash: %s" % json_hash )
     json_string = json.dumps( json_hash, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
     
     try:
@@ -898,9 +902,7 @@ def getvocabulary():
 def aggregation():
     logging.debug( "aggregation()" )
     
-    python_vertuple = sys.version_info
-    python_version = str( python_vertuple[ 0 ] ) + '.' + str( python_vertuple[ 1 ] ) + '.' + str( python_vertuple[ 2 ] )
-    logging.info( "Python version: %s" % python_version  )
+    logging.info( "Python version: %s" % sys.version  )
     
     thisyear = ''
     
@@ -1138,6 +1140,60 @@ def aggregation():
 
 
 
+@app.route( '/indicators', methods = ['POST', 'GET' ] )
+def indicators():
+    logging.debug( "indicators()" )
+    
+    logging.info( "Python version: %s" % sys.version  )
+
+    eng_data = {}
+    cursor = connect()
+    
+    #sql_query = "SELECT * FROM russianrepository LIMIT 1;"         # error
+    #sql_query = "SELECT datatype FROM russianrepository LIMIT 1;"   # OK
+    sql_query = "SELECT datatype, base_year, COUNT(*) FROM russianrepository GROUP BY base_year, datatype;"
+
+    if sql_query:
+        cursor.execute( sql_query )
+        sql_names = [ desc[ 0 ] for desc in cursor.description ]
+        logging.debug( "%d sql_names:" % len( sql_names ) )
+        logging.debug( sql_names )
+        
+        # retrieve the records from the database
+        data = cursor.fetchall()
+        finaldata = []
+        for item in data:
+            finalitem = []
+            for i, thisname in enumerate( sql_names ):
+                value = item[ i ]
+                if value == ". ":
+                    #logging.debug( "i: %d, name: %s, value: %s" % ( i, thisname, value ) )
+                    # ". " marks a trailing dot in histclass or class: skip
+                    #continue
+                    pass
+                
+            #for value in item:
+                if value in eng_data:
+                    value = value.encode( 'UTF-8' )
+                    value = eng_data[ value ]
+                if thisname not in forbidden:
+                    finalitem.append( value )
+            
+            finaldata.append( finalitem )
+            logging.debug( str( finaldata ) )
+            
+        json_data = json_generator( cursor, 'data', finaldata )
+        
+        logging.debug( "json_data before return Response:" )
+        logging.debug( json_data )
+        return Response( json_data, mimetype = 'application/json; charset=utf-8' )
+
+    return str( '{}' )
+
+
+
+"""
+# FL-22-Mar-2017: presumably not used; use aggregation
 @app.route( '/aggregate', methods = [ 'POST', 'GET' ] )
 def aggr():
     logging.debug( "aggr()" )
@@ -1286,36 +1342,69 @@ def aggr():
         final[ 'data' ] = result
         
         return Response( json.dumps( final ), mimetype = 'application/json; charset=utf-8' )
-
+"""
 
 
 @app.route( '/download' )
 def download():
-    logging.debug( "download()" )
+    zipping = True
+    logging.debug( "download() zip: %s" % zipping )
+    logging.debug( request.args )
     clioinfra = Configuration()
 
     if request.args.get( 'id' ):
+        logging.debug( "download() id" )
         host = "datasets.socialhistory.org"
         url = "https://%s/api/access/datafile/%s?&key=%s&show_entity_ids=true&q=authorName:*" % (host, request.args.get('id'), clioinfra.config['ristatkey'])
         f = urllib2.urlopen( url )
         pdfdata = f.read()
         filetype = "application/pdf"
+        
         if request.args.get( 'filetype' ) == 'excel':
             filetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        
         return Response( pdfdata, mimetype = filetype )
     
-    if request.args.get( 'key' ):
+    key = request.args.get( 'key' )
+    if key:
+        logging.debug( "download() key: %s" % key )
         clientcache = MongoClient()
         datafilter = {}
-        datafilter[ 'key' ] = request.args.get( 'key' )
+        datafilter[ 'key' ] = key
         ( lexicon, regions ) = preprocessor( datafilter )
-        full_path = "%s/%s.xlsx" % ( clioinfra.config[ 'tmppath' ],request.args.get( 'key' ) )
-        filename = aggregate_dataset( full_path, lexicon, regions )
+        
+        dirname = clioinfra.config[ 'tmppath' ]
+        download_dir = os.path.join( clioinfra.config[ 'tmppath' ], "download" )
+        xlsx_name = "%s.xlsx" % request.args.get( 'key' )
+        pathname = os.path.abspath( os.path.join( download_dir, xlsx_name ) )
+        logging.debug( "full_path: %s" % pathname )
+        
+        filename = aggregate_dataset( pathname, lexicon, regions )
+        logging.debug( "filename: %s" % filename )
         with open( filename, 'rb' ) as f:
             datacontents = f.read()
-        filetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        return Response( datacontents, mimetype = filetype )
-
+        
+        if not zipping:
+            filetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            return Response( datacontents, mimetype = filetype )
+        
+        else:
+            zip_fname = "%s.zip" % key
+            memory_file = BytesIO()
+            with zipfile.ZipFile( memory_file, 'w' ) as zf:
+                for root, sdirs, files in os.walk( download_dir ):
+                    for fname in files:
+                        data = zipfile.ZipInfo( fname )
+                        data.date_time = time.localtime( time.time() )[ :6 ]
+                        data.compress_type = zipfile.ZIP_DEFLATED
+                        file_path = os.path.join( root, fname )
+                        with open( file_path, 'rb' ) as f:
+                            datacontents = f.read()
+                            zf.writestr( data, datacontents )
+            memory_file.seek( 0 )
+            return send_file( memory_file, attachment_filename = zip_fname, as_attachment = True )
+            #return send_from_directory( download_dir, zip_fname, as_attachment = True )
+        
         dbcache = clientcache.get_database( 'datacache' )
         result = dbcache.data.find( { "key": str( request.args.get( 'key' ) ) } )
         for item in result:
@@ -1324,7 +1413,7 @@ def download():
             dataset = json.dumps( item, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
             return Response( dataset, mimetype = 'application/json; charset=utf-8' )
     else:
-        return 'Not found'
+        return "Argument 'key' not found"
 
 
 
