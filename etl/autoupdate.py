@@ -13,7 +13,8 @@ better use the curent version from PyPI
 VT-07-Jul-2016 latest change by VT
 FL-03-Mar-2017 Py2/Py3 compatibility: using pandas instead of xlsx2csv to create csv files
 FL-03-Mar-2017 Py2/Py3 compatibility: using future-0.16.0
-FL-17-Mar-2017 latest change
+FL-27-Mar-2017 Also download documentation files
+FL-27-Mar-2017 latest change
 """
 
 # future-0.16.0 imports for Python 2/3 compatibility
@@ -327,6 +328,20 @@ def documents_by_handle( clioinfra, handle_name, dst_dir, copy_local = False, to
                         papers.append( paperitem )
     
     return ( papers, ids )
+
+
+
+def update_documentation( clioinfra, copy_local, remove_xlsx = False ):
+    logging.info( "%s update_documentation()" % __file__ )
+
+    handle_name = "hdl_documentation"
+    logging.info( "retrieving documents from dataverse for handle name %s ..." % handle_name )
+    ( docs, ids ) = documents_by_handle( clioinfra, handle_name, "doc", copy_local, remove_xlsx )
+    ndoc =  len( docs )
+    logging.info( "%d documents retrieved from dataverse" % ndoc )
+    if ndoc == 0:
+        logging.info( "no documents, nothing to do." )
+        return
 
 
 
@@ -911,10 +926,11 @@ def format_secs( seconds ):
 
 
 if __name__ == "__main__":
-    DO_VOCABULARY = True        # vocabulary: dataverse  => mongodb
-    DO_RETRIEVE   = True        # ERRHS data: dataverse  => local_disk, xlsx -> csv
-    DO_POSTGRES   = True        # ERRHS data: local_disk => postgresql, csv -> table
-    DO_MONGODB    = True        # ERRHS data: postgresql => mongodb
+    DO_DOCUMENTATION = True     # documentation: dataverse  => local_disk
+    DO_VOCABULARY    = True     # vocabulary: dataverse  => mongodb
+    DO_RETRIEVE      = True     # ERRHS data: dataverse  => local_disk, xlsx -> csv
+    DO_POSTGRES      = True     # ERRHS data: local_disk => postgresql, csv -> table
+    DO_MONGODB       = True     # ERRHS data: postgresql => mongodb
     
     log_file = True
     
@@ -931,11 +947,6 @@ if __name__ == "__main__":
         logging.basicConfig( filename = logging_filename, filemode = mode, level = log_level )
     else:
         logging.basicConfig( level = log_level )
-    
-    # debugging:
-    logging.info( "" )
-    logging.info( "================================================================================" )
-    logging.info( "" )
 
     time0 = time()      # seconds since the epoch
     logging.info( "start: %s" % datetime.datetime.now() )
@@ -957,6 +968,10 @@ if __name__ == "__main__":
     
     if DO_VOCABULARY or DO_MONGODB:
         clear_mongo( mongo_client )
+    
+    if DO_DOCUMENTATION:
+        copy_local  = True      # for ziped downloads
+        update_documentation( clioinfra, copy_local )
     
     if DO_VOCABULARY:
         # Downloaded vocabulary documents are not used to update the vocabularies, 

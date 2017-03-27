@@ -25,6 +25,7 @@ import os
 import pandas as pd
 import random
 import re
+import shutil
 import simplejson
 import tables
 import time
@@ -154,7 +155,6 @@ def json_generator( cursor, json_dataname, data ):
     forbidden = { 'data_active', 0, 'datarecords', 1 }
     
     json_list = []
-    json_hash = {}
     
     logging.debug( "%d values in data" % len( data ) )
     for value_str in data:
@@ -182,25 +182,51 @@ def json_generator( cursor, json_dataname, data ):
         output[ 'path' ] = path
         json_list.append( output )
     
-    # Cache
-    clientcache = MongoClient()
-    dbcache = clientcache.get_database( 'datacache' )
-
+    json_hash = {}
+    json_hash[ "language" ] = lang
     json_hash[ json_dataname ] = json_list
-    newkey = str( "%05.8f" % random.random() )
-    json_hash[ 'url' ] = "%s/service/download?key=%s" % ( configparser.get( 'config', 'root' ), newkey )
+    
+    newkey = str( "%05.8f" % random.random() )   # newkey used as base name for zip download
+    clioinfra = Configuration()
+    dirname = clioinfra.config[ 'tmppath' ]
+    
+    download_dir = os.path.join( clioinfra.config[ 'tmppath' ], "download", newkey )
+    if not os.path.exists( download_dir ):
+        os.makedirs( download_dir )
+    doc_dir = os.path.join( clioinfra.config[ 'tmppath' ], "doc", "hdl_documentation" )
+    
+    if lang == "en":
+        doc_path = os.path.join( doc_dir, "ERRHS_Introduction_2016_EN.pdf" )
+        shutil.copy2( doc_path, download_dir )
+        
+        doc_path = os.path.join( doc_dir, "ERRHS_NACE 1.1_Classification_EN_RUS.xlsx" )
+        shutil.copy2( doc_path, download_dir )
+    elif lang == "rus":
+        oc_path = os.path.join( doc_dir, "ERRHS_Introduction_2016_RUS.pdf" )
+        shutil.copy2( doc_path, download_dir )
+    
+        doc_path = os.path.join( doc_dir, "ERRHS_NACE 1.1_Classification_EN_RUS.xlsx" )
+        shutil.copy2( doc_path, download_dir )
+    
+    
+    json_hash[ "url" ] = "%s/service/download?key=%s" % ( configparser.get( 'config', 'root' ), newkey )
     logging.debug( "json_hash: %s" % json_hash )
+    
     json_string = json.dumps( json_hash, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
     
+    # Cache
     try:
         thisdata = json_hash
         del thisdata[ 'url' ]
         thisdata[ 'key' ] = newkey
         thisdata[ 'language' ] = lang
+        
+        clientcache = MongoClient()
+        dbcache = clientcache.get_database( 'datacache' )
         result = dbcache.data.insert( thisdata )
     except:
-        skip = 'something went wrong...'
-
+        logging.error( "caching failed" )
+    
     logging.debug( json_string )
     return json_string
 
@@ -612,9 +638,9 @@ def load_vocabulary( vocname ):
 
     if request.args.get( 'language' ) == 'en':
         thisyear = ''
+        vocab_filter = {}
         if request.args.get( 'base_year' ):
             if vocname == 'historical':     # FL why only for 'historical' ?
-                vocab_filter = {}
                 base_year = request.args.get( "base_year" )
                 if base_year:
                     vocab_filter[ "YEAR" ] = base_year
@@ -1374,8 +1400,8 @@ def download():
         ( lexicon, regions ) = preprocessor( datafilter )
         
         dirname = clioinfra.config[ 'tmppath' ]
-        download_dir = os.path.join( clioinfra.config[ 'tmppath' ], "download" )
-        xlsx_name = "%s.xlsx" % request.args.get( 'key' )
+        download_dir = os.path.join( clioinfra.config[ 'tmppath' ], "download", key )
+        xlsx_name = "%s.xlsx" % key
         pathname = os.path.abspath( os.path.join( download_dir, xlsx_name ) )
         logging.debug( "full_path: %s" % pathname )
         
