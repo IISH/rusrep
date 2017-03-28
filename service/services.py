@@ -3,7 +3,7 @@
 # VT-07-Jul-2016 latest change by VT
 # FL-12-Dec-2016 use datatype in function documentation()
 # FL-20-Jan-2017 utf8 encoding
-# FL-24-Mar-2017 
+# FL-28-Mar-2017 
 
 from __future__ import absolute_import      # VT
 """
@@ -142,14 +142,25 @@ def json_generator( cursor, json_dataname, data ):
     
     configparser.read( configpath )
     
-    lang = 'en'
+    
+    language  = "EN"
+    datatype  = "1_00"
+    base_year = 1795
+    
     try:
         qinput = json.loads( request.data )
-        if 'language' in qinput:
-            lang = qinput[ 'language' ]
+        if "language" in qinput:
+            language = qinput[ "language" ]
+        if "datatype" in qinput:
+            datatype = qinput[ "datatype" ][ 0 ] + "_00"
+        if "base_year" in qinput:
+            base_year = qinput[ "base_year" ]
     except:
-        skip = 'yes'
-    logging.debug( "language: %s" % lang )
+        pass
+    
+    logging.debug( "language:  %s" % language )
+    logging.debug( "datatype:  %s" % datatype )
+    logging.debug( "base_year: %s" % base_year )
 
     sql_names  = [ desc[ 0 ] for desc in cursor.description ]
     forbidden = { 'data_active', 0, 'datarecords', 1 }
@@ -183,31 +194,43 @@ def json_generator( cursor, json_dataname, data ):
         json_list.append( output )
     
     json_hash = {}
-    json_hash[ "language" ] = lang
+    json_hash[ "language" ] = language
     json_hash[ json_dataname ] = json_list
     
     newkey = str( "%05.8f" % random.random() )   # newkey used as base name for zip download
     clioinfra = Configuration()
-    dirname = clioinfra.config[ 'tmppath' ]
-    
-    download_dir = os.path.join( clioinfra.config[ 'tmppath' ], "download", newkey )
+    tmp_dir = clioinfra.config[ 'tmppath' ]
+    download_dir = os.path.join( tmp_dir, "download", newkey )
     if not os.path.exists( download_dir ):
         os.makedirs( download_dir )
-    doc_dir = os.path.join( clioinfra.config[ 'tmppath' ], "doc", "hdl_documentation" )
+    doc_dir = os.path.join( tmp_dir, "dataverse", "doc", "hdl_documentation" )
+    doc_list = os.listdir( doc_dir )
+    doc_list.sort()
     
-    if lang == "en":
-        doc_path = os.path.join( doc_dir, "ERRHS_Introduction_2016_EN.pdf" )
-        shutil.copy2( doc_path, download_dir )
+    get_list = []   # docs for zipping
+    for doc in doc_list:
+        if doc.find( "NACE 1.1_Classification") != -1:          # string
+            get_list.append( doc )
         
-        doc_path = os.path.join( doc_dir, "ERRHS_NACE 1.1_Classification_EN_RUS.xlsx" )
-        shutil.copy2( doc_path, download_dir )
-    elif lang == "rus":
-        oc_path = os.path.join( doc_dir, "ERRHS_Introduction_2016_RUS.pdf" )
-        shutil.copy2( doc_path, download_dir )
+        if doc.find( language.upper() ) != -1:                  # language
+            if doc.find( "Introduction" ) != -1 or \
+               doc.find( "regions" ) != -1:                     # string
+                get_list.append( doc )
+        
+            if doc.find( datatype ) != -1:                      # datatype
+                if doc.find( "Modern_Classification" ) != -1:   # string
+                    get_list.append( doc )
+            
+            if doc.find( str( base_year ) ) != -1:              # base_year
+                if doc.find( "GovReports" ) != -1:              # string
+                    get_list.append( doc )
+            
+                if doc.find( datatype ) != -1:                  # datatype
+                    get_list.append( doc )
     
-        doc_path = os.path.join( doc_dir, "ERRHS_NACE 1.1_Classification_EN_RUS.xlsx" )
+    for doc in get_list:
+        doc_path = os.path.join( doc_dir, doc )
         shutil.copy2( doc_path, download_dir )
-    
     
     json_hash[ "url" ] = "%s/service/download?key=%s" % ( configparser.get( 'config', 'root' ), newkey )
     logging.debug( "json_hash: %s" % json_hash )
@@ -219,7 +242,7 @@ def json_generator( cursor, json_dataname, data ):
         thisdata = json_hash
         del thisdata[ 'url' ]
         thisdata[ 'key' ] = newkey
-        thisdata[ 'language' ] = lang
+        thisdata[ 'language' ] = language
         
         clientcache = MongoClient()
         dbcache = clientcache.get_database( 'datacache' )
@@ -1397,15 +1420,15 @@ def download():
         clientcache = MongoClient()
         datafilter = {}
         datafilter[ 'key' ] = key
-        ( lexicon, regions ) = preprocessor( datafilter )
+        ( lexicon, regions, header ) = preprocessor( datafilter )
         
-        dirname = clioinfra.config[ 'tmppath' ]
-        download_dir = os.path.join( clioinfra.config[ 'tmppath' ], "download", key )
+        tmp_dir = clioinfra.config[ 'tmppath' ]
+        download_dir = os.path.join( tmp_dir, "download", key )
         xlsx_name = "%s.xlsx" % key
-        pathname = os.path.abspath( os.path.join( download_dir, xlsx_name ) )
-        logging.debug( "full_path: %s" % pathname )
+        xlsx_pathname = os.path.abspath( os.path.join( download_dir, xlsx_name ) )
+        logging.debug( "full_path: %s" % xlsx_pathname )
         
-        filename = aggregate_dataset( pathname, lexicon, regions )
+        filename = aggregate_dataset( xlsx_pathname, lexicon, regions, header )
         logging.debug( "filename: %s" % filename )
         with open( filename, 'rb' ) as f:
             datacontents = f.read()
@@ -1420,13 +1443,15 @@ def download():
             with zipfile.ZipFile( memory_file, 'w' ) as zf:
                 for root, sdirs, files in os.walk( download_dir ):
                     for fname in files:
-                        data = zipfile.ZipInfo( fname )
-                        data.date_time = time.localtime( time.time() )[ :6 ]
-                        data.compress_type = zipfile.ZIP_DEFLATED
+                        info = zipfile.ZipInfo( fname )
+                        info.date_time = time.localtime( time.time() )[ :6 ]
+                        info.compress_type = zipfile.ZIP_DEFLATED
+                        info.external_attr = (0664 << 16) | 0x10    # -rw-rw-r--
+                        
                         file_path = os.path.join( root, fname )
                         with open( file_path, 'rb' ) as f:
                             datacontents = f.read()
-                            zf.writestr( data, datacontents )
+                            zf.writestr( info, datacontents )
             memory_file.seek( 0 )
             return send_file( memory_file, attachment_filename = zip_fname, as_attachment = True )
             #return send_from_directory( download_dir, zip_fname, as_attachment = True )
