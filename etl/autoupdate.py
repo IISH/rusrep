@@ -14,7 +14,7 @@ VT-07-Jul-2016 latest change by VT
 FL-03-Mar-2017 Py2/Py3 compatibility: using pandas instead of xlsx2csv to create csv files
 FL-03-Mar-2017 Py2/Py3 compatibility: using future-0.16.0
 FL-27-Mar-2017 Also download documentation files
-FL-27-Mar-2017 latest change
+FL-28-Mar-2017 latest change
 """
 
 # future-0.16.0 imports for Python 2/3 compatibility
@@ -233,14 +233,15 @@ def documents_by_handle( clioinfra, handle_name, dst_dir, copy_local = False, to
     sep = str(u'|').encode('utf-8')
     kwargs_pandas   = { 'sep' : sep, 'line_terminator' : '\n' }
     
+    tmp_dir = clioinfra.config[ 'tmppath' ]
     if copy_local:
-        download_dir = os.path.join( clioinfra.config[ 'tmppath' ], dst_dir, handle_name )
+        download_dir = os.path.join( tmp_dir, "dataverse", dst_dir, handle_name )
         logging.info( "downloading dataverse files to: %s" % download_dir )
         if os.path.exists( download_dir ):
             empty_dir( download_dir )           # remove previous files
     
     if dst_dir == "xlsx":
-        csv_dir = os.path.join( clioinfra.config[ 'tmppath' ], "csv", handle_name )
+        csv_dir = os.path.join( tmp_dir, "dataverse", "csv", handle_name )
         if os.path.exists( csv_dir ):
             empty_dir( csv_dir )                # remove previous files
     
@@ -520,7 +521,8 @@ def store_handle_docs( clioinfra, handle_name ):
     logging.info( "" )
     logging.info( "store_handle_docs() %s" % handle_name )
     
-    csv_dir  = os.path.join( clioinfra.config[ 'tmppath' ], "csv", handle_name )
+    tmp_dir = clioinfra.config[ 'tmppath' ]
+    csv_dir  = os.path.join( tmp_dir, "dataverse", "csv", handle_name )
     dir_list = []
     if os.path.isdir( csv_dir ):
         dir_list = os.listdir( csv_dir )
