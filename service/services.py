@@ -142,25 +142,33 @@ def json_generator( cursor, json_dataname, data ):
     
     configparser.read( configpath )
     
-    
-    language  = "EN"
-    datatype  = "1_00"
-    base_year = 1795
+    classification = "unknown"
+    language       = "EN"
+    datatype       = ""
+    datatype_      = "0_00"
+    base_year      = 1795
     
     try:
         qinput = json.loads( request.data )
+        logging.debug( "# of keys: %d" % len( qinput ) )
+        for k in qinput:
+            logging.debug( "k: %s, v: %s" % ( k, qinput[ k ] ) )
+        
+        if "classification" in qinput:
+            classification = qinput[ "classification" ]
         if "language" in qinput:
             language = qinput[ "language" ]
         if "datatype" in qinput:
-            datatype = qinput[ "datatype" ][ 0 ] + "_00"
+            datatype  = qinput[ "datatype" ]
+            datatype_ = datatype[ 0 ] + "_00"
         if "base_year" in qinput:
             base_year = qinput[ "base_year" ]
+            
+        logging.debug( "language:  %s" % language )
+        logging.debug( "datatype:  %s" % datatype )
+        logging.debug( "base_year: %s" % base_year )
     except:
         pass
-    
-    logging.debug( "language:  %s" % language )
-    logging.debug( "datatype:  %s" % datatype )
-    logging.debug( "base_year: %s" % base_year )
 
     sql_names  = [ desc[ 0 ] for desc in cursor.description ]
     forbidden = { 'data_active', 0, 'datarecords', 1 }
@@ -197,7 +205,10 @@ def json_generator( cursor, json_dataname, data ):
     json_hash[ "language" ] = language
     json_hash[ json_dataname ] = json_list
     
-    newkey = str( "%05.8f" % random.random() )   # newkey used as base name for zip download
+    newkey = str( "%05.8f" % random.random() )  # newkey used as base name for zip download
+    # put some additional info in the key
+    newkey = "%s-%s-%s" % ( classification[ 0 ], datatype, newkey[ 2: ] )
+    
     clioinfra = Configuration()
     tmp_dir = clioinfra.config[ 'tmppath' ]
     download_dir = os.path.join( tmp_dir, "download", newkey )
@@ -210,14 +221,16 @@ def json_generator( cursor, json_dataname, data ):
     get_list = []   # docs for zipping
     for doc in doc_list:
         if doc.find( "NACE 1.1_Classification") != -1:          # string
-            get_list.append( doc )
+            datatype0 = datatype_[ 0 ]
+            if datatype0 == "3" or datatype0 == "4" or datatype0 == "5":    # datatype
+                get_list.append( doc )
         
         if doc.find( language.upper() ) != -1:                  # language
             if doc.find( "Introduction" ) != -1 or \
                doc.find( "regions" ) != -1:                     # string
                 get_list.append( doc )
         
-            if doc.find( datatype ) != -1:                      # datatype
+            if doc.find( datatype_ ) != -1:                     # datatype
                 if doc.find( "Modern_Classification" ) != -1:   # string
                     get_list.append( doc )
             
@@ -225,7 +238,7 @@ def json_generator( cursor, json_dataname, data ):
                 if doc.find( "GovReports" ) != -1:              # string
                     get_list.append( doc )
             
-                if doc.find( datatype ) != -1:                  # datatype
+                if doc.find( datatype_ ) != -1:                 # datatype
                     get_list.append( doc )
     
     for doc in get_list:
@@ -950,8 +963,7 @@ def getvocabulary():
 @app.route( '/aggregation', methods = ['POST', 'GET' ] )
 def aggregation():
     logging.debug( "aggregation()" )
-    
-    logging.info( "Python version: %s" % sys.version  )
+    #logging.info( "Python version: %s" % sys.version  )
     
     thisyear = ''
     
@@ -1120,6 +1132,7 @@ def aggregation():
         sql_query += " AND (%s) " % sql[ 'internal' ]
     
     #sql_query += " AND value ~ '^\d+$'"         # regexp (~) to require that value only contains digits
+    sql_query += " AND value <> '.'"            # suppress a 'lone' "optional point", used in the table to flag missing data
     sql_query += " AND value ~ '^\d*\.?\d*$'"   # plus an optional single . for floating point values
     
     sql[ "group_by" ] = " GROUP BY value_unit, ter_code, "
