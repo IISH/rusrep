@@ -5,6 +5,7 @@
 # FL-28-Mar-2017 
 
 import json
+import logging
 import openpyxl
 import re
 
@@ -14,22 +15,32 @@ from pymongo import MongoClient
 
 
 def preprocessor( datafilter ):
+    logging.debug( "preprocessor()" )
+     
     dataset = []
     lexicon = {}
-    lands = {}
-    year = 0
-    lang = 'en'
-    clientcache = MongoClient()
+    lands   = {}
+    year    = 0
+    lang    = 'en'
 
-    if datafilter[ 'key' ]:
+    key = datafilter[ "key" ]
+    if key:
+        clientcache = MongoClient()
         dbcache = clientcache.get_database( 'datacache' )
-        result = dbcache.data.find( { "key": datafilter[ 'key' ] } )
+        result = dbcache.data.find( { "key": key } )
+        
+        ter_codes = []      # actually used region codes
+        
         for rowitem in result:
+            logging.debug( "rowitem: " + str( rowitem ) )
+            
             del rowitem[ 'key' ]
             del rowitem[ '_id' ]
+            
             if 'language' in rowitem:
                 lang = rowitem[ 'language' ]
                 del rowitem['language']
+            
             for item in rowitem[ 'data' ]:
                 dataitem = item
                 if 'path' in item:
@@ -46,6 +57,8 @@ def preprocessor( datafilter ):
                 itemlexicon = dataitem
                 lands = {}
                 if 'ter_code' in itemlexicon:
+                    ter_code = itemlexicon[ 'ter_code' ]
+                    ter_codes.append( ter_code )
                     lands[ itemlexicon[ 'ter_code' ] ] = itemlexicon[ 'total' ]
                     del itemlexicon[ 'ter_code' ]
                 if 'total' in itemlexicon:
@@ -63,49 +76,108 @@ def preprocessor( datafilter ):
                 
                 dataset.append( dataitem )
         
-        # load regions
-        db = clientcache.get_database( 'vocabulary' )
-        regfilter = {}
-        regfilter[ "vocabulary" ] = "ERRHS_Vocabulary_regions"
-        if year:
-            regfilter[ 'basisyear' ] = str( year )
-        vocab = db.data.find( regfilter )
-        regions = {}
-        vocabulary = {}
-        for item in vocab:
-            if lang == 'en':
-                regions[ item[ 'ID' ] ] = item[ 'EN' ]
-            else:
-                regions[ item[ 'ID' ] ] = item[ 'RUS' ]
-        vocabulary[ 'regions' ] = regions
+        db = clientcache.get_database( 'vocabulary' )   # vocabulary
         
-        # load terms
-        vocab = db.data.find( { "vocabulary": "ERRHS_Vocabulary_download" } )
+        # load regions
+        regions_filter = {}
+        regions_filter[ "vocabulary" ] = "ERRHS_Vocabulary_regions"
+        if year:
+            regions_filter[ 'basisyear' ] = str( year )
+        vocab_regions = db.data.find( regions_filter )
+        regions = {}
+        
+        logging.debug( str( ter_codes ) )
+        for item in vocab_regions:
+            #logging.debug( str( item ) )
+            ID = item[ 'ID' ]
+            if ID in ter_codes:
+                if lang == 'en':
+                    regions[ item[ 'ID' ] ] = item[ 'EN' ]
+                else:
+                    regions[ item[ 'ID' ] ] = item[ 'RUS' ]
+        
+        vocabulary = {}
+        vocabulary[ 'regions' ] = regions
         
         # create header
         header = []
+        
+        topic = ""
+        key_comps = key.split( '-' )
+        if len( key_comps ) >= 2:
+            topic = key_comps[ 1 ]
+        
+        # load terms
+        terms_needed  = [ "base_year", "count", "datatype", "value_unit" ]
+        terms_needed += [ "class1", "class2", "class3", "class4", "class5", "class6", "class7", "class8", "class9", "class10" ]
+        terms_needed += [ "histclass1", "histclass2", "histclass3", "histclass4", "histclass5", "histclass6", "histclass7", "histclass8", "histclass9", "histclass10" ]
+        
+        terms = {}
+        vocab_download = db.data.find( { "vocabulary": "ERRHS_Vocabulary_download" } )
+        topic_name = ""
+        for item in vocab_download:
+            #logging.debug( str( item ) )
+            ID = item[ 'ID' ]
+            #logging.debug( "%s %s" % ( topic, ID ) )
+            if ID == topic:
+                if lang == 'en':
+                    topic_name = item[ 'EN' ]
+                else:
+                    topic_name = item[ 'RUS' ]
+            
+            if ID in terms_needed:
+                if lang == 'en':
+                    terms[ item[ 'ID' ] ] = item[ 'EN' ]
+                else:
+                    terms[ item[ 'ID' ] ] = item[ 'RUS' ]
+        
+        
+        #logging.debug( "topic: %s, topic_name: %s" % ( topic, topic_name ) )
+        vocabulary[ 'terms' ] = terms
+        
         if lang == 'en':
+            if key[ 0 ] == 'h':
+                classification = "HISTORICAL"
+            elif key[ 0 ] == 'm':
+                classification = "MODERN"
+            else:
+                classification = ""
+            
             header.append( { "r" : 1, "c" : 0, "value" : "Electronic repository of Russian Historical Statistics - ristat.org" } )
             header.append( { "r" : 3, "c" : 0, "value" : "TOPIC:" } )
-            header.append( { "r" : 3, "c" : 1, "value" : "" } )
+            header.append( { "r" : 3, "c" : 1, "value" : topic_name } )
             header.append( { "r" : 4, "c" : 0, "value" : "BENCHMARK-YEAR:" } )
             header.append( { "r" : 4, "c" : 1, "value" : year } )
             header.append( { "r" : 5, "c" : 0, "value" : "CLASSIFICATION:" } )
-            header.append( { "r" : 5, "c" : 1, "value" : "" } )
+            header.append( { "r" : 5, "c" : 1, "value" : classification } )
         else:
+            if key[ 0 ] == 'h':
+                classification = "ИСТОРИЧЕСКАЯ"
+            elif key[ 0 ] == 'm':
+                classification = "СОВРЕМЕННАЯ"
+            else:
+                classification = ""
+            
             header.append( { "r" : 1, "c" : 0, "value" : "Электронный архив Российской исторической статистики - ristat.org" } )
             header.append( { "r" : 3, "c" : 0, "value" : "ТЕМА:" } )
-            header.append( { "r" : 3, "c" : 1, "value" : "" } )
+            header.append( { "r" : 3, "c" : 1, "value" : topic_name } )
             header.append( { "r" : 4, "c" : 0, "value" : "ГОД:" } )
             header.append( { "r" : 4, "c" : 1, "value" : year } )
             header.append( { "r" : 5, "c" : 0, "value" : "КЛАССИФИКАЦИЯ:" } )
-            header.append( { "r" : 5, "c" : 1, "value" : "" } )
-        
+            header.append( { "r" : 5, "c" : 1, "value" : classification } )
+    
+    
+    logging.debug( str( lexicon ) )
+    logging.debug( str( vocabulary ) )
+    logging.debug( str( header ) )
+    
     return ( lexicon, vocabulary, header )
 
 
 
 def aggregate_dataset( fullpath, result, vocab, header ):
+    logging.debug( "aggregate_dataset()" )
+    
     wb = openpyxl.Workbook( encoding = 'utf-8' )
     ws = wb.get_active_sheet()
     ws.title = "Dataset"
@@ -127,16 +199,23 @@ def aggregate_dataset( fullpath, result, vocab, header ):
     for itemchain in result:
         j = 0
         if i == 9:
-    #        ws.column_dimensions[ "C" ].width = 80
-    #        ws.column_dimensions[ "D" ].width = 20
-    #        ws.column_dimensions[ "O" ].width = 100
-    #        ws.column_dimensions[ "P" ].width = 100
+            #ws.column_dimensions[ "C" ].width = 80
+            #ws.column_dimensions[ "D" ].width = 20
+            #ws.column_dimensions[ "O" ].width = 100
+            #ws.column_dimensions[ "P" ].width = 100
+    
             chain = json.loads( itemchain )
             terdata = result[ itemchain ]
+            
             for name in sorted( chain ):
                 c = ws.cell( row = i, column = j )
-                c.value = name
+                col_name = name
+                if col_name in vocab[ 'terms' ]:
+                    col_name = vocab[ 'terms' ][ col_name ]
+                c.value = col_name
+                logging.debug( "%d: %s" % ( j, col_name ) )
                 j += 1
+            
             for ter_name in sorted_regions:
                 ter_code = regions[ ter_name ]
                 c = ws.cell( row = i, column = j )
@@ -144,6 +223,7 @@ def aggregate_dataset( fullpath, result, vocab, header ):
                 if ter_code in vocab[ 'regions' ]:
                     ter_name = vocab[ 'regions' ][ ter_code ]
                 c.value = ter_name
+                logging.debug( "%d: %s" % ( j, ter_name ) )
                 j += 1
             i += 1
         
