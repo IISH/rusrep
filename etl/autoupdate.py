@@ -14,7 +14,7 @@ VT-07-Jul-2016 latest change by VT
 FL-03-Mar-2017 Py2/Py3 compatibility: using pandas instead of xlsx2csv to create csv files
 FL-03-Mar-2017 Py2/Py3 compatibility: using future-0.16.0
 FL-27-Mar-2017 Also download documentation files
-FL-28-Mar-2017 latest change
+FL-03-Apr-2017 latest change
 """
 
 # future-0.16.0 imports for Python 2/3 compatibility
@@ -213,11 +213,11 @@ def documents_by_handle( clioinfra, handle_name, dst_dir, copy_local = False, to
     logging.debug( "handle_name: %s" % handle_name )
     
     host = "datasets.socialhistory.org"
-    ristatkey = clioinfra.config[ 'ristatkey' ]
+    ristat_key = clioinfra.config[ 'ristatkey' ]
     logging.debug( "host: %s" % host )
-    logging.debug( "ristatkey: %s" % ristatkey )
+    logging.debug( "ristat_key: %s" % ristat_key )
     
-    connection = Connection( host, ristatkey )
+    connection = Connection( host, ristat_key )
     
     dataverse  = connection.get_dataverse( 'RISTAT' )
     
@@ -240,10 +240,13 @@ def documents_by_handle( clioinfra, handle_name, dst_dir, copy_local = False, to
         if os.path.exists( download_dir ):
             empty_dir( download_dir )           # remove previous files
     
+    csv_dir = ""
     if dst_dir == "xlsx":
         csv_dir = os.path.join( tmp_dir, "dataverse", "csv", handle_name )
-        if os.path.exists( csv_dir ):
-            empty_dir( csv_dir )                # remove previous files
+    elif dst_dir == "vocab/xlsx":
+        csv_dir = os.path.join( tmp_dir, "dataverse", "vocab/csv", handle_name )
+    if os.path.exists( csv_dir ):
+        empty_dir( csv_dir )                # remove previous files
     
     for item in dataverse.get_contents():
         # item dict keys: protocol, authority, persistentUrl, identifier, type, id
@@ -256,22 +259,34 @@ def documents_by_handle( clioinfra, handle_name, dst_dir, copy_local = False, to
             logging.info( "handle_name: %s, using handle: %s" % ( handle_name, handle ) )
             datasetid = item[ 'id' ]
             url  = "https://" + str( host ) + "/api/datasets/" + str( datasetid )
-            #url += "/?&key=" + str( clioinfra.config[ 'ristatkey' ] )
-            url += "?key=" + str( clioinfra.config[ 'ristatkey' ] )
-            url += "&format=original"
+            #url += "/?&key=" + str( ristat_key )
+            url += "?key=" + str( ristat_key )
             
             dataframe = loadjson( url )
             
             files = dataframe[ 'data' ][ 'latestVersion' ][ 'files' ]
             logging.info( "number of files: %d" % len( files ) )
-            for dvfile in files:
+            for dv_file in files:
+                logging.debug( str( dv_file ) )
+                datasetVersionId = str( dv_file[ "datasetVersionId" ] )
+                version          = str( dv_file[ "version" ] )
+                label            = str( dv_file[ "label" ] )
+                datafile         =  dv_file[ "datafile" ]
                 paperitem = {}
-                paperitem[ 'id' ]   = str( dvfile[ 'datafile' ][ 'id' ] )
-                paperitem[ 'name' ] = str( dvfile[ 'datafile' ][ 'name' ] )
-                ids[ paperitem[ 'id'] ] = paperitem[ 'name' ]
+                paperitem[ 'id' ]   = str( datafile[ 'id' ] )
+                originalFormatLabel = str( datafile[ 'originalFormatLabel' ] )
+                name = str( datafile[ 'name' ] )
+                basename, ext = os.path.splitext( name )
+                logging.debug( "basename: %s, ext: %s, originalFormatLabel: %s" % ( basename, ext, originalFormatLabel ) )
+                if ext == ".tab" and originalFormatLabel == "MS Excel (XLSX)":
+                    name = basename + ".xlsx"
+                    logging.debug( "tab => xlsx: %s" % name )
+                paperitem[ 'name' ] = name
+                ids[ paperitem[ 'id'] ] = name
                 paperitem[ 'handle' ] = handle
                 paperitem[ 'url' ] = "http://data.sandbox.socialhistoryservices.org/service/download?id=%s" % paperitem[ 'id' ]
-                url = "https://%s/api/access/datafile/%s?&key=%s&show_entity_ids=true&q=authorName:*" % ( host, paperitem[ 'id' ], clioinfra.config[ 'ristatkey' ] )
+                url  = "https://%s/api/access/datafile/%s" % ( host, paperitem[ 'id' ] )
+                url += "?&key=%s&format=original&show_entity_ids=true&q=authorName:*" % str( ristat_key )
                 logging.debug( url )
                 
                 if copy_local:
@@ -357,7 +372,9 @@ def update_vocabularies( clioinfra, mongo_client, copy_local = False, to_csv = F
     
     handle_name = "hdl_vocabularies"
     logging.info( "retrieving documents from dataverse for handle name %s ..." % handle_name )
-    ( docs, ids ) = documents_by_handle( clioinfra, handle_name, "tab", copy_local, remove_xlsx )
+    xlsx_dir = "vocab/xlsx"
+    csv_dir  = "vocab/csv"
+    ( docs, ids ) = documents_by_handle( clioinfra, handle_name, xlsx_dir, copy_local, to_csv, remove_xlsx )
     ndoc =  len( docs )
     logging.info( "%d documents retrieved from dataverse" % ndoc )
     if ndoc == 0:
@@ -382,9 +399,13 @@ def update_vocabularies( clioinfra, mongo_client, copy_local = False, to_csv = F
     
     vocab_json = [ {} ]
     # the vocabulary files may already have been downloadeded by documents_by_handle();
-    # vocabulary() retrieves them again, and --together with some filetring-- 
+    # with ".tab" extension vocabulary() retrieves them again from dataverse, 
+    # with ".csv" extension vocabulary() retrieves them locally, 
+    # and --together with some filtering-- 
     # appends them to a bigvocabulary
-    bigvocabulary = vocabulary( host, apikey, ids )     # type: <class 'pandas.core.frame.DataFrame'>
+    tmp_dir = clioinfra.config[ 'tmppath' ]
+    abs_csv_dir = os.path.join( tmp_dir, "dataverse", csv_dir, handle_name )
+    bigvocabulary = vocabulary( host, apikey, ids, abs_csv_dir )    # type: <class 'pandas.core.frame.DataFrame'>
     #print bigvocabulary.to_json( orient = 'records' )
     vocab_json = json.loads( bigvocabulary.to_json( orient = 'records' ) )  # type: <type 'list'>
     
@@ -978,8 +999,9 @@ if __name__ == "__main__":
     if DO_VOCABULARY:
         # Downloaded vocabulary documents are not used to update the vocabularies, 
         # they are processed on the fly, and put in MongoDB
-        copy_local  = True      # to inspect
-        update_vocabularies( clioinfra, mongo_client, copy_local )
+        copy_local = True      # to inspect
+        to_csv     = True
+        update_vocabularies( clioinfra, mongo_client, copy_local, to_csv )
     #"""
     handle_names = [ 
         "hdl_errhs_population",     # ERRHS_1   39 files
