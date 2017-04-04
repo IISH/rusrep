@@ -14,7 +14,7 @@ VT-07-Jul-2016 latest change by VT
 FL-03-Mar-2017 Py2/Py3 compatibility: using pandas instead of xlsx2csv to create csv files
 FL-03-Mar-2017 Py2/Py3 compatibility: using future-0.16.0
 FL-27-Mar-2017 Also download documentation files
-FL-03-Apr-2017 latest change
+FL-04-Apr-2017 latest change
 """
 
 # future-0.16.0 imports for Python 2/3 compatibility
@@ -208,9 +208,10 @@ def empty_dir( dst_dir ):
 
 
 
-def documents_by_handle( clioinfra, handle_name, dst_dir, copy_local = False, to_csv = False, remove_xlsx = True ):
+def documents_by_handle( clioinfra, handle_name, dst_dir, dv_format = "", copy_local = False, to_csv = False, remove_xlsx = True ):
     logging.info( "documents_by_handle() copy_local: %s, to_csv: %s" % ( copy_local, to_csv ) )
     logging.debug( "handle_name: %s" % handle_name )
+    logging.info( "dst_dir: %s, dv_format: %s, copy_local: %s, to_csv: %s" % ( dst_dir, dv_format, copy_local, to_csv ) )
     
     host = "datasets.socialhistory.org"
     ristat_key = clioinfra.config[ 'ristatkey' ]
@@ -245,6 +246,7 @@ def documents_by_handle( clioinfra, handle_name, dst_dir, copy_local = False, to
         csv_dir = os.path.join( tmp_dir, "dataverse", "csv", handle_name )
     elif dst_dir == "vocab/xlsx":
         csv_dir = os.path.join( tmp_dir, "dataverse", "vocab/csv", handle_name )
+    
     if os.path.exists( csv_dir ):
         empty_dir( csv_dir )                # remove previous files
     
@@ -278,7 +280,7 @@ def documents_by_handle( clioinfra, handle_name, dst_dir, copy_local = False, to
                 name = str( datafile[ 'name' ] )
                 basename, ext = os.path.splitext( name )
                 logging.debug( "basename: %s, ext: %s, originalFormatLabel: %s" % ( basename, ext, originalFormatLabel ) )
-                if ext == ".tab" and originalFormatLabel == "MS Excel (XLSX)":
+                if dv_format == "original" and ext == ".tab" and originalFormatLabel == "MS Excel (XLSX)":
                     name = basename + ".xlsx"
                     logging.debug( "tab => xlsx: %s" % name )
                 paperitem[ 'name' ] = name
@@ -286,13 +288,15 @@ def documents_by_handle( clioinfra, handle_name, dst_dir, copy_local = False, to
                 paperitem[ 'handle' ] = handle
                 paperitem[ 'url' ] = "http://data.sandbox.socialhistoryservices.org/service/download?id=%s" % paperitem[ 'id' ]
                 url  = "https://%s/api/access/datafile/%s" % ( host, paperitem[ 'id' ] )
-                url += "?&key=%s&format=original&show_entity_ids=true&q=authorName:*" % str( ristat_key )
+                url += "?&key=%s&show_entity_ids=true&q=authorName:*" % str( ristat_key )
+                if not dv_format == "":
+                    url += "&format=original"
                 logging.debug( url )
                 
                 if copy_local:
                     if not os.path.exists( download_dir ):
                         os.makedirs( download_dir )
-            
+                    
                     filename = paperitem[ 'name' ]
                     filepath = "%s/%s" % ( download_dir, filename )
                     logging.debug( "filepath: %s" % filepath )
@@ -352,7 +356,9 @@ def update_documentation( clioinfra, copy_local, remove_xlsx = False ):
 
     handle_name = "hdl_documentation"
     logging.info( "retrieving documents from dataverse for handle name %s ..." % handle_name )
-    ( docs, ids ) = documents_by_handle( clioinfra, handle_name, "doc", copy_local, remove_xlsx )
+    dst_dir = "doc"
+    dv_format = ""
+    ( docs, ids ) = documents_by_handle( clioinfra, handle_name, dst_dir, dv_format, copy_local, remove_xlsx )
     ndoc =  len( docs )
     logging.info( "%d documents retrieved from dataverse" % ndoc )
     if ndoc == 0:
@@ -361,7 +367,7 @@ def update_documentation( clioinfra, copy_local, remove_xlsx = False ):
 
 
 
-def update_vocabularies( clioinfra, mongo_client, copy_local = False, to_csv = False, remove_xlsx = False):
+def update_vocabularies( clioinfra, mongo_client, dv_format, copy_local = False, to_csv = False, remove_xlsx = False):
     logging.info( "%s update_vocabularies()" % __file__ )
     """
     update_vocabularies():
@@ -372,9 +378,16 @@ def update_vocabularies( clioinfra, mongo_client, copy_local = False, to_csv = F
     
     handle_name = "hdl_vocabularies"
     logging.info( "retrieving documents from dataverse for handle name %s ..." % handle_name )
-    xlsx_dir = "vocab/xlsx"
-    csv_dir  = "vocab/csv"
-    ( docs, ids ) = documents_by_handle( clioinfra, handle_name, xlsx_dir, copy_local, to_csv, remove_xlsx )
+    
+    if dv_format == "original":
+        dst_dir   = "vocab/xlsx"
+        csv_dir   = "vocab/csv"
+        ascii_dir = csv_dir
+    else:
+        dst_dir   = "vocab/tab"
+        ascii_dir = dst_dir
+    
+    ( docs, ids ) = documents_by_handle( clioinfra, handle_name, dst_dir, dv_format, copy_local, to_csv, remove_xlsx )
     ndoc =  len( docs )
     logging.info( "%d documents retrieved from dataverse" % ndoc )
     if ndoc == 0:
@@ -404,8 +417,8 @@ def update_vocabularies( clioinfra, mongo_client, copy_local = False, to_csv = F
     # and --together with some filtering-- 
     # appends them to a bigvocabulary
     tmp_dir = clioinfra.config[ 'tmppath' ]
-    abs_csv_dir = os.path.join( tmp_dir, "dataverse", csv_dir, handle_name )
-    bigvocabulary = vocabulary( host, apikey, ids, abs_csv_dir )    # type: <class 'pandas.core.frame.DataFrame'>
+    abs_ascii_dir = os.path.join( tmp_dir, "dataverse", ascii_dir, handle_name )
+    bigvocabulary = vocabulary( host, apikey, ids, abs_ascii_dir )    # type: <class 'pandas.core.frame.DataFrame'>
     #print bigvocabulary.to_json( orient = 'records' )
     vocab_json = json.loads( bigvocabulary.to_json( orient = 'records' ) )  # type: <type 'list'>
     
@@ -439,12 +452,13 @@ def update_vocabularies( clioinfra, mongo_client, copy_local = False, to_csv = F
 
 
 
-def retrieve_handle_docs( clioinfra, handle_name, copy_local = False, to_csv = False, remove_xlsx = False ):
+def retrieve_handle_docs( clioinfra, handle_name, dv_format = "", copy_local = False, to_csv = False, remove_xlsx = False ):
     logging.info( "" )
     logging.info( "retrieve_handle_docs() copy_local: %s" % copy_local )
 
     logging.info( "retrieving documents from dataverse for handle name %s ..." % handle_name )
-    ( docs, ids ) = documents_by_handle( clioinfra, handle_name, "xlsx", copy_local, to_csv, remove_xlsx )
+    dst_dir = "xlsx"
+    ( docs, ids ) = documents_by_handle( clioinfra, handle_name, dst_dir, dv_format, copy_local, to_csv, remove_xlsx )
     ndoc =  len( docs )
     if ndoc == 0:
         logging.info( "no documents retrieved." )
@@ -955,6 +969,9 @@ if __name__ == "__main__":
     DO_POSTGRES      = True     # ERRHS data: local_disk => postgresql, csv -> table
     DO_MONGODB       = True     # ERRHS data: postgresql => mongodb
     
+    dv_format = ""
+    #dv_format = "original"  # does not work for ter_code (regions) vocab translations
+    
     log_file = True
     
     #log_level = logging.DEBUG
@@ -1000,8 +1017,11 @@ if __name__ == "__main__":
         # Downloaded vocabulary documents are not used to update the vocabularies, 
         # they are processed on the fly, and put in MongoDB
         copy_local = True      # to inspect
-        to_csv     = True
-        update_vocabularies( clioinfra, mongo_client, copy_local, to_csv )
+        if dv_format == "":
+            to_csv = False      # we get .tab
+        else:
+            to_csv = True       # we get .xlsx
+        update_vocabularies( clioinfra, mongo_client, dv_format, copy_local, to_csv )
     #"""
     handle_names = [ 
         "hdl_errhs_population",     # ERRHS_1   39 files
@@ -1020,7 +1040,7 @@ if __name__ == "__main__":
         to_csv      = True
         remove_xlsx = False
         for handle_name in handle_names:
-            retrieve_handle_docs( clioinfra, handle_name, copy_local, to_csv, remove_xlsx ) # dataverse  => local_disk
+            retrieve_handle_docs( clioinfra, handle_name, dv_format, copy_local, to_csv, remove_xlsx ) # dataverse  => local_disk
     
     if DO_POSTGRES:
         logging.StreamHandler().flush()
@@ -1028,12 +1048,12 @@ if __name__ == "__main__":
         clear_postgres( clioinfra )
         row_count( clioinfra )
         for handle_name in handle_names:
-            store_handle_docs( clioinfra, handle_name )                 # local_disk => postgresql
+            store_handle_docs( clioinfra, handle_name )         # local_disk => postgresql
             logging.StreamHandler().flush()
             row_count( clioinfra )
     
     if DO_MONGODB:
-        update_handle_docs( clioinfra, mongo_client )                   # postgresql => mongodb
+        update_handle_docs( clioinfra, mongo_client )           # postgresql => mongodb
     
     logging.info( "stop: %s" % datetime.datetime.now() )
     str_elapsed = format_secs( time() - time0 )

@@ -3,7 +3,7 @@
 
 """
 VT-06-Jul-2016 latest change by VT
-FL-03-Apr-2017
+FL-04-Apr-2017
 """
 
 import ConfigParser
@@ -24,9 +24,9 @@ from StringIO import StringIO
 #import vocab
 
 
-def vocabulary( host, apikey, ids, abs_csv_dir ):
+def vocabulary( host, apikey, ids, abs_ascii_dir ):
     logging.info( "%s vocabulary()" % __file__ )
-    logging.info( "vocabulary() abs_csv_dir: %s" % abs_csv_dir )
+    logging.info( "vocabulary() abs_ascii_dir: %s" % abs_ascii_dir )
     
     lexicon = []
     len_totvocab = 0
