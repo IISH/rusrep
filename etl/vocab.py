@@ -3,7 +3,7 @@
 
 """
 VT-06-Jul-2016 latest change by VT
-FL-04-Apr-2017
+FL-05-Apr-2017
 """
 
 import ConfigParser
@@ -45,7 +45,7 @@ def vocabulary( host, apikey, ids, abs_ascii_dir ):
             dataframe = pd.read_csv( csvio, sep = '\t', dtype = 'unicode' )
         elif ext == ".xlsx":
             filename = basename + ".csv"
-            pathname = os.path.join( abs_csv_dir, filename )
+            pathname = os.path.join( abs_ascii_dir, filename )
             with open( pathname, 'r') as f:
                 data = f.read()
                 csvio = StringIO( str( data ) )
@@ -69,7 +69,7 @@ def vocabulary( host, apikey, ids, abs_ascii_dir ):
             
             vocab.columns = newcolumns
             vocab = vocab.dropna()
-            vocab[ 'vocabulary' ] = filename
+            vocab[ 'vocabulary' ] = basename
             len_vocab = len( vocab )
             len_totvocab += len_vocab
             lexicon.append( vocab )

@@ -969,8 +969,8 @@ if __name__ == "__main__":
     DO_POSTGRES      = True     # ERRHS data: local_disk => postgresql, csv -> table
     DO_MONGODB       = True     # ERRHS data: postgresql => mongodb
     
-    dv_format = ""
-    #dv_format = "original"  # does not work for ter_code (regions) vocab translations
+    #dv_format = ""
+    dv_format = "original"  # does not work for ter_code (regions) vocab translations
     
     log_file = True
     
