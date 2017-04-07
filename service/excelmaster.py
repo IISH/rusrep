@@ -108,7 +108,7 @@ def preprocessor( datafilter ):
             topic = key_comps[ 1 ]
         
         # load terms
-        terms_needed  = [ "base_year", "count", "datatype", "value_unit" ]
+        terms_needed  = [ "na", "base_year", "count", "datatype", "value_unit" ]
         terms_needed += [ "class1", "class2", "class3", "class4", "class5", "class6", "class7", "class8", "class9", "class10" ]
         terms_needed += [ "histclass1", "histclass2", "histclass3", "histclass4", "histclass5", "histclass6", "histclass7", "histclass8", "histclass9", "histclass10" ]
         
@@ -177,6 +177,10 @@ def preprocessor( datafilter ):
 
 def aggregate_dataset( fullpath, result, vocab, header ):
     logging.debug( "aggregate_dataset()" )
+    
+    #logging.debug( str( vocab ) )
+    na = vocab[ "terms" ][ "na" ]
+    logging.debug( "na: %s" % na )
     
     wb = openpyxl.Workbook( encoding = 'utf-8' )
     ws = wb.get_active_sheet()
@@ -258,7 +262,7 @@ def aggregate_dataset( fullpath, result, vocab, header ):
                     ter_value = ter_data[ ter_code ]
                     ter_value = re.sub( r'\.0', '', str( ter_value ) )
                 else:
-                    ter_value = 'NA'
+                    ter_value = na
                 
                 c.value = ter_value
                 logging.debug( "%d: %s" % ( j, ter_value ) )
@@ -272,6 +276,41 @@ def aggregate_dataset( fullpath, result, vocab, header ):
         c.value = line[ "value" ]
         #logging.debug( "r: %d, c: %d, value: %s" % ( line[ "r" ], line[ "c" ], line[ "value" ] ) )
     
+    # create copyright sheet
+    lang = "en"
+    if lang == "en":
+        ws2 = wb.create_sheet( 2, "Copyrights" )
+        c = ws2.cell( row = 1, column = 0 )
+        c.value = "Electronic Repository of Russian Historical Statistics / Электронный архив Российской исторической статистики"
+        c = ws2.cell( row = 2, column = 0 )
+        c.value = "2014-2016"
+        c = ws2.cell( row = 4, column = 0 )
+        c.value = "Creative Commons License"
+        c = ws2.cell( row = 5, column = 0 )
+        c.value = "This work is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License."
+        c = ws2.cell( row = 6, column = 0 )
+        c.value = "http://creativecommons.org/licenses/by-nc-sa/4.0/"
+        c = ws2.cell( row = 8, column = 0 )
+        c.value = "By downloading and using data from the Electronic Repository of Russian Historical Statistics the user agrees to the terms of this license. Providing a correct reference to the resource is a formal requirement of the license: "
+        c = ws2.cell( row = 9, column = 0 )
+        c.value = "Kessler, Gijs and Andrei Markevich (2016), Electronic Repository of Russian Historical Statistics, 18th - 21st centuries, http://ristat.org/"
+    elif lang == "rus":
+        ws2 = wb.create_sheet( 2, "Copyrights" )
+        c = ws2.cell( row = 1, column = 0 )
+        c.value = "Electronic Repository of Russian Historical Statistics / Электронный архив Российской исторической статистики"
+        c = ws2.cell( row = 2, column = 0 )
+        c.value = "2014-2016"
+        c = ws2.cell( row = 4, column = 0 )
+        c.value = "Лицензия Creative Commons"
+        c = ws2.cell( row = 5, column = 0 )
+        c.value = "Это произведение доступно по лицензии Creative Commons «Attribution-NonCommercial-ShareAlike» («Атрибуция — Некоммерческое использование — На тех же условиях») 4.0 Всемирная."
+        c = ws2.cell( row = 6, column = 0 )
+        c.value = "http://creativecommons.org/licenses/by-nc-sa/4.0/deed.ru"
+        c = ws2.cell( row = 8, column = 0 )
+        c.value = "Скачивая и начиная использовать данные пользователь автоматически соглашается с этой лицензией. Наличие корректно оформленной ссылки является обязательным требованием лицензии:"
+        c = ws2.cell( row = 9, column = 0 )
+        c.value = "Кесслер Хайс и Маркевич Андрей (2016), Электронный архив Российской исторической статистики, XVIII – XXI вв., [Электронный ресурс] : [сайт]. — Режим доступа: http://ristat.org/"
+
     wb.save( fullpath )
     
     return fullpath

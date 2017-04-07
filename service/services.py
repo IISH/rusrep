@@ -196,7 +196,10 @@ def json_generator( cursor, json_dataname, data ):
         # If aggregation check data output for 'NA' values
         if 'total' in data_keys:
             if extravalues[ 'data_active' ]:
-                data_keys[ 'total' ] = 'NA'
+                if language == "en":
+                    data_keys[ 'total' ] = 'NA'
+                elif language == "rus":
+                    data_keys = "непригодный"
         
         ( path, output ) = classcollector( data_keys )
         output[ 'path' ] = path
