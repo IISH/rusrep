@@ -19,6 +19,7 @@ sys.setdefaultencoding( "utf8" )
 
 import collections
 import ConfigParser
+import datetime
 import json
 import logging
 import os
@@ -1411,9 +1412,16 @@ def aggr():
 def download():
     zipping = True
     logging.debug( "download() zip: %s" % zipping )
+    
     logging.debug( request.args )
+    key = request.args.get( 'key' )
+        
     clioinfra = Configuration()
-
+    tmp_dir = clioinfra.config[ 'tmppath' ]
+    top_download_dir = os.path.join( tmp_dir, "download" )
+    cleanup_downloads( top_download_dir )                   # remove too old downloads
+    download_dir = os.path.join( top_download_dir, key )    # this download dir
+    
     if request.args.get( 'id' ):
         logging.debug( "download() id" )
         host = "datasets.socialhistory.org"
@@ -1427,7 +1435,6 @@ def download():
         
         return Response( pdfdata, mimetype = filetype )
     
-    key = request.args.get( 'key' )
     if key:
         logging.debug( "download() key: %s" % key )
         clientcache = MongoClient()
@@ -1435,8 +1442,6 @@ def download():
         datafilter[ 'key' ] = key
         ( lexicon, regions, header ) = preprocessor( datafilter )
         
-        tmp_dir = clioinfra.config[ 'tmppath' ]
-        download_dir = os.path.join( tmp_dir, "download", key )
         xlsx_name = "%s.xlsx" % key
         xlsx_pathname = os.path.abspath( os.path.join( download_dir, xlsx_name ) )
         logging.debug( "full_path: %s" % xlsx_pathname )
@@ -1478,6 +1483,42 @@ def download():
             return Response( dataset, mimetype = 'application/json; charset=utf-8' )
     else:
         return "Argument 'key' not found"
+
+
+
+def cleanup_downloads( download_dir ):
+    # remove too old downloads
+    logging.debug( "download_dir() %s" % download_dir )
+    
+    seconds_per_day = 60 * 60 * 24
+    time_limit = seconds_per_day
+    dt_now = datetime.datetime.now()
+    
+    ndeleted = 0
+    dir_list = os.listdir( download_dir )
+    for dir_name in dir_list:
+        dir_path = os.path.abspath( os.path.join( download_dir, dir_name ) )
+        mtime = os.path.getmtime( dir_path )
+        dt_file = datetime.datetime.fromtimestamp( mtime )
+        seconds = (dt_now - dt_file).total_seconds()
+        
+        if seconds >= time_limit:       # remove
+            logging.debug( "delete: %s" % dir_name )
+            ndeleted += 1
+            for root, sdirs, files in os.walk( dir_path ):
+                if files is not None:
+                    files.sort()
+                    for fname in files:
+                        logging.debug( "delete: %s" % fname )
+                        file_path = os.path.join( root, fname )
+                        logging.debug( "file_path: %s" % file_path )
+                        os.unlink( file_path )  # download file
+                shutil.rmtree( root )           # download dir
+        else:                           # keep
+            #logging.debug( "keep:   %s" % dir_name )
+            pass
+        
+    logging.debug( "# of downloads deleted: %d" % ndeleted )
 
 
 

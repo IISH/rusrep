@@ -182,7 +182,6 @@ def aggregate_dataset( fullpath, result, vocab, header ):
     ws = wb.get_active_sheet()
     ws.title = "Dataset"
 
-    i = 9
     myloc = Locale( 'ru' )  # 'el' is the locale code for Greek
     col = Collator.createInstance( myloc )
     regions = {}
@@ -195,19 +194,28 @@ def aggregate_dataset( fullpath, result, vocab, header ):
         regnames.append( ter_name ) 
 
     sorted_regions = sorted( regnames, cmp = col.compare )
-
+    
+    # header line here; lines above for legend
+    i = 9
+    logging.debug( "# of itemchains in result: %d" % len( result ) )
     for itemchain in result:
         j = 0
+        
+        # header
         if i == 9:
+            # write header colums with translations
             #ws.column_dimensions[ "C" ].width = 80
             #ws.column_dimensions[ "D" ].width = 20
             #ws.column_dimensions[ "O" ].width = 100
             #ws.column_dimensions[ "P" ].width = 100
     
             chain = json.loads( itemchain )
-            terdata = result[ itemchain ]
+            ter_data = result[ itemchain ]
             
+            logging.debug( "# of names in chain: %d" % len( chain ) )
             for name in sorted( chain ):
+                if name == "count":         # skip 'count' column in download
+                    continue
                 c = ws.cell( row = i, column = j )
                 col_name = name
                 if col_name in vocab[ 'terms' ]:
@@ -216,6 +224,7 @@ def aggregate_dataset( fullpath, result, vocab, header ):
                 logging.debug( "%d: %s" % ( j, col_name ) )
                 j += 1
             
+            logging.debug( "# of ter_names in sorted_regions: %d" % len( sorted_regions ) )
             for ter_name in sorted_regions:
                 ter_code = regions[ ter_name ]
                 c = ws.cell( row = i, column = j )
@@ -227,44 +236,44 @@ def aggregate_dataset( fullpath, result, vocab, header ):
                 j += 1
             i += 1
         
+        # data
         if itemchain:
+            logging.debug( "data" )
             j = 0
             chain = json.loads( itemchain )
-            terdata = result[ itemchain ]
+            ter_data = result[ itemchain ]
             for name in sorted( chain ):
+                if name == "count":         # skip 'count' column in download
+                    continue
                 c = ws.cell( row = i, column = j )
                 c.value = chain[ name ] 
+                logging.debug( "%d: %s" % ( j, name ) )
                 j += 1
             
             # Sorting
             for ter_name in sorted_regions:
                 ter_code = regions[ ter_name ]
                 c = ws.cell( row = i, column = j )
-                if ter_code in terdata:
-                    ter_value = terdata[ ter_code ]
+                if ter_code in ter_data:
+                    ter_value = ter_data[ ter_code ]
                     ter_value = re.sub( r'\.0', '', str( ter_value ) )
                 else:
                     ter_value = 'NA'
+                
                 c.value = ter_value
+                logging.debug( "%d: %s" % ( j, ter_value ) )
                 j += 1
+            
             i += 1
     
+    #logging.debug( "# of lines in header: %d" % len( header ) )
     for line in header:
         c = ws.cell( row = line[ "r" ], column = line[ "c" ] )
         c.value = line[ "value" ]
+        #logging.debug( "r: %d, c: %d, value: %s" % ( line[ "r" ], line[ "c" ], line[ "value" ] ) )
     
-    
-
     wb.save( fullpath )
+    
     return fullpath
 
-#datakey = '0.34172879'
-#datakey = "0.67168331"
-#fullpath = "/home/dpe/rusrep/service/test1.xlsx"
-#lexicon = preprocessor(datakey)
-#filename= create_excel_dataset(fullpath, lexicon)
-#print filename
-#for lexkey in lexicon:
-#    print str(lexkey)
-#    print str(lexicon[lexkey])
-
+# [eof]
