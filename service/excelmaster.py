@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # VT-07-Jul-2016 latest change by VT
-# FL-28-Mar-2017 
+# FL-10-Apr-2017 
 
 import json
 import logging
@@ -276,14 +276,19 @@ def aggregate_dataset( fullpath, result, vocab, header ):
         c.value = line[ "value" ]
         #logging.debug( "r: %d, c: %d, value: %s" % ( line[ "r" ], line[ "c" ], line[ "value" ] ) )
     
-    # create copyright sheet
-    lang = "en"
-    if lang == "en":
-        ws2 = wb.create_sheet( 2, "Copyrights" )
-        c = ws2.cell( row = 1, column = 0 )
-        c.value = "Electronic Repository of Russian Historical Statistics / Электронный архив Российской исторической статистики"
-        c = ws2.cell( row = 2, column = 0 )
-        c.value = "2014-2016"
+    # create copyright sheet; extract language id from filename
+    comps1 = fullpath.split( '/' )
+    comps2 = comps1[ -1 ].split( '-' )
+    language = comps2[ 0 ]
+    logging.debug( "language: %s" % language )
+    
+    ws2 = wb.create_sheet( 2, "Copyrights" )
+    c = ws2.cell( row = 1, column = 0 )
+    c.value = "Electronic Repository of Russian Historical Statistics / Электронный архив Российской исторической статистики"
+    c = ws2.cell( row = 2, column = 0 )
+    c.value = "2014-2016"
+        
+    if language == "en":
         c = ws2.cell( row = 4, column = 0 )
         c.value = "Creative Commons License"
         c = ws2.cell( row = 5, column = 0 )
@@ -294,12 +299,7 @@ def aggregate_dataset( fullpath, result, vocab, header ):
         c.value = "By downloading and using data from the Electronic Repository of Russian Historical Statistics the user agrees to the terms of this license. Providing a correct reference to the resource is a formal requirement of the license: "
         c = ws2.cell( row = 9, column = 0 )
         c.value = "Kessler, Gijs and Andrei Markevich (2016), Electronic Repository of Russian Historical Statistics, 18th - 21st centuries, http://ristat.org/"
-    elif lang == "rus":
-        ws2 = wb.create_sheet( 2, "Copyrights" )
-        c = ws2.cell( row = 1, column = 0 )
-        c.value = "Electronic Repository of Russian Historical Statistics / Электронный архив Российской исторической статистики"
-        c = ws2.cell( row = 2, column = 0 )
-        c.value = "2014-2016"
+    elif language == "ru":
         c = ws2.cell( row = 4, column = 0 )
         c.value = "Лицензия Creative Commons"
         c = ws2.cell( row = 5, column = 0 )

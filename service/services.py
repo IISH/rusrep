@@ -3,7 +3,7 @@
 # VT-07-Jul-2016 latest change by VT
 # FL-12-Dec-2016 use datatype in function documentation()
 # FL-20-Jan-2017 utf8 encoding
-# FL-28-Mar-2017 
+# FL-10-Apr-2017 
 
 from __future__ import absolute_import      # VT
 """
@@ -211,7 +211,7 @@ def json_generator( cursor, json_dataname, data ):
     
     newkey = str( "%05.8f" % random.random() )  # newkey used as base name for zip download
     # put some additional info in the key
-    newkey = "%s-%s-%s" % ( classification[ 0 ], datatype, newkey[ 2: ] )
+    newkey = "%s-%s-%s-%s" % ( language, classification[ 0 ], datatype, newkey[ 2: ] )
     
     clioinfra = Configuration()
     tmp_dir = clioinfra.config[ 'tmppath' ]
