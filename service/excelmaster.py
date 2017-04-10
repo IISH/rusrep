@@ -9,6 +9,7 @@ import logging
 import openpyxl
 import re
 
+from datetime import date
 from icu import Locale, Collator
 from openpyxl.cell import get_column_letter
 from pymongo import MongoClient
@@ -286,8 +287,8 @@ def aggregate_dataset( fullpath, result, vocab, header ):
     c = ws2.cell( row = 1, column = 0 )
     c.value = "Electronic Repository of Russian Historical Statistics / Электронный архив Российской исторической статистики"
     c = ws2.cell( row = 2, column = 0 )
-    c.value = "2014-2016"
-        
+    c.value = "2014-%d" % date.today().year
+    
     if language == "en":
         c = ws2.cell( row = 4, column = 0 )
         c.value = "Creative Commons License"
@@ -298,7 +299,7 @@ def aggregate_dataset( fullpath, result, vocab, header ):
         c = ws2.cell( row = 8, column = 0 )
         c.value = "By downloading and using data from the Electronic Repository of Russian Historical Statistics the user agrees to the terms of this license. Providing a correct reference to the resource is a formal requirement of the license: "
         c = ws2.cell( row = 9, column = 0 )
-        c.value = "Kessler, Gijs and Andrei Markevich (2016), Electronic Repository of Russian Historical Statistics, 18th - 21st centuries, http://ristat.org/"
+        c.value = "Kessler, Gijs and Andrei Markevich (%d), Electronic Repository of Russian Historical Statistics, 18th - 21st centuries, http://ristat.org/" % date.today().year
     elif language == "ru":
         c = ws2.cell( row = 4, column = 0 )
         c.value = "Лицензия Creative Commons"
@@ -309,7 +310,7 @@ def aggregate_dataset( fullpath, result, vocab, header ):
         c = ws2.cell( row = 8, column = 0 )
         c.value = "Скачивая и начиная использовать данные пользователь автоматически соглашается с этой лицензией. Наличие корректно оформленной ссылки является обязательным требованием лицензии:"
         c = ws2.cell( row = 9, column = 0 )
-        c.value = "Кесслер Хайс и Маркевич Андрей (2016), Электронный архив Российской исторической статистики, XVIII – XXI вв., [Электронный ресурс] : [сайт]. — Режим доступа: http://ristat.org/"
+        c.value = "Кесслер Хайс и Маркевич Андрей (%d), Электронный архив Российской исторической статистики, XVIII – XXI вв., [Электронный ресурс] : [сайт]. — Режим доступа: http://ristat.org/" % date.today().year
 
     wb.save( fullpath )
     
