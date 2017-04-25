@@ -16,7 +16,7 @@ from pymongo import MongoClient
 
 
 def preprocessor( datafilter ):
-    logging.debug( "preprocessor()" )
+    logging.debug( "preprocessor() datafilter: %s" % datafilter )
      
     dataset = []
     lexicon = {}

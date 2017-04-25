@@ -164,10 +164,11 @@ def json_generator( cursor, json_dataname, data ):
             datatype_ = datatype[ 0 ] + "_00"
         if "base_year" in qinput:
             base_year = qinput[ "base_year" ]
-            
-        logging.debug( "language:  %s" % language )
-        logging.debug( "datatype:  %s" % datatype )
-        logging.debug( "base_year: %s" % base_year )
+        
+        logging.debug( "classification : %s" % classification )
+        logging.debug( "language       : %s" % language )
+        logging.debug( "datatype       : %s" % datatype )
+        logging.debug( "base_year      : %s" % base_year )
     except:
         pass
 
@@ -238,13 +239,21 @@ def json_generator( cursor, json_dataname, data ):
                 if doc.find( "Modern_Classification" ) != -1:   # string
                     get_list.append( doc )
             
-            if doc.find( str( base_year ) ) != -1:              # base_year
+            if classification == "historic":                    # only base_year docs
+                if doc.find( str( base_year ) ) != -1:          # base_year
+                    if doc.find( "GovReports" ) != -1:          # string
+                        get_list.append( doc )
+                
+                    if doc.find( datatype_ ) != -1:             # datatype
+                        get_list.append( doc )
+            else:                                               # modern: all docs
                 if doc.find( "GovReports" ) != -1:              # string
                     get_list.append( doc )
             
                 if doc.find( datatype_ ) != -1:                 # datatype
                     get_list.append( doc )
-    
+            
+            
     for doc in get_list:
         doc_path = os.path.join( doc_dir, doc )
         shutil.copy2( doc_path, download_dir )
@@ -970,10 +979,11 @@ def aggregation():
     #logging.info( "Python version: %s" % sys.version  )
     
     thisyear = ''
+    qinput = simplejson.loads( request.data )
     
     try:
         #qinput = json.loads( request.data )
-        qinput = simplejson.loads( request.data )
+        #qinput = simplejson.loads( request.data )
         """
         from simplejson import JSONDecoder
         jd = JSONDecoder()
@@ -1001,12 +1011,14 @@ def aggregation():
         for key in qinput:
             value = qinput[ key ]
             if key == "path":
-                logging.debug( "path: %s" % u"\u2265" )
+                logging.debug( "path:" )     # debug: ≥ = u"\u2265"
                 for pdict in value:
                     logging.debug( str( pdict ) )
                     for pkey in pdict:
                         pvalue = pdict[ pkey ]
                         logging.debug( "key: %s, value: %s" % ( pkey, pvalue ) )
+                        if pkey == "classification":
+							classification = pvalue
             else:
                 logging.debug( "key: %s, value: %s" % ( key, value ) )
     except:
@@ -1027,6 +1039,7 @@ def aggregation():
                 base_year = qinput.get( "base_year" )
                 if base_year:
                     vocab_filter[ "YEAR" ] = base_year
+                
                 datatype = qinput.get( "datatype" )
                 if datatype:
                     vocab_filter[ "DATATYPE" ] = datatype
@@ -1034,6 +1047,9 @@ def aggregation():
                 eng_data = translated_vocabulary( vocab_filter )
                 units = translated_vocabulary( { "vocabulary": "ERRHS_Vocabulary_units" } )
                 logging.debug( "translated_vocabulary returned %d items" % len( units ) )
+                logging.debug( "vocab_filter: %s" % str( vocab_filter ) )
+                logging.debug( "eng_data: %s" % str( eng_data ) )
+                logging.debug( "units: %s" % str( units ) )
                 for item in units:
                     eng_data[ item ] = units[ item ]
     
@@ -1083,7 +1099,7 @@ def aggregation():
                         if value in eng_data:
                             logging.debug( "xkey: %s,     value: %s" % ( xkey, value ) )
                             value = eng_data[ value ]
-
+                        
                         """
                         p_inhabitants = value.find( "inhabitants" )
                         if p_inhabitants != -1:
@@ -1114,6 +1130,12 @@ def aggregation():
     
     sql[ 'internal' ] = sql[ 'internal' ][ :-3 ]
 
+    logging.debug( "condition: %s" % str( sql[ "condition" ] ) )
+    logging.debug( "order_by:  %s" % str( sql[ "order_by" ]  ) )
+    logging.debug( "group_by:  %s" % str( sql[ "group_by" ]  ) )
+    logging.debug( "where:     %s" % str( sql[ "where" ]     ) )
+    logging.debug( "internal:  %s" % str( sql[ "internal" ]  ) )
+
     #select sum(cast(value as double precision)), value_unit from russianrepository where datatype = '1.02' and year='2002' and histclass2 = '' and histclass1='1' group by histclass1, histclass2, value_unit;
     # value may contain '.'& '. ' entries that cannot be SUMmed
     # => manually count with python, skipping '.'& '. ' entries
@@ -1124,10 +1146,21 @@ def aggregation():
     sql_query += ", COUNT(*) - COUNT(value) AS data_active"
     sql_query += ", value_unit, ter_code"
 
+    #classification = qinput[ "classification" ]
+    #logging.debug( "classification: %s" % classification )
+    #if classification == "modern":
+    #    sql_query += ", base_year"
+    # must also be in GROUP BY, 
+    # between datatype and ter_code
+
     if sql[ 'where' ]:
         logging.debug( "where: %s" % sql[ "where" ] )
         sql_query += ", %s" % sql[ 'condition' ]
         sql_query  = sql_query[ :-2 ]
+        
+        #if classification == "modern":
+        #    sql_query += " AND base_year = '1858'"
+        
         sql_query += " FROM russianrepository WHERE %s" % sql[ 'where' ]
         sql_query  = sql_query[ :-4 ]
         
@@ -1423,7 +1456,7 @@ def download():
     tmp_dir = clioinfra.config[ 'tmppath' ]
     top_download_dir = os.path.join( tmp_dir, "download" )
     cleanup_downloads( top_download_dir )                   # remove too old downloads
-    download_dir = os.path.join( top_download_dir, key )    # this download dir
+    download_dir = os.path.join( top_download_dir, key )    # current download dir
     
     if request.args.get( 'id' ):
         logging.debug( "download() id" )
@@ -1491,10 +1524,10 @@ def download():
 
 def cleanup_downloads( download_dir ):
     # remove too old downloads
-    logging.debug( "download_dir() %s" % download_dir )
+    logging.debug( "cleanup_downloads() download_dir: %s" % download_dir )
     
     seconds_per_day = 60 * 60 * 24
-    time_limit = seconds_per_day
+    time_limit = seconds_per_day        # 1 day
     dt_now = datetime.datetime.now()
     
     ndeleted = 0
