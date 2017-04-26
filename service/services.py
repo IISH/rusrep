@@ -977,9 +977,31 @@ def getvocabulary():
 def aggregation():
     logging.debug( "aggregation()" )
 
+    qinput = simplejson.loads( request.data )
+    classification = qinput.get( "classification" )
+    logging.debug( "classification: %s" % classification )
+    
+    if classification == "historical":
+        resp = aggregation_1year( qinput )
+        return resp
+    elif classification == "modern":
+        """
+        base_years = [ "1795", "1858", "1897", "1959", "2002"]
+        for base_year in base_years:
+            logging.debug( "base_year: %s" % base_year )
+            qinput[ "base_year" ] = base_year
+            aggregation_1year( qinput )
+        """
+        aggregation_1year( qinput )
+    
+    return str( '{}' )
+
+
+
+def aggregation_1year( qinput ):
+    logging.debug( "aggregation_1year()" )
     
     thisyear = ''
-    qinput = simplejson.loads( request.data )
     
     try:
         #qinput = json.loads( request.data )
