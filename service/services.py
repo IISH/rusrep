@@ -976,7 +976,7 @@ def getvocabulary():
 @app.route( '/aggregation', methods = ['POST', 'GET' ] )
 def aggregation():
     logging.debug( "aggregation()" )
-    #logging.info( "Python version: %s" % sys.version  )
+
     
     thisyear = ''
     qinput = simplejson.loads( request.data )
@@ -1065,10 +1065,11 @@ def aggregation():
         for name in qinput:
             if not name in forbidden:
                 value = str( qinput[ name ] )
+                logging.debug( "name: %s, value: %s" % ( name, value ) )
                 if value in eng_data:
                     #value = eng_data[ value ][ 'class_rus' ]
                     value = eng_data[ value ]
-                    logging.debug( "name: %s, value: %s" % ( name, value ) )
+                    logging.debug( "eng_data name: %s, value: %s" % ( name, value ) )
                 
                 #sql[ 'where' ] += "%s='%s' AND1 " % ( name, value )
                 sql[ 'where' ] += "%s AND " % get_sql_query( name, value )
@@ -1095,10 +1096,12 @@ def aggregation():
                         value = path[ xkey ]
                         value = str( value )    # ≥5000 : \xe2\x89\xa55000 => u'\\u22655000
                         # otherwise, it is not found in eng_data
+                        logging.debug( "clear_path xkey: %s, value: %s" % ( xkey, value ) )
                         
                         if value in eng_data:
-                            logging.debug( "xkey: %s,     value: %s" % ( xkey, value ) )
+                            logging.debug( "xkey: %s, value: %s" % ( xkey, value ) )
                             value = eng_data[ value ]
+                            logging.debug( "xkey: %s, value: %s" % ( xkey, value ) )
                         
                         """
                         p_inhabitants = value.find( "inhabitants" )
@@ -1124,7 +1127,8 @@ def aggregation():
                         for key in sql_local:
                             sql_local[ key ] = sql_local[ key ][ :-2 ]
                             sql[ 'internal' ] += "%s AND " % sql_local[ key ]
-                        
+                            logging.debug( "key: %s, value: %s" % ( key, sql_local[ key ] ) )
+                            
                         sql[ 'internal' ] = sql[ 'internal' ][ :-4 ]
                         sql[ 'internal' ] += ') OR'
     
@@ -1146,8 +1150,8 @@ def aggregation():
     sql_query += ", COUNT(*) - COUNT(value) AS data_active"
     sql_query += ", value_unit, ter_code"
 
-    #classification = qinput[ "classification" ]
-    #logging.debug( "classification: %s" % classification )
+    classification = qinput[ "classification" ]
+    logging.debug( "classification: %s" % classification )
     #if classification == "modern":
     #    sql_query += ", base_year"
     # must also be in GROUP BY, 
@@ -1172,7 +1176,12 @@ def aggregation():
     sql_query += " AND value <> '.'"            # suppress a 'lone' "optional point", used in the table to flag missing data
     sql_query += " AND value ~ '^\d*\.?\d*$'"   # plus an optional single . for floating point values
     
-    sql[ "group_by" ] = " GROUP BY value_unit, ter_code, "
+    if classification == "modern":
+        #sql[ "group_by" ] = " GROUP BY value_unit, base_year, ter_code, "
+        sql[ "group_by" ] = " GROUP BY value_unit, ter_code, "
+    else:
+        sql[ "group_by" ] = " GROUP BY value_unit, ter_code, "
+    
     for field in known_fields:
         sql[ "group_by" ] += "%s," % field
     sql[ "group_by" ] = sql[ "group_by" ][ :-1 ]
