@@ -125,7 +125,7 @@ def classcollector( keywords ):
 
 
 
-def json_generator( cursor, json_dataname, data ):
+def json_generator( cursor, json_dataname, data, download_key = None ):
     logging.debug( "json_generator() cursor: %s, json_dataname: %s" % ( cursor, json_dataname ) )
     logging.debug( "data: %s" % data )
     
@@ -210,13 +210,15 @@ def json_generator( cursor, json_dataname, data ):
     json_hash[ "language" ] = language
     json_hash[ json_dataname ] = json_list
     
-    newkey = str( "%05.8f" % random.random() )  # newkey used as base name for zip download
+    """
+    download_key = str( "%05.8f" % random.random() )  # used as base name for zip download
     # put some additional info in the key
-    newkey = "%s-%s-%s-%s" % ( language, classification[ 0 ], datatype, newkey[ 2: ] )
+    download_key = "%s-%s-%s-%s" % ( language, classification[ 0 ], datatype, download_key[ 2: ] )
+    """
     
     clioinfra = Configuration()
     tmp_dir = clioinfra.config[ 'tmppath' ]
-    download_dir = os.path.join( tmp_dir, "download", newkey )
+    download_dir = os.path.join( tmp_dir, "download", download_key )
     if not os.path.exists( download_dir ):
         os.makedirs( download_dir )
     doc_dir = os.path.join( tmp_dir, "dataverse", "doc", "hdl_documentation" )
@@ -258,7 +260,7 @@ def json_generator( cursor, json_dataname, data ):
         doc_path = os.path.join( doc_dir, doc )
         shutil.copy2( doc_path, download_dir )
     
-    json_hash[ "url" ] = "%s/service/download?key=%s" % ( configparser.get( 'config', 'root' ), newkey )
+    json_hash[ "url" ] = "%s/service/download?key=%s" % ( configparser.get( 'config', 'root' ), download_key )
     logging.debug( "json_hash: %s" % json_hash )
     
     json_string = json.dumps( json_hash, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
@@ -267,7 +269,7 @@ def json_generator( cursor, json_dataname, data ):
     try:
         thisdata = json_hash
         del thisdata[ 'url' ]
-        thisdata[ 'key' ] = newkey
+        thisdata[ 'key' ] = download_key
         thisdata[ 'language' ] = language
         
         clientcache = MongoClient()
@@ -281,16 +283,19 @@ def json_generator( cursor, json_dataname, data ):
 
 
 
-def translated_vocabulary( newfilter ):
+def translated_vocabulary( vocab_filter, classification = None ):
     logging.debug( "translated_vocabulary()" )
-    logging.debug( newfilter )
+    logging.debug( "vocab_filter: %s" % str( vocab_filter ) )
     
     client = MongoClient()
     dbname = 'vocabulary'
     db = client.get_database( dbname )
-    if newfilter:
-        #vocab = db.data.find( { "YEAR": thisyear } )
-        vocab = db.data.find( newfilter )
+    
+    if classification == "modern":
+        del vocab_filter[ "YEAR" ]
+    
+    if vocab_filter:
+        vocab = db.data.find( vocab_filter )
     else:
         vocab = db.data.find()
     
@@ -978,28 +983,39 @@ def aggregation():
     logging.debug( "aggregation()" )
 
     qinput = simplejson.loads( request.data )
+    language = qinput.get( "language" )
     classification = qinput.get( "classification" )
-    logging.debug( "classification: %s" % classification )
+    datatype = qinput.get( "datatype" )
+    logging.debug( "language: %s, classification: %s, datatype: %s" % ( language, classification, datatype ) )
+    
+    download_key = str( "%05.8f" % random.random() )  # used as base name for zip download
+    # put some additional info in the key
+    download_key = "%s-%s-%s-%s" % ( language, classification[ 0 ], datatype, download_key[ 2: ] )
+    logging.debug( "download_key: %s" % download_key )
     
     if classification == "historical":
-        resp = aggregation_1year( qinput )
+        resp = aggregation_1year( qinput, download_key )
         return resp
     elif classification == "modern":
-        """
+        #"""
+        resps = []
         base_years = [ "1795", "1858", "1897", "1959", "2002"]
         for base_year in base_years:
             logging.debug( "base_year: %s" % base_year )
             qinput[ "base_year" ] = base_year
-            aggregation_1year( qinput )
-        """
-        aggregation_1year( qinput )
-    
+            resp = aggregation_1year( qinput, download_key )
+            logging.debug( type( resp ) )
+            #resps += resp
+        return resp
+        #"""
+        #resp = aggregation_1year( qinput, download_key )
+        
     return str( '{}' )
 
 
 
-def aggregation_1year( qinput ):
-    logging.debug( "aggregation_1year()" )
+def aggregation_1year( qinput, download_key ):
+    logging.debug( "aggregation_1year() %s" % download_key )
     
     thisyear = ''
     
@@ -1059,7 +1075,7 @@ def aggregation_1year( qinput ):
             if qinput[ 'language' ]== 'en':
                 vocab_filter = {}
                 base_year = qinput.get( "base_year" )
-                if base_year:
+                if base_year and qinput.get( "classification" ) == "historical":
                     vocab_filter[ "YEAR" ] = base_year
                 
                 datatype = qinput.get( "datatype" )
@@ -1260,7 +1276,7 @@ def aggregation_1year( qinput ):
             
             finaldata.append( finalitem )
         
-        json_data = json_generator( cursor, 'data', finaldata )
+        json_data = json_generator( cursor, 'data', finaldata, download_key )
         
         logging.debug( "json_data before return Response:" )
         logging.debug( json_data )

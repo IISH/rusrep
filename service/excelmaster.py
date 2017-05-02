@@ -7,6 +7,7 @@
 import json
 import logging
 import openpyxl
+import os
 import re
 
 from datetime import date
@@ -178,6 +179,9 @@ def preprocessor( datafilter ):
 
 def aggregate_dataset( fullpath, result, vocab, header ):
     logging.debug( "aggregate_dataset()" )
+    logging.debug( "fullpath: %s" % fullpath )
+    #( root, ext ) = os.path.split( fullpath )
+    #fullpath = root + "-2017" + ext
     
     #logging.debug( str( vocab ) )
     na = vocab[ "terms" ][ "na" ]
