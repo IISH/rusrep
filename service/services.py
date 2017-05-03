@@ -38,6 +38,7 @@ import zipfile
 
 from io import BytesIO
 from flask import Flask, Response, request, send_from_directory, send_file
+from jsonmerge import merge
 from pymongo import MongoClient
 from StringIO import StringIO
 from sys import exc_info
@@ -990,26 +991,26 @@ def aggregation():
     
     download_key = str( "%05.8f" % random.random() )  # used as base name for zip download
     # put some additional info in the key
-    download_key = "%s-%s-%s-%s" % ( language, classification[ 0 ], datatype, download_key[ 2: ] )
+    base_year = qinput.get( "base_year" )
+    if base_year is None or base_year == "":
+        base_year = "0000"
+    download_key = "%s-%s-%s-%s-%s" % ( language, classification[ 0 ], datatype, base_year, download_key[ 2: ] )
     logging.debug( "download_key: %s" % download_key )
     
     if classification == "historical":
-        resp = aggregation_1year( qinput, download_key )
-        return resp
+        json_data = aggregation_1year( qinput, download_key )
+        return Response( json_data, mimetype = 'application/json; charset=utf-8' )
     elif classification == "modern":
-        #"""
-        resps = []
-        base_years = [ "1795", "1858", "1897", "1959", "2002"]
+        json_datas = {}
+        base_years = [ "1795", "1858", "1897", "1959", "2002" ]
         for base_year in base_years:
             logging.debug( "base_year: %s" % base_year )
             qinput[ "base_year" ] = base_year
-            resp = aggregation_1year( qinput, download_key )
-            logging.debug( type( resp ) )
-            #resps += resp
-        return resp
-        #"""
-        #resp = aggregation_1year( qinput, download_key )
+            json_data = aggregation_1year( qinput, download_key )
+            json_datas = merge( json_datas, json_data )
         
+        return Response( json_datas, mimetype = 'application/json; charset=utf-8' )
+    
     return str( '{}' )
 
 
@@ -1280,7 +1281,8 @@ def aggregation_1year( qinput, download_key ):
         
         logging.debug( "json_data before return Response:" )
         logging.debug( json_data )
-        return Response( json_data, mimetype = 'application/json; charset=utf-8' )
+        #return Response( json_data, mimetype = 'application/json; charset=utf-8' )
+        return json_data
 
     return str( '{}' )
 
