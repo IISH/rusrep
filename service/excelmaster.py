@@ -1,8 +1,8 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-# VT-07-Jul-2016 latest change by VT
-# FL-10-Apr-2017 
+# VT-07-Jul-2016 Latest change by VT
+# FL-08-May-2017 Latest change
 
 import json
 import logging
@@ -18,15 +18,25 @@ from pymongo import MongoClient
 
 def preprocessor( datafilter ):
     logging.debug( "preprocessor() datafilter: %s" % datafilter )
-     
+    
     dataset = []
     lexicon = {}
     lands   = {}
     year    = 0
-    lang    = 'en'
+    lang    = ""
 
     key = datafilter[ "key" ]
     if key:
+        topic = ""
+        key_comps = key.split( '-' )
+        logging.debug( "key_comps: %s" % str( key_comps ) )
+        if len( key_comps ) >= 1:
+            lang = key_comps[ 0 ]
+        if len( key_comps ) >= 2:
+            hist_mod = key_comps[ 1 ]
+        if len( key_comps ) >= 3:
+            topic = key_comps[ 2 ]
+        
         clientcache = MongoClient()
         dbcache = clientcache.get_database( 'datacache' )
         result = dbcache.data.find( { "key": key } )
@@ -103,12 +113,6 @@ def preprocessor( datafilter ):
         
         # create header
         header = []
-        
-        topic = ""
-        key_comps = key.split( '-' )
-        if len( key_comps ) >= 2:
-            topic = key_comps[ 1 ]
-        
         # load terms
         terms_needed  = [ "na", "base_year", "count", "datatype", "value_unit" ]
         terms_needed += [ "class1", "class2", "class3", "class4", "class5", "class6", "class7", "class8", "class9", "class10" ]
@@ -133,14 +137,13 @@ def preprocessor( datafilter ):
                 else:
                     terms[ item[ 'ID' ] ] = item[ 'RUS' ]
         
-        
         #logging.debug( "topic: %s, topic_name: %s" % ( topic, topic_name ) )
         vocabulary[ 'terms' ] = terms
         
         if lang == 'en':
-            if key[ 0 ] == 'h':
+            if hist_mod == 'h':
                 classification = "HISTORICAL"
-            elif key[ 0 ] == 'm':
+            elif hist_mod == 'm':
                 classification = "MODERN"
             else:
                 classification = ""
@@ -153,9 +156,9 @@ def preprocessor( datafilter ):
             header.append( { "r" : 5, "c" : 0, "value" : "CLASSIFICATION:" } )
             header.append( { "r" : 5, "c" : 1, "value" : classification } )
         else:
-            if key[ 0 ] == 'h':
+            if hist_mod == 'h':
                 classification = "ИСТОРИЧЕСКАЯ"
-            elif key[ 0 ] == 'm':
+            elif hist_mod == 'm':
                 classification = "СОВРЕМЕННАЯ"
             else:
                 classification = ""
@@ -168,7 +171,6 @@ def preprocessor( datafilter ):
             header.append( { "r" : 5, "c" : 0, "value" : "КЛАССИФИКАЦИЯ:" } )
             header.append( { "r" : 5, "c" : 1, "value" : classification } )
     
-    
     logging.debug( str( lexicon ) )
     logging.debug( str( vocabulary ) )
     logging.debug( str( header ) )
@@ -177,20 +179,14 @@ def preprocessor( datafilter ):
 
 
 
-def aggregate_dataset( fullpath, result, vocab, header ):
+def aggregate_dataset( key, fullpath, result, vocab, header ):
     logging.debug( "aggregate_dataset()" )
     logging.debug( "fullpath: %s" % fullpath )
-    #( root, ext ) = os.path.split( fullpath )
-    #fullpath = root + "-2017" + ext
     
     #logging.debug( str( vocab ) )
     na = vocab[ "terms" ][ "na" ]
     logging.debug( "na: %s" % na )
     
-    wb = openpyxl.Workbook( encoding = 'utf-8' )
-    ws = wb.get_active_sheet()
-    ws.title = "Dataset"
-
     myloc = Locale( 'ru' )  # 'el' is the locale code for Greek
     col = Collator.createInstance( myloc )
     regions = {}
@@ -204,6 +200,27 @@ def aggregate_dataset( fullpath, result, vocab, header ):
 
     sorted_regions = sorted( regnames, cmp = col.compare )
     
+    wb = openpyxl.Workbook( encoding = 'utf-8' )
+    
+    hist_mod = ""
+    key_comps = key.split( '-' )
+    if len( key_comps ) >= 2:
+        hist_mod = key_comps[ 1 ]
+    
+    if hist_mod == 'h':
+        ws = wb.get_active_sheet()
+        ws.title = "Dataset"
+    elif hist_mod == 'm':
+        base_years = [ "1795", "1858", "1897", "1959", "2002" ]
+        ws = wb.get_active_sheet()
+        ws.title = "1795"
+        ws_1 = wb.create_sheet( 1, "1858" )
+        ws_2 = wb.create_sheet( 2, "1897" )
+        ws_3 = wb.create_sheet( 3, "1959" )
+        ws_4 = wb.create_sheet( 4, "2002" )
+    
+    
+    
     # header line here; lines above for legend
     i = 9
     logging.debug( "# of itemchains in result: %d" % len( result ) )
@@ -212,16 +229,11 @@ def aggregate_dataset( fullpath, result, vocab, header ):
         
         # header
         if i == 9:
-            # write header colums with translations
-            #ws.column_dimensions[ "C" ].width = 80
-            #ws.column_dimensions[ "D" ].width = 20
-            #ws.column_dimensions[ "O" ].width = 100
-            #ws.column_dimensions[ "P" ].width = 100
-    
             chain = json.loads( itemchain )
             ter_data = result[ itemchain ]
             
             logging.debug( "# of names in chain: %d" % len( chain ) )
+            logging.debug( "names in chain: %s" % str( chain ) )
             for name in sorted( chain ):
                 if name == "count":         # skip 'count' column in download
                     continue
@@ -275,11 +287,24 @@ def aggregate_dataset( fullpath, result, vocab, header ):
             
             i += 1
     
+    
     #logging.debug( "# of lines in header: %d" % len( header ) )
-    for line in header:
-        c = ws.cell( row = line[ "r" ], column = line[ "c" ] )
-        c.value = line[ "value" ]
-        #logging.debug( "r: %d, c: %d, value: %s" % ( line[ "r" ], line[ "c" ], line[ "value" ] ) )
+    if hist_mod == 'h':
+        for line in header:
+            c = ws.cell( row = line[ "r" ], column = line[ "c" ] )
+            c.value = line[ "value" ]
+            #logging.debug( "header r: %d, c: %d, value: %s" % ( line[ "r" ], line[ "c" ], line[ "value" ] ) )
+    elif hist_mod == 'm':
+        for ws in wb.worksheets:
+            prev_value = ""
+            for line in header:
+                c = ws.cell( row = line[ "r" ], column = line[ "c" ] )
+                if prev_value == "BENCHMARK-YEAR:":
+                    c.value = ws.title
+                else:
+                    c.value = line[ "value" ]
+                prev_value = c.value
+                logging.debug( "header r: %d, c: %d, value: %s" % ( line[ "r" ], line[ "c" ], line[ "value" ] ) )
     
     # create copyright sheet; extract language id from filename
     comps1 = fullpath.split( '/' )
@@ -287,33 +312,37 @@ def aggregate_dataset( fullpath, result, vocab, header ):
     language = comps2[ 0 ]
     logging.debug( "language: %s" % language )
     
-    ws2 = wb.create_sheet( 2, "Copyrights" )
-    c = ws2.cell( row = 1, column = 0 )
+    if hist_mod == 'h':
+        ws_cr = wb.create_sheet( 1, "Copyrights" )
+    else:
+        ws_cr = wb.create_sheet( 5, "Copyrights" )
+    
+    c = ws_cr.cell( row = 1, column = 0 )
     c.value = "Electronic Repository of Russian Historical Statistics / Электронный архив Российской исторической статистики"
-    c = ws2.cell( row = 2, column = 0 )
+    c = ws_cr.cell( row = 2, column = 0 )
     c.value = "2014-%d" % date.today().year
     
     if language == "en":
-        c = ws2.cell( row = 4, column = 0 )
+        c = ws_cr.cell( row = 4, column = 0 )
         c.value = "Creative Commons License"
-        c = ws2.cell( row = 5, column = 0 )
+        c = ws_cr.cell( row = 5, column = 0 )
         c.value = "This work is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License."
-        c = ws2.cell( row = 6, column = 0 )
+        c = ws_cr.cell( row = 6, column = 0 )
         c.value = "http://creativecommons.org/licenses/by-nc-sa/4.0/"
-        c = ws2.cell( row = 8, column = 0 )
+        c = ws_cr.cell( row = 8, column = 0 )
         c.value = "By downloading and using data from the Electronic Repository of Russian Historical Statistics the user agrees to the terms of this license. Providing a correct reference to the resource is a formal requirement of the license: "
-        c = ws2.cell( row = 9, column = 0 )
+        c = ws_cr.cell( row = 9, column = 0 )
         c.value = "Kessler, Gijs and Andrei Markevich (%d), Electronic Repository of Russian Historical Statistics, 18th - 21st centuries, http://ristat.org/" % date.today().year
     elif language == "ru":
-        c = ws2.cell( row = 4, column = 0 )
+        c = ws_cr.cell( row = 4, column = 0 )
         c.value = "Лицензия Creative Commons"
-        c = ws2.cell( row = 5, column = 0 )
+        c = ws_cr.cell( row = 5, column = 0 )
         c.value = "Это произведение доступно по лицензии Creative Commons «Attribution-NonCommercial-ShareAlike» («Атрибуция — Некоммерческое использование — На тех же условиях») 4.0 Всемирная."
-        c = ws2.cell( row = 6, column = 0 )
+        c = ws_cr.cell( row = 6, column = 0 )
         c.value = "http://creativecommons.org/licenses/by-nc-sa/4.0/deed.ru"
-        c = ws2.cell( row = 8, column = 0 )
+        c = ws_cr.cell( row = 8, column = 0 )
         c.value = "Скачивая и начиная использовать данные пользователь автоматически соглашается с этой лицензией. Наличие корректно оформленной ссылки является обязательным требованием лицензии:"
-        c = ws2.cell( row = 9, column = 0 )
+        c = ws_cr.cell( row = 9, column = 0 )
         c.value = "Кесслер Хайс и Маркевич Андрей (%d), Электронный архив Российской исторической статистики, XVIII – XXI вв., [Электронный ресурс] : [сайт]. — Режим доступа: http://ristat.org/" % date.today().year
 
     wb.save( fullpath )
