@@ -3,7 +3,7 @@
 # VT-07-Jul-2016 latest change by VT
 # FL-12-Dec-2016 use datatype in function documentation()
 # FL-20-Jan-2017 utf8 encoding
-# FL-10-Apr-2017 
+# FL-08-May-2017 
 
 from __future__ import absolute_import      # VT
 """
@@ -1531,7 +1531,7 @@ def download():
         xlsx_pathname = os.path.abspath( os.path.join( download_dir, xlsx_name ) )
         logging.debug( "full_path: %s" % xlsx_pathname )
         
-        filename = aggregate_dataset( xlsx_pathname, lexicon, regions, header )
+        filename = aggregate_dataset( key, xlsx_pathname, lexicon, regions, header )
         logging.debug( "filename: %s" % filename )
         with open( filename, 'rb' ) as f:
             datacontents = f.read()

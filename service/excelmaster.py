@@ -207,86 +207,105 @@ def aggregate_dataset( key, fullpath, result, vocab, header ):
     if len( key_comps ) >= 2:
         hist_mod = key_comps[ 1 ]
     
+    nsheets = 0
     if hist_mod == 'h':
-        ws = wb.get_active_sheet()
-        ws.title = "Dataset"
+        nsheets = 1
+        ws_0 = wb.get_active_sheet()
+        ws_0.title = "Dataset"
     elif hist_mod == 'm':
-        base_years = [ "1795", "1858", "1897", "1959", "2002" ]
-        ws = wb.get_active_sheet()
-        ws.title = "1795"
+        nsheets = 5
+        base_years = [ 1795, 1858, 1897, 1959, 2002 ]
+        ws_0 = wb.get_active_sheet()
+        ws_0.title = "1795"
         ws_1 = wb.create_sheet( 1, "1858" )
         ws_2 = wb.create_sheet( 2, "1897" )
         ws_3 = wb.create_sheet( 3, "1959" )
         ws_4 = wb.create_sheet( 4, "2002" )
     
-    
-    
-    # header line here; lines above for legend
-    i = 9
-    logging.debug( "# of itemchains in result: %d" % len( result ) )
-    for itemchain in result:
-        j = 0
+    # loop over the data sheets, and select the correct year data
+    for sheet_idx in range( nsheets ):
+        base_year = base_years[ sheet_idx ]
+        logging.debug( "work_sheet: %d, base_year: %s" % ( sheet_idx, base_year ) )
+        if sheet_idx == 0:
+            ws = ws_0
+        elif sheet_idx == 1:
+            ws = ws_1
+        elif sheet_idx == 2:
+            ws = ws_2
+        elif sheet_idx == 3:
+            ws = ws_3
+        elif sheet_idx == 4:
+            ws = ws_4
         
-        # header
-        if i == 9:
-            chain = json.loads( itemchain )
-            ter_data = result[ itemchain ]
-            
-            logging.debug( "# of names in chain: %d" % len( chain ) )
-            logging.debug( "names in chain: %s" % str( chain ) )
-            for name in sorted( chain ):
-                if name == "count":         # skip 'count' column in download
-                    continue
-                c = ws.cell( row = i, column = j )
-                col_name = name
-                if col_name in vocab[ 'terms' ]:
-                    col_name = vocab[ 'terms' ][ col_name ]
-                c.value = col_name
-                logging.debug( "%d: %s" % ( j, col_name ) )
-                j += 1
-            
-            logging.debug( "# of ter_names in sorted_regions: %d" % len( sorted_regions ) )
-            for ter_name in sorted_regions:
-                ter_code = regions[ ter_name ]
-                c = ws.cell( row = i, column = j )
-                ter_name = ter_code
-                if ter_code in vocab[ 'regions' ]:
-                    ter_name = vocab[ 'regions' ][ ter_code ]
-                c.value = ter_name
-                logging.debug( "%d: %s" % ( j, ter_name ) )
-                j += 1
-            i += 1
-        
-        # data
-        if itemchain:
-            logging.debug( "data" )
+        # header line here; lines above for legend
+        i = 9
+        logging.debug( "# of itemchains in result: %d" % len( result ) )
+        for itemchain in result:
             j = 0
-            chain = json.loads( itemchain )
-            ter_data = result[ itemchain ]
-            for name in sorted( chain ):
-                if name == "count":         # skip 'count' column in download
-                    continue
-                c = ws.cell( row = i, column = j )
-                c.value = chain[ name ] 
-                logging.debug( "%d: %s" % ( j, name ) )
-                j += 1
             
-            # Sorting
-            for ter_name in sorted_regions:
-                ter_code = regions[ ter_name ]
-                c = ws.cell( row = i, column = j )
-                if ter_code in ter_data:
-                    ter_value = ter_data[ ter_code ]
-                    ter_value = re.sub( r'\.0', '', str( ter_value ) )
-                else:
-                    ter_value = na
+            # header
+            if i == 9:
+                chain = json.loads( itemchain )
+                ter_data = result[ itemchain ]
                 
-                c.value = ter_value
-                logging.debug( "%d: %s" % ( j, ter_value ) )
-                j += 1
+                logging.debug( "# of names in chain: %d" % len( chain ) )
+                logging.debug( "names in chain: %s" % str( chain ) )
+                for name in sorted( chain ):
+                    if name == "count":         # skip 'count' column in download
+                        continue
+                    c = ws.cell( row = i, column = j )
+                    col_name = name
+                    if col_name in vocab[ 'terms' ]:
+                        col_name = vocab[ 'terms' ][ col_name ]
+                    c.value = col_name
+                    logging.debug( "%d: %s" % ( j, col_name ) )
+                    j += 1
+                
+                logging.debug( "# of ter_names in sorted_regions: %d" % len( sorted_regions ) )
+                for ter_name in sorted_regions:
+                    ter_code = regions[ ter_name ]
+                    c = ws.cell( row = i, column = j )
+                    ter_name = ter_code
+                    if ter_code in vocab[ 'regions' ]:
+                        ter_name = vocab[ 'regions' ][ ter_code ]
+                    c.value = ter_name
+                    logging.debug( "%d: %s" % ( j, ter_name ) )
+                    j += 1
+                i += 1
             
-            i += 1
-    
+            # data
+            if itemchain:
+                logging.debug( "data" )
+                j = 0
+                chain = json.loads( itemchain )
+                if base_year != chain[ "base_year" ]:
+                    continue
+                
+                ter_data = result[ itemchain ]
+                for name in sorted( chain ):
+                    if name == "count":         # skip 'count' column in download
+                        continue
+                    c = ws.cell( row = i, column = j )
+                    c.value = chain[ name ] 
+                    logging.debug( "%d: %s" % ( j, name ) )
+                    j += 1
+                
+                # Sorting
+                for ter_name in sorted_regions:
+                    ter_code = regions[ ter_name ]
+                    c = ws.cell( row = i, column = j )
+                    if ter_code in ter_data:
+                        ter_value = ter_data[ ter_code ]
+                        ter_value = re.sub( r'\.0', '', str( ter_value ) )
+                    else:
+                        ter_value = na
+                    
+                    c.value = ter_value
+                    logging.debug( "%d: %s" % ( j, ter_value ) )
+                    j += 1
+                
+                i += 1
+        
     
     #logging.debug( "# of lines in header: %d" % len( header ) )
     if hist_mod == 'h':
