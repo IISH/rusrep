@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # VT-07-Jul-2016 Latest change by VT
-# FL-08-May-2017 Latest change
+# FL-10-May-2017 Latest change
 
 import json
 import logging
@@ -20,7 +20,7 @@ def preprocessor( datafilter ):
     logging.debug( "preprocessor() datafilter: %s" % datafilter )
     
     dataset = []
-    lexicon = {}
+    lex_lands = {}
     lands   = {}
     year    = 0
     lang    = ""
@@ -39,6 +39,7 @@ def preprocessor( datafilter ):
         
         clientcache = MongoClient()
         dbcache = clientcache.get_database( 'datacache' )
+        logging.debug( "dbcache.data.find with key: %s" % key )
         result = dbcache.data.find( { "key": key } )
         
         ter_codes = []      # actually used region codes
@@ -78,13 +79,13 @@ def preprocessor( datafilter ):
                 
                 lexkey = json.dumps( itemlexicon )
                 itemlexicon[ 'lands' ] = lands
-                if lexkey in lexicon:
-                    currentlands = lexicon[ lexkey ]
+                if lexkey in lex_lands:
+                    currentlands = lex_lands[ lexkey ]
                     for item in lands:
                         currentlands[ item ] = lands[ item ]
-                    lexicon[ lexkey ] = currentlands
+                    lex_lands[ lexkey ] = currentlands
                 else:
-                    lexicon[ lexkey ] = lands
+                    lex_lands[ lexkey ] = lands
                 
                 dataset.append( dataitem )
         
@@ -108,11 +109,11 @@ def preprocessor( datafilter ):
                 else:
                     regions[ item[ 'ID' ] ] = item[ 'RUS' ]
         
-        vocabulary = {}
-        vocabulary[ 'regions' ] = regions
+        vocab_regs_terms = {}       # regions and terms
+        vocab_regs_terms[ 'regions' ] = regions
         
-        # create header
-        header = []
+        # create sheet_header
+        sheet_header = []
         # load terms
         terms_needed  = [ "na", "base_year", "count", "datatype", "value_unit" ]
         terms_needed += [ "class1", "class2", "class3", "class4", "class5", "class6", "class7", "class8", "class9", "class10" ]
@@ -138,7 +139,7 @@ def preprocessor( datafilter ):
                     terms[ item[ 'ID' ] ] = item[ 'RUS' ]
         
         #logging.debug( "topic: %s, topic_name: %s" % ( topic, topic_name ) )
-        vocabulary[ 'terms' ] = terms
+        vocab_regs_terms[ 'terms' ] = terms
         
         if lang == 'en':
             if hist_mod == 'h':
@@ -148,13 +149,13 @@ def preprocessor( datafilter ):
             else:
                 classification = ""
             
-            header.append( { "r" : 1, "c" : 0, "value" : "Electronic repository of Russian Historical Statistics - ristat.org" } )
-            header.append( { "r" : 3, "c" : 0, "value" : "TOPIC:" } )
-            header.append( { "r" : 3, "c" : 1, "value" : topic_name } )
-            header.append( { "r" : 4, "c" : 0, "value" : "BENCHMARK-YEAR:" } )
-            header.append( { "r" : 4, "c" : 1, "value" : year } )
-            header.append( { "r" : 5, "c" : 0, "value" : "CLASSIFICATION:" } )
-            header.append( { "r" : 5, "c" : 1, "value" : classification } )
+            sheet_header.append( { "r" : 1, "c" : 0, "value" : "Electronic repository of Russian Historical Statistics - ristat.org" } )
+            sheet_header.append( { "r" : 3, "c" : 0, "value" : "TOPIC:" } )
+            sheet_header.append( { "r" : 3, "c" : 1, "value" : topic_name } )
+            sheet_header.append( { "r" : 4, "c" : 0, "value" : "BENCHMARK-YEAR:" } )
+            sheet_header.append( { "r" : 4, "c" : 1, "value" : year } )
+            sheet_header.append( { "r" : 5, "c" : 0, "value" : "CLASSIFICATION:" } )
+            sheet_header.append( { "r" : 5, "c" : 1, "value" : classification } )
         else:
             if hist_mod == 'h':
                 classification = "ИСТОРИЧЕСКАЯ"
@@ -163,28 +164,28 @@ def preprocessor( datafilter ):
             else:
                 classification = ""
             
-            header.append( { "r" : 1, "c" : 0, "value" : "Электронный архив Российской исторической статистики - ristat.org" } )
-            header.append( { "r" : 3, "c" : 0, "value" : "ТЕМА:" } )
-            header.append( { "r" : 3, "c" : 1, "value" : topic_name } )
-            header.append( { "r" : 4, "c" : 0, "value" : "ГОД:" } )
-            header.append( { "r" : 4, "c" : 1, "value" : year } )
-            header.append( { "r" : 5, "c" : 0, "value" : "КЛАССИФИКАЦИЯ:" } )
-            header.append( { "r" : 5, "c" : 1, "value" : classification } )
+            sheet_header.append( { "r" : 1, "c" : 0, "value" : "Электронный архив Российской исторической статистики - ristat.org" } )
+            sheet_header.append( { "r" : 3, "c" : 0, "value" : "ТЕМА:" } )
+            sheet_header.append( { "r" : 3, "c" : 1, "value" : topic_name } )
+            sheet_header.append( { "r" : 4, "c" : 0, "value" : "ГОД:" } )
+            sheet_header.append( { "r" : 4, "c" : 1, "value" : year } )
+            sheet_header.append( { "r" : 5, "c" : 0, "value" : "КЛАССИФИКАЦИЯ:" } )
+            sheet_header.append( { "r" : 5, "c" : 1, "value" : classification } )
     
-    logging.debug( str( lexicon ) )
-    logging.debug( str( vocabulary ) )
-    logging.debug( str( header ) )
+    logging.debug( "preprocessor lex_lands: %s" % str( lex_lands ) )
+    logging.debug( "preprocessor vocab_regs_terms: %s" % str( vocab_regs_terms ) )
+    logging.debug( "preprocessor sheet_header: %s" % str( sheet_header ) )
     
-    return ( lexicon, vocabulary, header )
+    return ( lex_lands, vocab_regs_terms, sheet_header )
 
 
 
-def aggregate_dataset( key, fullpath, result, vocab, header ):
+def aggregate_dataset( key, fullpath, lex_lands, vocab_regs_terms, sheet_header ):
     logging.debug( "aggregate_dataset()" )
     logging.debug( "fullpath: %s" % fullpath )
     
-    #logging.debug( str( vocab ) )
-    na = vocab[ "terms" ][ "na" ]
+    #logging.debug( str( vocab_regs_terms ) )
+    na = vocab_regs_terms[ "terms" ][ "na" ]
     logging.debug( "na: %s" % na )
     
     myloc = Locale( 'ru' )  # 'el' is the locale code for Greek
@@ -192,8 +193,8 @@ def aggregate_dataset( key, fullpath, result, vocab, header ):
     regions = {}
     regnames = []
     
-    for ter_code in vocab[ 'regions' ]:
-        tmpname = vocab[ 'regions' ][ ter_code ]
+    for ter_code in vocab_regs_terms[ 'regions' ]:
+        tmpname = vocab_regs_terms[ 'regions' ][ ter_code ]
         ter_name = tmpname.decode( 'utf-8' )
         regions[ ter_name ] = ter_code
         regnames.append( ter_name ) 
@@ -206,10 +207,13 @@ def aggregate_dataset( key, fullpath, result, vocab, header ):
     key_comps = key.split( '-' )
     if len( key_comps ) >= 2:
         hist_mod = key_comps[ 1 ]
+    if len( key_comps ) >= 3:
+        base_year = int( key_comps[ 3 ] )
     
     nsheets = 0
     if hist_mod == 'h':
         nsheets = 1
+        base_years = [ base_year ]
         ws_0 = wb.get_active_sheet()
         ws_0.title = "Dataset"
     elif hist_mod == 'm':
@@ -237,16 +241,16 @@ def aggregate_dataset( key, fullpath, result, vocab, header ):
         elif sheet_idx == 4:
             ws = ws_4
         
-        # header line here; lines above for legend
+        # sheet_header line here; lines above for legend
         i = 9
-        logging.debug( "# of itemchains in result: %d" % len( result ) )
-        for itemchain in result:
+        logging.debug( "# of itemchains in lex_lands: %d" % len( lex_lands ) )
+        for itemchain in lex_lands:
             j = 0
             
-            # header
+            # sheet_header
             if i == 9:
                 chain = json.loads( itemchain )
-                ter_data = result[ itemchain ]
+                ter_data = lex_lands[ itemchain ]
                 
                 logging.debug( "# of names in chain: %d" % len( chain ) )
                 logging.debug( "names in chain: %s" % str( chain ) )
@@ -255,8 +259,8 @@ def aggregate_dataset( key, fullpath, result, vocab, header ):
                         continue
                     c = ws.cell( row = i, column = j )
                     col_name = name
-                    if col_name in vocab[ 'terms' ]:
-                        col_name = vocab[ 'terms' ][ col_name ]
+                    if col_name in vocab_regs_terms[ 'terms' ]:
+                        col_name = vocab_regs_terms[ 'terms' ][ col_name ]
                     c.value = col_name
                     logging.debug( "%d: %s" % ( j, col_name ) )
                     j += 1
@@ -266,8 +270,8 @@ def aggregate_dataset( key, fullpath, result, vocab, header ):
                     ter_code = regions[ ter_name ]
                     c = ws.cell( row = i, column = j )
                     ter_name = ter_code
-                    if ter_code in vocab[ 'regions' ]:
-                        ter_name = vocab[ 'regions' ][ ter_code ]
+                    if ter_code in vocab_regs_terms[ 'regions' ]:
+                        ter_name = vocab_regs_terms[ 'regions' ][ ter_code ]
                     c.value = ter_name
                     logging.debug( "%d: %s" % ( j, ter_name ) )
                     j += 1
@@ -275,13 +279,15 @@ def aggregate_dataset( key, fullpath, result, vocab, header ):
             
             # data
             if itemchain:
-                logging.debug( "data" )
+                logging.debug( "itemchain" )
                 j = 0
                 chain = json.loads( itemchain )
-                if base_year != chain[ "base_year" ]:
+                logging.debug( "# of items: %d" % len( chain ))
+                if base_year != chain.get( "base_year" ):
+                    logging.debug( "skip: %s, base_year not in chain" % base_year )
                     continue
                 
-                ter_data = result[ itemchain ]
+                ter_data = lex_lands[ itemchain ]
                 for name in sorted( chain ):
                     if name == "count":         # skip 'count' column in download
                         continue
@@ -307,23 +313,23 @@ def aggregate_dataset( key, fullpath, result, vocab, header ):
                 i += 1
         
     
-    #logging.debug( "# of lines in header: %d" % len( header ) )
+    #logging.debug( "# of lines in sheet_header: %d" % len( sheet_header ) )
     if hist_mod == 'h':
-        for line in header:
+        for line in sheet_header:
             c = ws.cell( row = line[ "r" ], column = line[ "c" ] )
             c.value = line[ "value" ]
-            #logging.debug( "header r: %d, c: %d, value: %s" % ( line[ "r" ], line[ "c" ], line[ "value" ] ) )
+            #logging.debug( "sheet_header r: %d, c: %d, value: %s" % ( line[ "r" ], line[ "c" ], line[ "value" ] ) )
     elif hist_mod == 'm':
         for ws in wb.worksheets:
             prev_value = ""
-            for line in header:
+            for line in sheet_header:
                 c = ws.cell( row = line[ "r" ], column = line[ "c" ] )
                 if prev_value == "BENCHMARK-YEAR:":
                     c.value = ws.title
                 else:
                     c.value = line[ "value" ]
                 prev_value = c.value
-                logging.debug( "header r: %d, c: %d, value: %s" % ( line[ "r" ], line[ "c" ], line[ "value" ] ) )
+                logging.debug( "sheet_header r: %d, c: %d, value: %s" % ( line[ "r" ], line[ "c" ], line[ "value" ] ) )
     
     # create copyright sheet; extract language id from filename
     comps1 = fullpath.split( '/' )

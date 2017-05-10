@@ -3,7 +3,7 @@
 # VT-07-Jul-2016 latest change by VT
 # FL-12-Dec-2016 use datatype in function documentation()
 # FL-20-Jan-2017 utf8 encoding
-# FL-08-May-2017 
+# FL-10-May-2017 
 
 from __future__ import absolute_import      # VT
 """
@@ -130,6 +130,7 @@ def json_generator( cursor, json_dataname, data, download_key = None ):
     logging.debug( "json_generator() cursor: %s, json_dataname: %s" % ( cursor, json_dataname ) )
     logging.debug( "data: %s" % data )
     
+    """
     configparser = ConfigParser.RawConfigParser()
     
     RUSREP_CONFIG_PATH = os.environ[ "RUSREP_CONFIG_PATH" ]
@@ -143,12 +144,13 @@ def json_generator( cursor, json_dataname, data, download_key = None ):
         sys.exit( 1 )
     
     configparser.read( configpath )
+    """
     
     classification = "unknown"
     language       = "EN"
     datatype       = ""
     datatype_      = "0_00"
-    base_year      = 1795
+    base_year      = ""
     
     try:
         qinput = json.loads( request.data )
@@ -156,15 +158,11 @@ def json_generator( cursor, json_dataname, data, download_key = None ):
         for k in qinput:
             logging.debug( "k: %s, v: %s" % ( k, qinput[ k ] ) )
         
-        if "classification" in qinput:
-            classification = qinput[ "classification" ]
-        if "language" in qinput:
-            language = qinput[ "language" ]
-        if "datatype" in qinput:
-            datatype  = qinput[ "datatype" ]
-            datatype_ = datatype[ 0 ] + "_00"
-        if "base_year" in qinput:
-            base_year = qinput[ "base_year" ]
+        classification = qinput.get( "classification" )
+        language       = qinput.get( "language" )
+        datatype       = qinput.get( "datatype" )
+        datatype_      = datatype[ 0 ] + "_00"
+        base_year      = qinput.get( "base_year" )
         
         logging.debug( "classification : %s" % classification )
         logging.debug( "language       : %s" % language )
@@ -178,7 +176,7 @@ def json_generator( cursor, json_dataname, data, download_key = None ):
     
     json_list = []
     
-    logging.debug( "%d values in data" % len( data ) )
+    logging.debug( "# values in data: %d" % len( data ) )
     for value_str in data:
         data_keys   = {}
         extravalues = {}
@@ -207,15 +205,73 @@ def json_generator( cursor, json_dataname, data, download_key = None ):
         output[ 'path' ] = path
         json_list.append( output )
     
+    json_string = json_cache( json_list, language, json_dataname, download_key )
+    
+    #logging.debug( json_string )
+    #return json_string
+    logging.debug( json_list )
+    return json_list
+
+
+
+def json_cache( json_list, language, json_dataname, download_key ):
+    logging.debug( "json_cache()" )
+    
+    configparser = ConfigParser.RawConfigParser()
+    
+    RUSREP_CONFIG_PATH = os.environ[ "RUSREP_CONFIG_PATH" ]
+    logging.info( "RUSREP_CONFIG_PATH: %s" % RUSREP_CONFIG_PATH )
+    
+    configpath = RUSREP_CONFIG_PATH
+    if not os.path.isfile( configpath ):
+        print( "in %s" % __file__ )
+        print( "configpath %s FILE DOES NOT EXIST" % configpath )
+        print( "EXIT" )
+        sys.exit( 1 )
+    
+    configparser.read( configpath )
+    
     json_hash = {}
     json_hash[ "language" ] = language
     json_hash[ json_dataname ] = json_list
     
-    """
-    download_key = str( "%05.8f" % random.random() )  # used as base name for zip download
-    # put some additional info in the key
-    download_key = "%s-%s-%s-%s" % ( language, classification[ 0 ], datatype, download_key[ 2: ] )
-    """
+    json_hash[ "url" ] = "%s/service/download?key=%s" % ( configparser.get( 'config', 'root' ), download_key )
+    logging.debug( "json_hash: %s" % json_hash )
+    
+    json_string = json.dumps( json_hash, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
+    
+    try:
+        thisdata = json_hash
+        del thisdata[ 'url' ]
+        thisdata[ 'key' ] = download_key
+        thisdata[ 'language' ] = language
+        
+        logging.debug( "dbcache.data.insert with key: %s" % download_key )
+        clientcache = MongoClient()
+        dbcache = clientcache.get_database( 'datacache' )
+        result = dbcache.data.insert( thisdata )
+    except:
+        logging.error( "caching failed" )
+
+    return json_string
+
+
+
+def collect_docs( qinput, download_key ):
+    # collect the accompanying docs in the download dir
+    logging.debug( "collect_docs() %s" % download_key )
+    
+    classification = "unknown"
+    language       = "EN"
+    datatype       = ""
+    datatype_      = "0_00"
+    base_year      = ""
+    
+    classification = qinput.get( "classification" )
+    language       = qinput.get( "language" )
+    datatype       = qinput.get( "datatype" )
+    datatype_      = datatype[ 0 ] + "_00"
+    base_year      = qinput.get( "base_year" )
     
     clioinfra = Configuration()
     tmp_dir = clioinfra.config[ 'tmppath' ]
@@ -246,41 +302,19 @@ def json_generator( cursor, json_dataname, data, download_key = None ):
                 if doc.find( str( base_year ) ) != -1:          # base_year
                     if doc.find( "GovReports" ) != -1:          # string
                         get_list.append( doc )
-                
+            
                     if doc.find( datatype_ ) != -1:             # datatype
                         get_list.append( doc )
             else:                                               # modern: all docs
                 if doc.find( "GovReports" ) != -1:              # string
                     get_list.append( doc )
-            
+        
                 if doc.find( datatype_ ) != -1:                 # datatype
                     get_list.append( doc )
-            
-            
+    
     for doc in get_list:
         doc_path = os.path.join( doc_dir, doc )
         shutil.copy2( doc_path, download_dir )
-    
-    json_hash[ "url" ] = "%s/service/download?key=%s" % ( configparser.get( 'config', 'root' ), download_key )
-    logging.debug( "json_hash: %s" % json_hash )
-    
-    json_string = json.dumps( json_hash, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
-    
-    # Cache
-    try:
-        thisdata = json_hash
-        del thisdata[ 'url' ]
-        thisdata[ 'key' ] = download_key
-        thisdata[ 'language' ] = language
-        
-        clientcache = MongoClient()
-        dbcache = clientcache.get_database( 'datacache' )
-        result = dbcache.data.insert( thisdata )
-    except:
-        logging.error( "caching failed" )
-    
-    logging.debug( json_string )
-    return json_string
 
 
 
@@ -695,7 +729,7 @@ def load_vocabulary( vocname ):
         thisyear = ''
         vocab_filter = {}
         if request.args.get( 'base_year' ):
-            if vocname == 'historical':     # FL why only for 'historical' ?
+            if vocname == 'historical':
                 base_year = request.args.get( "base_year" )
                 if base_year:
                     vocab_filter[ "YEAR" ] = base_year
@@ -998,18 +1032,32 @@ def aggregation():
     logging.debug( "download_key: %s" % download_key )
     
     if classification == "historical":
-        json_data = aggregation_1year( qinput, download_key )
+        # historical has base_year in qinput
+        #json_data = aggregation_1year( qinput, download_key )
+        json_list = aggregation_1year( qinput, download_key )
+        json_data = json_cache( json_list, language, 'data', download_key )
+        logging.debug( "aggregated json_data: \n%s" % json_data )
+        
+        collect_docs( qinput, download_key )
         return Response( json_data, mimetype = 'application/json; charset=utf-8' )
+    
     elif classification == "modern":
-        json_datas = {}
+        #json_datas = {}
+        json_list = []
         base_years = [ "1795", "1858", "1897", "1959", "2002" ]
         for base_year in base_years:
             logging.debug( "base_year: %s" % base_year )
-            qinput[ "base_year" ] = base_year
-            json_data = aggregation_1year( qinput, download_key )
-            json_datas = merge( json_datas, json_data )
-        
-        return Response( json_datas, mimetype = 'application/json; charset=utf-8' )
+            qinput[ "base_year" ] = base_year   # add base_year to qinput
+            #json_data = aggregation_1year( qinput, download_key )
+            #json_datas = merge( json_datas, json_data )
+            json_list1 = aggregation_1year( qinput, download_key )
+            logging.debug( "jsonlist1: \n%s" % str( json_list1 ) )
+            json_list.extend( json_list1 )
+            
+        json_data = json_cache( json_list, language, 'data', download_key )
+        logging.debug( "aggregated json_data: \n%s" % json_data )
+        collect_docs( qinput, download_key )
+        return Response( json_data, mimetype = 'application/json; charset=utf-8' )
     
     return str( '{}' )
 
@@ -1046,6 +1094,9 @@ def aggregation_1year( qinput, download_key ):
         
         print( qinput )
         """
+        
+        language = qinput.get( "language" )
+        
         logging.debug( "number of keys in request.data: %d" % len( qinput ) )
         for key in qinput:
             value = qinput[ key ]
@@ -1257,6 +1308,7 @@ def aggregation_1year( qinput, download_key ):
         
         # retrieve the records from the database
         data = cursor.fetchall()
+        logging.debug( "result # of data records: %d" % len( data ) )
         finaldata = []
         for item in data:
             finalitem = []
@@ -1277,14 +1329,17 @@ def aggregation_1year( qinput, download_key ):
             
             finaldata.append( finalitem )
         
-        json_data = json_generator( cursor, 'data', finaldata, download_key )
+        #json_string = json_generator( cursor, 'data', finaldata, download_key )
+        json_list = json_generator( cursor, 'data', finaldata, download_key )
         
-        logging.debug( "json_data before return Response:" )
-        logging.debug( json_data )
-        #return Response( json_data, mimetype = 'application/json; charset=utf-8' )
-        return json_data
+        #json_string = json_cache( json_list, language, 'data', download_key )
+        #logging.debug( "aggregated json_data: \n%s" % json_string )
+        
+        #return json_string
+        return json_list
 
-    return str( '{}' )
+    #return str( '{}' )
+    return []
 
 
 
@@ -1525,13 +1580,13 @@ def download():
         clientcache = MongoClient()
         datafilter = {}
         datafilter[ 'key' ] = key
-        ( lexicon, regions, header ) = preprocessor( datafilter )
+        ( lex_lands, vocab_regs_terms, sheet_header ) = preprocessor( datafilter )
         
         xlsx_name = "%s.xlsx" % key
         xlsx_pathname = os.path.abspath( os.path.join( download_dir, xlsx_name ) )
         logging.debug( "full_path: %s" % xlsx_pathname )
         
-        filename = aggregate_dataset( key, xlsx_pathname, lexicon, regions, header )
+        filename = aggregate_dataset( key, xlsx_pathname, lex_lands, vocab_regs_terms, sheet_header )
         logging.debug( "filename: %s" % filename )
         with open( filename, 'rb' ) as f:
             datacontents = f.read()
