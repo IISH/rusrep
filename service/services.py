@@ -3,7 +3,7 @@
 # VT-07-Jul-2016 latest change by VT
 # FL-12-Dec-2016 use datatype in function documentation()
 # FL-20-Jan-2017 utf8 encoding
-# FL-10-May-2017 
+# FL-12-May-2017 
 
 from __future__ import absolute_import      # VT
 """
@@ -215,6 +215,7 @@ def json_generator( cursor, json_dataname, data, download_key = None ):
 
 
 def json_cache( json_list, language, json_dataname, download_key ):
+    # cache json_list in mongodb with download_key as key
     logging.debug( "json_cache()" )
     
     configparser = ConfigParser.RawConfigParser()
@@ -1038,7 +1039,7 @@ def aggregation():
         json_data = json_cache( json_list, language, 'data', download_key )
         logging.debug( "aggregated json_data: \n%s" % json_data )
         
-        collect_docs( qinput, download_key )
+        collect_docs( qinput, download_key )    # collect doc files in download dir
         return Response( json_data, mimetype = 'application/json; charset=utf-8' )
     
     elif classification == "modern":
@@ -1051,12 +1052,13 @@ def aggregation():
             #json_data = aggregation_1year( qinput, download_key )
             #json_datas = merge( json_datas, json_data )
             json_list1 = aggregation_1year( qinput, download_key )
-            logging.debug( "jsonlist1: \n%s" % str( json_list1 ) )
+            logging.debug( "json_list1: \n%s" % str( json_list1 ) )
             json_list.extend( json_list1 )
             
         json_data = json_cache( json_list, language, 'data', download_key )
         logging.debug( "aggregated json_data: \n%s" % json_data )
-        collect_docs( qinput, download_key )
+        
+        collect_docs( qinput, download_key )    # collect doc files in download dir
         return Response( json_data, mimetype = 'application/json; charset=utf-8' )
     
     return str( '{}' )

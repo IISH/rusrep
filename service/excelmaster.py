@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # VT-07-Jul-2016 Latest change by VT
-# FL-10-May-2017 Latest change
+# FL-12-May-2017 Latest change
 
 import json
 import logging
@@ -43,7 +43,6 @@ def preprocessor( datafilter ):
         result = dbcache.data.find( { "key": key } )
         
         ter_codes = []      # actually used region codes
-        
         for rowitem in result:
             logging.debug( "rowitem: " + str( rowitem ) )
             
@@ -89,17 +88,21 @@ def preprocessor( datafilter ):
                 
                 dataset.append( dataitem )
         
+        vocab_regs_terms = {}       # regions and terms
+        vocab_regs_terms[ "ter_codes" ] = ter_codes
+        
         db = clientcache.get_database( 'vocabulary' )   # vocabulary
         
+        """
         # load regions
         regions_filter = {}
         regions_filter[ "vocabulary" ] = "ERRHS_Vocabulary_regions"
-        if year:
+        if hist_mod == 'h' and year:
             regions_filter[ 'basisyear' ] = str( year )
         vocab_regions = db.data.find( regions_filter )
         regions = {}
         
-        logging.debug( str( ter_codes ) )
+        logging.debug( "ter_codes: %s" % str( ter_codes ) )
         for item in vocab_regions:
             #logging.debug( str( item ) )
             ID = item[ 'ID' ]
@@ -109,15 +112,17 @@ def preprocessor( datafilter ):
                 else:
                     regions[ item[ 'ID' ] ] = item[ 'RUS' ]
         
-        vocab_regs_terms = {}       # regions and terms
-        vocab_regs_terms[ 'regions' ] = regions
+        vocab_regs_terms[ "regions" ] = regions
+        """
         
         # create sheet_header
         sheet_header = []
         # load terms
         terms_needed  = [ "na", "base_year", "count", "datatype", "value_unit" ]
-        terms_needed += [ "class1", "class2", "class3", "class4", "class5", "class6", "class7", "class8", "class9", "class10" ]
-        terms_needed += [ "histclass1", "histclass2", "histclass3", "histclass4", "histclass5", "histclass6", "histclass7", "histclass8", "histclass9", "histclass10" ]
+        if hist_mod == 'h':     # historical
+            terms_needed += [ "histclass1", "histclass2", "histclass3", "histclass4", "histclass5", "histclass6", "histclass7", "histclass8", "histclass9", "histclass10" ]
+        elif hist_mod == 'm':   # modern
+            terms_needed += [ "class1", "class2", "class3", "class4", "class5", "class6", "class7", "class8", "class9", "class10" ]
         
         terms = {}
         vocab_download = db.data.find( { "vocabulary": "ERRHS_Vocabulary_download" } )
@@ -139,7 +144,7 @@ def preprocessor( datafilter ):
                     terms[ item[ 'ID' ] ] = item[ 'RUS' ]
         
         #logging.debug( "topic: %s, topic_name: %s" % ( topic, topic_name ) )
-        vocab_regs_terms[ 'terms' ] = terms
+        vocab_regs_terms[ "term" ] = terms
         
         if lang == 'en':
             if hist_mod == 'h':
@@ -181,36 +186,32 @@ def preprocessor( datafilter ):
 
 
 def aggregate_dataset( key, fullpath, lex_lands, vocab_regs_terms, sheet_header ):
-    logging.debug( "aggregate_dataset()" )
+    logging.debug( "aggregate_dataset() key: %s" % key )
     logging.debug( "fullpath: %s" % fullpath )
     
-    #logging.debug( str( vocab_regs_terms ) )
-    na = vocab_regs_terms[ "terms" ][ "na" ]
-    logging.debug( "na: %s" % na )
-    
-    myloc = Locale( 'ru' )  # 'el' is the locale code for Greek
-    col = Collator.createInstance( myloc )
-    regions = {}
-    regnames = []
-    
-    for ter_code in vocab_regs_terms[ 'regions' ]:
-        tmpname = vocab_regs_terms[ 'regions' ][ ter_code ]
-        ter_name = tmpname.decode( 'utf-8' )
-        regions[ ter_name ] = ter_code
-        regnames.append( ter_name ) 
-
-    sorted_regions = sorted( regnames, cmp = col.compare )
-    
-    wb = openpyxl.Workbook( encoding = 'utf-8' )
-    
+    lang = ""
     hist_mod = ""
+    base_year_str = ""
     key_comps = key.split( '-' )
+    if len( key_comps ) >= 1:
+        lang = key_comps[ 0 ]
     if len( key_comps ) >= 2:
         hist_mod = key_comps[ 1 ]
     if len( key_comps ) >= 3:
-        base_year = int( key_comps[ 3 ] )
+        base_year_str = key_comps[ 3 ]
+        base_year = int( base_year_str )
+    logging.debug( "lang: %s, hist_mod: %s, base_year_str: %s" % ( lang, hist_mod, base_year_str ) )
+    
+    #logging.debug( str( vocab_regs_terms ) )
+    logging.debug( "keys is vocab_regs_terms:" )
+    for key in vocab_regs_terms:
+        logging.debug( "key: %s" % key )
+    
+    na = vocab_regs_terms[ "terms" ][ "na" ]
+    logging.debug( "na: %s" % na )
     
     nsheets = 0
+    wb = openpyxl.Workbook( encoding = 'utf-8' )
     if hist_mod == 'h':
         nsheets = 1
         base_years = [ base_year ]
@@ -241,6 +242,48 @@ def aggregate_dataset( key, fullpath, lex_lands, vocab_regs_terms, sheet_header 
         elif sheet_idx == 4:
             ws = ws_4
         
+        
+        clientcache = MongoClient()
+        dbcache = clientcache.get_database( 'datacache' )
+        logging.debug( "dbcache.data.find with key: %s" % key )
+        result = dbcache.data.find( { "key": key } )
+        db = clientcache.get_database( 'vocabulary' )   # vocabulary
+        
+        # load regions for base_year
+        regions_filter = {}
+        regions_filter[ "vocabulary" ] = "ERRHS_Vocabulary_regions"
+        regions_filter[ 'basisyear' ] = str( base_year )
+        vocab_regions = db.data.find( regions_filter )
+        
+        regions = {}
+        ter_codes = vocab_regs_terms[ "ter_codes" ]
+        logging.debug( "ter_codes: %s" % str( ter_codes ) )
+        for item in vocab_regions:
+            #logging.debug( str( item ) )
+            ID = item[ 'ID' ]
+            if ID in ter_codes:
+                if lang == 'en':
+                    regions[ item[ 'ID' ] ] = item[ 'EN' ]
+                else:
+                    regions[ item[ 'ID' ] ] = item[ 'RUS' ]
+        
+        logging.debug( "regions: %s" % str( regions ) )
+        vocab_regs_terms[ "regions" ] = regions
+        
+        
+        regions = {}
+        regnames = []
+        for ter_code in vocab_regs_terms[ "regions" ]:
+            tmpname = vocab_regs_terms[ "regions" ][ ter_code ]
+            ter_name = tmpname.decode( 'utf-8' )
+            regions[ ter_name ] = ter_code
+            regnames.append( ter_name ) 
+
+        myloc = Locale( 'ru' )  # 'el' is the locale code for Greek
+        col = Collator.createInstance( myloc )
+        sorted_regions = sorted( regnames, cmp = col.compare )
+        logging.debug( "sorted_regions: %s" % str( sorted_regions ) )
+        
         # sheet_header line here; lines above for legend
         i = 9
         logging.debug( "# of itemchains in lex_lands: %d" % len( lex_lands ) )
@@ -259,8 +302,8 @@ def aggregate_dataset( key, fullpath, lex_lands, vocab_regs_terms, sheet_header 
                         continue
                     c = ws.cell( row = i, column = j )
                     col_name = name
-                    if col_name in vocab_regs_terms[ 'terms' ]:
-                        col_name = vocab_regs_terms[ 'terms' ][ col_name ]
+                    if col_name in vocab_regs_terms[ "term" ]:
+                        col_name = vocab_regs_terms[ "term" ][ col_name ]
                     c.value = col_name
                     logging.debug( "%d: %s" % ( j, col_name ) )
                     j += 1
@@ -270,8 +313,8 @@ def aggregate_dataset( key, fullpath, lex_lands, vocab_regs_terms, sheet_header 
                     ter_code = regions[ ter_name ]
                     c = ws.cell( row = i, column = j )
                     ter_name = ter_code
-                    if ter_code in vocab_regs_terms[ 'regions' ]:
-                        ter_name = vocab_regs_terms[ 'regions' ][ ter_code ]
+                    if ter_code in vocab_regs_terms[ "regions" ]:
+                        ter_name = vocab_regs_terms[ "regions" ][ ter_code ]
                     c.value = ter_name
                     logging.debug( "%d: %s" % ( j, ter_name ) )
                     j += 1
@@ -288,6 +331,7 @@ def aggregate_dataset( key, fullpath, lex_lands, vocab_regs_terms, sheet_header 
                     continue
                 
                 ter_data = lex_lands[ itemchain ]
+                logging.debug( "ter_data: %s: " % str( ter_data ) )
                 for name in sorted( chain ):
                     if name == "count":         # skip 'count' column in download
                         continue
@@ -299,13 +343,14 @@ def aggregate_dataset( key, fullpath, lex_lands, vocab_regs_terms, sheet_header 
                 # Sorting
                 for ter_name in sorted_regions:
                     ter_code = regions[ ter_name ]
-                    c = ws.cell( row = i, column = j )
+                    logging.debug( "ter_name: %s, ter_code: %s: " % ( ter_name, ter_code ) )
                     if ter_code in ter_data:
                         ter_value = ter_data[ ter_code ]
                         ter_value = re.sub( r'\.0', '', str( ter_value ) )
                     else:
                         ter_value = na
                     
+                    c = ws.cell( row = i, column = j )
                     c.value = ter_value
                     logging.debug( "%d: %s" % ( j, ter_value ) )
                     j += 1
