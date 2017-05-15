@@ -3,7 +3,7 @@
 # VT-07-Jul-2016 latest change by VT
 # FL-12-Dec-2016 use datatype in function documentation()
 # FL-20-Jan-2017 utf8 encoding
-# FL-12-May-2017 
+# FL-15-May-2017 
 
 from __future__ import absolute_import      # VT
 """
@@ -273,12 +273,29 @@ def collect_docs( qinput, download_key ):
     datatype       = qinput.get( "datatype" )
     datatype_      = datatype[ 0 ] + "_00"
     base_year      = qinput.get( "base_year" )
+    ter_code_list  = qinput.get( "ter_code" )
+    
+    logging.debug( "classification: %s" % classification )
+    logging.debug( "ter_codes: %s" % str( ter_code_list ) )
     
     clioinfra = Configuration()
     tmp_dir = clioinfra.config[ 'tmppath' ]
     download_dir = os.path.join( tmp_dir, "download", download_key )
     if not os.path.exists( download_dir ):
         os.makedirs( download_dir )
+    
+    # For modern classification we always use all regions (ter_codes). But for 
+    # historical classification the spreadsheet must contain the same regions 
+    # as selected in the frontend, so not only the regions that contain data. 
+    # As the db query only returns region with data, we save the ter_codes in 
+    # a tmp file in the download_dir. 
+    if classification == "historical": 
+        ter_name = "ter_codes.txt"
+        ter_path = os.path.join( download_dir, ter_name )
+        with open( ter_path, "w" ) as f:
+            f.write( str( ter_code_list ) )
+    
+    
     doc_dir = os.path.join( tmp_dir, "dataverse", "doc", "hdl_documentation" )
     doc_list = os.listdir( doc_dir )
     doc_list.sort()
@@ -294,7 +311,7 @@ def collect_docs( qinput, download_key ):
             if doc.find( "Introduction" ) != -1 or \
                doc.find( "regions" ) != -1:                     # string
                 get_list.append( doc )
-        
+            
             if doc.find( datatype_ ) != -1:                     # datatype
                 if doc.find( "Modern_Classification" ) != -1:   # string
                     get_list.append( doc )
@@ -303,13 +320,13 @@ def collect_docs( qinput, download_key ):
                 if doc.find( str( base_year ) ) != -1:          # base_year
                     if doc.find( "GovReports" ) != -1:          # string
                         get_list.append( doc )
-            
+                    
                     if doc.find( datatype_ ) != -1:             # datatype
                         get_list.append( doc )
             else:                                               # modern: all docs
                 if doc.find( "GovReports" ) != -1:              # string
                     get_list.append( doc )
-        
+                
                 if doc.find( datatype_ ) != -1:                 # datatype
                     get_list.append( doc )
     
@@ -1110,7 +1127,7 @@ def aggregation_1year( qinput, download_key ):
                         pvalue = pdict[ pkey ]
                         logging.debug( "key: %s, value: %s" % ( pkey, pvalue ) )
                         if pkey == "classification":
-							classification = pvalue
+                            classification = pvalue
             else:
                 logging.debug( "key: %s, value: %s" % ( key, value ) )
     except:
@@ -1585,10 +1602,7 @@ def download():
         ( lex_lands, vocab_regs_terms, sheet_header ) = preprocessor( datafilter )
         
         xlsx_name = "%s.xlsx" % key
-        xlsx_pathname = os.path.abspath( os.path.join( download_dir, xlsx_name ) )
-        logging.debug( "full_path: %s" % xlsx_pathname )
-        
-        filename = aggregate_dataset( key, xlsx_pathname, lex_lands, vocab_regs_terms, sheet_header )
+        filename = aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header )
         logging.debug( "filename: %s" % filename )
         with open( filename, 'rb' ) as f:
             datacontents = f.read()
@@ -1598,6 +1612,52 @@ def download():
             return Response( datacontents, mimetype = filetype )
         
         else:
+            """
+            https://unix.stackexchange.com/questions/14705/the-zip-formats-external-file-attribute
+            The high 16 bits of the external file attributes seem to be used for OS-specific permissions. The Unix values are the same as on traditional unix implementations. Other OSes use other values. Information about the formats used in a variety of different OSes can be found in the Info-ZIP source code (download or e.g in debian apt-get source [zip or unzip]) - relevant files are zipinfo.c in unzip, and the platform-specific files in zip.
+
+            These are conventionally defined in octal (base 8); this is represented in C and python by prefixing the number with a 0.
+
+            These values can all be found in <sys/stat.h> - link to 4.4BSD version. These are not in the POSIX standard (which defines test macros instead); but originate from AT&T Unix and BSD. (in GNU libc / Linux, the values themselves are defined as __S_IFDIR etc in bits/stat.h, though the kernel header might be easier to read - the values are all the same pretty much everywhere.)
+
+            #define S_IFIFO  0010000  /* named pipe (fifo) */
+            #define S_IFCHR  0020000  /* character special */
+            #define S_IFDIR  0040000  /* directory */
+            #define S_IFBLK  0060000  /* block special */
+            #define S_IFREG  0100000  /* regular */
+            #define S_IFLNK  0120000  /* symbolic link */
+            #define S_IFSOCK 0140000  /* socket */
+
+            And of course, the other 12 bits are for the permissions and setuid/setgid/sticky bits, the same as for chmod:
+
+            #define S_ISUID 0004000 /* set user id on execution */
+            #define S_ISGID 0002000 /* set group id on execution */
+            #define S_ISTXT 0001000 /* sticky bit */
+            #define S_IRWXU 0000700 /* RWX mask for owner */
+            #define S_IRUSR 0000400 /* R for owner */
+            #define S_IWUSR 0000200 /* W for owner */
+            #define S_IXUSR 0000100 /* X for owner */
+            #define S_IRWXG 0000070 /* RWX mask for group */
+            #define S_IRGRP 0000040 /* R for group */
+            #define S_IWGRP 0000020 /* W for group */
+            #define S_IXGRP 0000010 /* X for group */
+            #define S_IRWXO 0000007 /* RWX mask for other */
+            #define S_IROTH 0000004 /* R for other */
+            #define S_IWOTH 0000002 /* W for other */
+            #define S_IXOTH 0000001 /* X for other */
+            #define S_ISVTX 0001000 /* save swapped text even after use */
+
+            As a historical note, the reason 0100000 is for regular files instead of 0 is that in very early versions of unix, 0 was for 'small' files (these did not use indirect blocks in the filesystem) and the high bit of the mode flag was set for 'large' files which would use indirect blocks. The other two types using this bit were added in later unix-derived OSes, after the filesystem had changed.
+
+            So, to wrap up, the overall layout of the extended attributes field for Unix is
+
+            TTTTsstrwxrwxrwx0000000000ADVSHR
+            ^^^^____________________________ file type as explained above
+                ^^^_________________________ setuid, setgid, sticky
+                ^^^^^^^^^________________ permissions
+                            ^^^^^^^^________ This is the "lower-middle byte" your post mentions
+                                    ^^^^^^^^ DOS attribute bits
+            """
             zip_fname = "%s.zip" % key
             memory_file = BytesIO()
             with zipfile.ZipFile( memory_file, 'w' ) as zf:
@@ -1606,7 +1666,12 @@ def download():
                         info = zipfile.ZipInfo( fname )
                         info.date_time = time.localtime( time.time() )[ :6 ]
                         info.compress_type = zipfile.ZIP_DEFLATED
-                        info.external_attr = (0664 << 16) | 0x10    # -rw-rw-r--
+                        # Notes from the web and zipfile sources:
+                        # external_attr is 32 in size, with the unix permissions in the
+                        # high order 16 bit, and the MS-DOS FAT attributes in the lower 16.
+                        # man 2 stat tells us that 040755 should be a drwxr-xr-x style file,
+                        # and word of mouth tells me that bit 4 marks directories in FAT.
+                        info.external_attr = (0664 << 16)       # -rw-rw-r--
                         
                         file_path = os.path.join( root, fname )
                         with open( file_path, 'rb' ) as f:

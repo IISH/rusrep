@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # VT-07-Jul-2016 Latest change by VT
-# FL-12-May-2017 Latest change
+# FL-15-May-2017 Latest change
 
 import json
 import logging
@@ -94,6 +94,7 @@ def preprocessor( datafilter ):
         db = clientcache.get_database( 'vocabulary' )   # vocabulary
         
         """
+        # moved to aggregate_dataset()
         # load regions
         regions_filter = {}
         regions_filter[ "vocabulary" ] = "ERRHS_Vocabulary_regions"
@@ -144,7 +145,7 @@ def preprocessor( datafilter ):
                     terms[ item[ 'ID' ] ] = item[ 'RUS' ]
         
         #logging.debug( "topic: %s, topic_name: %s" % ( topic, topic_name ) )
-        vocab_regs_terms[ "term" ] = terms
+        vocab_regs_terms[ "terms" ] = terms
         
         if lang == 'en':
             if hist_mod == 'h':
@@ -185,9 +186,11 @@ def preprocessor( datafilter ):
 
 
 
-def aggregate_dataset( key, fullpath, lex_lands, vocab_regs_terms, sheet_header ):
+def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header ):
     logging.debug( "aggregate_dataset() key: %s" % key )
-    logging.debug( "fullpath: %s" % fullpath )
+    
+    xlsx_pathname = os.path.abspath( os.path.join( download_dir, xlsx_name ) )
+    logging.debug( "full_path: %s" % xlsx_pathname )
     
     lang = ""
     hist_mod = ""
@@ -202,21 +205,34 @@ def aggregate_dataset( key, fullpath, lex_lands, vocab_regs_terms, sheet_header 
         base_year = int( base_year_str )
     logging.debug( "lang: %s, hist_mod: %s, base_year_str: %s" % ( lang, hist_mod, base_year_str ) )
     
-    #logging.debug( str( vocab_regs_terms ) )
-    logging.debug( "keys is vocab_regs_terms:" )
+    logging.debug( "keys in vocab_regs_terms:" )
     for key in vocab_regs_terms:
         logging.debug( "key: %s" % key )
     
-    na = vocab_regs_terms[ "terms" ][ "na" ]
-    logging.debug( "na: %s" % na )
+    #na = vocab_regs_terms[ "terms" ][ "na" ]
+    #logging.debug( "na: %s" % na )
     
     nsheets = 0
+    ter_code_list = []
     wb = openpyxl.Workbook( encoding = 'utf-8' )
     if hist_mod == 'h':
         nsheets = 1
         base_years = [ base_year ]
         ws_0 = wb.get_active_sheet()
         ws_0.title = "Dataset"
+        
+        ter_name = "ter_codes.txt"
+        ter_path = os.path.join( download_dir, ter_name )
+        with open( ter_path, "r" ) as f:
+            ter_code_str = f.read()
+            logging.debug( "ter_code_str: %s, %s" % ( ter_code_str, type( ter_code_str ) ) )
+            ter_code_str = ter_code_str[ 1: -1 ]    # remove leading and trailing bracket
+            ter_code_str = ter_code_str.replace( "'", "" )
+            ter_code_list = ter_code_str.split( ',' )
+            logging.debug( "ter_code_list: %s, %s" % ( str( ter_code_list ), type( ter_code_list ) ) )
+        
+        os.remove( ter_path )       # not in download
+    
     elif hist_mod == 'm':
         nsheets = 5
         base_years = [ 1795, 1858, 1897, 1959, 2002 ]
@@ -270,18 +286,24 @@ def aggregate_dataset( key, fullpath, lex_lands, vocab_regs_terms, sheet_header 
         logging.debug( "regions: %s" % str( regions ) )
         vocab_regs_terms[ "regions" ] = regions
         
+        logging.debug( "keys in vocab_regs_terms:" )
+        for key in vocab_regs_terms:
+            logging.debug( "key: %s" % key )
         
-        regions = {}
-        regnames = []
+        na = vocab_regs_terms[ "terms" ][ "na" ]
+        logging.debug( "na: %s" % na )
+        
+        regions = {}        # key: reg_name, value: reg_code
+        reg_names = []      # list of reg_name's
         for ter_code in vocab_regs_terms[ "regions" ]:
             tmpname = vocab_regs_terms[ "regions" ][ ter_code ]
             ter_name = tmpname.decode( 'utf-8' )
             regions[ ter_name ] = ter_code
-            regnames.append( ter_name ) 
+            reg_names.append( ter_name ) 
 
-        myloc = Locale( 'ru' )  # 'el' is the locale code for Greek
-        col = Collator.createInstance( myloc )
-        sorted_regions = sorted( regnames, cmp = col.compare )
+        locale = Locale( 'ru' )  # 'el' is the locale code for Greek
+        collator = Collator.createInstance( locale )
+        sorted_regions = sorted( reg_names, cmp = collator.compare )
         logging.debug( "sorted_regions: %s" % str( sorted_regions ) )
         
         # sheet_header line here; lines above for legend
@@ -301,12 +323,14 @@ def aggregate_dataset( key, fullpath, lex_lands, vocab_regs_terms, sheet_header 
                     if name == "count":         # skip 'count' column in download
                         continue
                     c = ws.cell( row = i, column = j )
-                    col_name = name
-                    if col_name in vocab_regs_terms[ "term" ]:
-                        col_name = vocab_regs_terms[ "term" ][ col_name ]
-                    c.value = col_name
-                    logging.debug( "%d: %s" % ( j, col_name ) )
+                    column_name = name
+                    if column_name in vocab_regs_terms[ "terms" ]:
+                        column_name = vocab_regs_terms[ "terms" ][ column_name ]
+                    c.value = column_name
+                    logging.debug( "column %d: %s" % ( j, column_name ) )
                     j += 1
+                
+                
                 
                 logging.debug( "# of ter_names in sorted_regions: %d" % len( sorted_regions ) )
                 for ter_name in sorted_regions:
@@ -316,7 +340,7 @@ def aggregate_dataset( key, fullpath, lex_lands, vocab_regs_terms, sheet_header 
                     if ter_code in vocab_regs_terms[ "regions" ]:
                         ter_name = vocab_regs_terms[ "regions" ][ ter_code ]
                     c.value = ter_name
-                    logging.debug( "%d: %s" % ( j, ter_name ) )
+                    logging.debug( "column %d: %s" % ( j, ter_name ) )
                     j += 1
                 i += 1
             
@@ -377,7 +401,7 @@ def aggregate_dataset( key, fullpath, lex_lands, vocab_regs_terms, sheet_header 
                 logging.debug( "sheet_header r: %d, c: %d, value: %s" % ( line[ "r" ], line[ "c" ], line[ "value" ] ) )
     
     # create copyright sheet; extract language id from filename
-    comps1 = fullpath.split( '/' )
+    comps1 = xlsx_pathname.split( '/' )
     comps2 = comps1[ -1 ].split( '-' )
     language = comps2[ 0 ]
     logging.debug( "language: %s" % language )
@@ -415,8 +439,8 @@ def aggregate_dataset( key, fullpath, lex_lands, vocab_regs_terms, sheet_header 
         c = ws_cr.cell( row = 9, column = 0 )
         c.value = "Кесслер Хайс и Маркевич Андрей (%d), Электронный архив Российской исторической статистики, XVIII – XXI вв., [Электронный ресурс] : [сайт]. — Режим доступа: http://ristat.org/" % date.today().year
 
-    wb.save( fullpath )
+    wb.save( xlsx_pathname )
     
-    return fullpath
+    return xlsx_pathname
 
 # [eof]
