@@ -14,7 +14,8 @@ VT-07-Jul-2016 latest change by VT
 FL-03-Mar-2017 Py2/Py3 compatibility: using pandas instead of xlsx2csv to create csv files
 FL-03-Mar-2017 Py2/Py3 compatibility: using future-0.16.0
 FL-27-Mar-2017 Also download documentation files
-FL-04-Apr-2017 latest change
+FL-15-May-2017 Replace intermediate "." with ""
+FL-15-May-2017 latest change
 """
 
 # future-0.16.0 imports for Python 2/3 compatibility
@@ -778,7 +779,7 @@ def filter_csv( csv_dir, in_filename ):
             nzaphc = 0
             for i in reversed( range( nfields ) ):      # histclass fields
                 #print( "%2d %s: %s" % ( i, csv_header_names[ i ], fields[ i ] ) )
-                if csv_header_names[ i ].startswith( "histclass" ):
+                if csv_header_names[ i ].startswith( "histclass" ):     # historical
                     if fields[ i ] == ".":
                         fields[ i ] = ". "
                         nzaphc += 1
@@ -788,12 +789,27 @@ def filter_csv( csv_dir, in_filename ):
             nzapc = 0
             for i in reversed( range( nfields ) ):  # class fields
                 #print( "%2d %s: %s" % ( i, csv_header_names[ i ], fields[ i ] ) )
-                if csv_header_names[ i ].startswith( "class" ):
+                if csv_header_names[ i ].startswith( "class" ):         # modern
                     if fields[ i ] == ".":
                         fields[ i ] = ". "
                         nzapc += 1
                     else:
                         break
+            
+            # The trailing dot fields have been replace by dot+space, 
+            # now replace the central dot fields by an empty string, 
+            # because the dots hamper COUNT, and we want them in the response. 
+            for i in range( nfields ):      # histclass fields
+                #print( "%2d %s: %s" % ( i, csv_header_names[ i ], fields[ i ] ) )
+                if csv_header_names[ i ].startswith( "histclass" ):     # historical
+                    if fields[ i ] == ".":
+                        fields[ i ] = ""
+            for i in range( nfields ):      # class fields
+                #print( "%2d %s: %s" % ( i, csv_header_names[ i ], fields[ i ] ) )
+                if csv_header_names[ i ].startswith( "class" ):         # modern
+                    if fields[ i ] == ".":
+                        fields[ i ] = ""
+            
             """
             if nzaphc != 0 or nzapc != 0:
                 print( "nzaphc: %d, nzapc: %d" % ( nzaphc, nzapc ) )
