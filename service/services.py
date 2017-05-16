@@ -3,7 +3,7 @@
 # VT-07-Jul-2016 latest change by VT
 # FL-12-Dec-2016 use datatype in function documentation()
 # FL-20-Jan-2017 utf8 encoding
-# FL-15-May-2017 
+# FL-16-May-2017 
 
 from __future__ import absolute_import      # VT
 """
@@ -105,7 +105,6 @@ def connect():
     # conn.cursor will return a cursor object, you can use this cursor to perform queries
     cursor = connection.cursor()
     
-    #( row_count, dataset ) = load_regions( cursor, year, datatype, region, debug )
     return cursor
 
 
@@ -205,7 +204,7 @@ def json_generator( cursor, json_dataname, data, download_key = None ):
         output[ 'path' ] = path
         json_list.append( output )
     
-    json_string = json_cache( json_list, language, json_dataname, download_key )
+    #json_string = json_cache( json_list, language, json_dataname, download_key )
     
     #logging.debug( json_string )
     #return json_string
@@ -464,7 +463,6 @@ def load_years( cursor, datatype ):
         if int( year ) not in result:
             result[ int( year ) ] = 0
     
-    #json_data = json_generator( cursor, 'years', result )
     json_string = json.dumps( result, encoding = "utf-8" )
 
     return json_string
@@ -513,20 +511,20 @@ def sqlconstructor( sql ):
 
 
 
-def load_topics( cursor ):
+def load_topics():
     logging.debug( "load_topics()" )
-    data = {}
-    sql = "select * from datasets.topics where 1=1"
-    sql = sqlfilter( sql ) 
-
-    # execute
-    cursor.execute( sql )
-
-    # retrieve the records from the database
-    data = cursor.fetchall()
-    json_data = json_generator( cursor, 'data', data )
     
-    return json_data
+    sql = "SELECT * FROM datasets.topics"
+    sql = sqlfilter( sql ) 
+    logging.debug( "sql: %s" % sql )
+
+    cursor = connect()
+    cursor.execute( sql )       # execute
+
+    data = cursor.fetchall()    # retrieve the records from the database
+    json_list = json_generator( cursor, 'data', data )
+    
+    return json_list
 
 
 
@@ -582,7 +580,7 @@ def datasetfilter( data, sql_names, classification ):
             return json.dumps( datafilter, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
 
 
-
+"""
 def load_classes( cursor ):
     logging.debug( "load_classes()" )
     data = {}
@@ -681,10 +679,10 @@ def load_classes( cursor ):
         json_list.append( data_keys )
     #return str( json_list )
     
-    json_data = json_generator( cursor, 'data', data )
+    json_list = json_generator( cursor, 'data', data )
     
-    return json_data
-
+    return json_list
+"""
 
 
 def zap_empty_classes( item ):
@@ -832,7 +830,7 @@ def load_vocabulary( vocname ):
     return json_hash
 
 
-
+"""
 def load_histclasses( cursor ):
     logging.debug( "load_histclasses()" )
     data = {}
@@ -847,9 +845,9 @@ def load_histclasses( cursor ):
     json_data = json_generator( cursor, 'data', data )
 
     return json_data
+"""
 
-
-
+"""
 def load_regions( cursor ):
     logging.debug( "load_regions()" )
     data = {}
@@ -862,9 +860,10 @@ def load_regions( cursor ):
     
     # retrieve the records from the database
     data = cursor.fetchall()
-    json_data = json_generator( cursor, 'regions', data )
-    return json_data
-
+    json_list = json_generator( cursor, 'regions', data )
+    
+    return json_list
+"""
 
 
 def load_data( cursor, year, datatype, region, debug ):
@@ -894,9 +893,10 @@ def load_data( cursor, year, datatype, region, debug ):
         i = i + 1
         data[ i ] = row
         #print row[ 0 ]
-    json_data = json_generator( cursor, 'data', records )
     
-    return json_data
+    json_list = json_generator( cursor, 'data', records )
+    
+    return json_list
 
 
 
@@ -999,9 +999,13 @@ def export():
 @app.route( '/topics' )
 def topics():
     logging.debug( "topics()" )
-    cursor = connect()
-    data = load_topics( cursor )
-    return Response( data, mimetype = 'application/json; charset=utf-8' )
+    language = request.args.get( "language" )
+    download_key = request.args.get( "download_key" )
+    
+    json_list = load_topics()
+    json_string = json_cache( json_list, language, 'data', download_key )
+    
+    return Response( json_string, mimetype = 'application/json; charset=utf-8' )
 
 
 
@@ -1021,14 +1025,14 @@ def vocab():
         return Response( jsondump, mimetype = 'application/json; charset=utf-8' )
 
 
-
+"""
 @app.route( '/vocabulary' )
 def getvocabulary():
     logging.debug( "getvocabulary()" )
-    data = translated_vocabulary()
+    data = translated_vocabulary()      # needs 1 argument, e.g: { "vocabulary": "ERRHS_Vocabulary_units" }
     json_string = json.dumps( data, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
     return Response( json_string, mimetype = 'application/json; charset=utf-8' )
-
+"""
 
 
 @app.route( '/aggregation', methods = ['POST', 'GET' ] )
@@ -1053,11 +1057,11 @@ def aggregation():
         # historical has base_year in qinput
         #json_data = aggregation_1year( qinput, download_key )
         json_list = aggregation_1year( qinput, download_key )
-        json_data = json_cache( json_list, language, 'data', download_key )
-        logging.debug( "aggregated json_data: \n%s" % json_data )
+        json_string = json_cache( json_list, language, 'data', download_key )
+        logging.debug( "aggregated json_string: \n%s" % json_string )
         
         collect_docs( qinput, download_key )    # collect doc files in download dir
-        return Response( json_data, mimetype = 'application/json; charset=utf-8' )
+        return Response( json_string, mimetype = 'application/json; charset=utf-8' )
     
     elif classification == "modern":
         #json_datas = {}
@@ -1072,11 +1076,11 @@ def aggregation():
             logging.debug( "json_list1: \n%s" % str( json_list1 ) )
             json_list.extend( json_list1 )
             
-        json_data = json_cache( json_list, language, 'data', download_key )
-        logging.debug( "aggregated json_data: \n%s" % json_data )
+        json_string = json_cache( json_list, language, 'data', download_key )
+        logging.debug( "aggregated json_string: \n%s" % json_string )
         
         collect_docs( qinput, download_key )    # collect doc files in download dir
-        return Response( json_data, mimetype = 'application/json; charset=utf-8' )
+        return Response( json_string, mimetype = 'application/json; charset=utf-8' )
     
     return str( '{}' )
 
@@ -1348,16 +1352,10 @@ def aggregation_1year( qinput, download_key ):
             
             finaldata.append( finalitem )
         
-        #json_string = json_generator( cursor, 'data', finaldata, download_key )
         json_list = json_generator( cursor, 'data', finaldata, download_key )
         
-        #json_string = json_cache( json_list, language, 'data', download_key )
-        #logging.debug( "aggregated json_data: \n%s" % json_string )
-        
-        #return json_string
         return json_list
 
-    #return str( '{}' )
     return []
 
 
@@ -1404,11 +1402,16 @@ def indicators():
             finaldata.append( finalitem )
             logging.debug( str( finaldata ) )
             
-        json_data = json_generator( cursor, 'data', finaldata )
+        json_list = json_generator( cursor, 'data', finaldata )
         
-        logging.debug( "json_data before return Response:" )
-        logging.debug( json_data )
-        return Response( json_data, mimetype = 'application/json; charset=utf-8' )
+        language = request.args.get( "language" )
+        download_key = request.args.get( "download_key" )
+        json_string = json_cache( json_list, language, 'data', download_key )
+        
+        logging.debug( "json_string before return Response:" )
+        logging.debug( json_string )
+        
+        return Response( json_string, mimetype = 'application/json; charset=utf-8' )
 
     return str( '{}' )
 
@@ -1569,17 +1572,9 @@ def aggr():
 
 @app.route( '/download' )
 def download():
-    zipping = True
-    logging.debug( "download() zip: %s" % zipping )
-    
     logging.debug( request.args )
-    key = request.args.get( 'key' )
-        
+    
     clioinfra = Configuration()
-    tmp_dir = clioinfra.config[ 'tmppath' ]
-    top_download_dir = os.path.join( tmp_dir, "download" )
-    cleanup_downloads( top_download_dir )                   # remove too old downloads
-    download_dir = os.path.join( top_download_dir, key )    # current download dir
     
     if request.args.get( 'id' ):
         logging.debug( "download() id" )
@@ -1594,7 +1589,19 @@ def download():
         
         return Response( pdfdata, mimetype = filetype )
     
+    key = request.args.get( 'key' )
+    logging.debug( "key: %s" % key )
+    
     if key:
+        zipping = True
+        logging.debug( "download() zip: %s" % zipping )
+    
+        tmp_dir = clioinfra.config[ 'tmppath' ]
+        top_download_dir = os.path.join( tmp_dir, "download" )
+        logging.debug( "top_download_dir: %s" % top_download_dir )
+        cleanup_downloads( top_download_dir )                   # remove too old downloads
+        download_dir = os.path.join( top_download_dir, key )    # current download dir
+    
         logging.debug( "download() key: %s" % key )
         clientcache = MongoClient()
         datafilter = {}
@@ -1832,9 +1839,8 @@ def documentation():
 @app.route( '/histclasses' )
 def histclasses():
     logging.debug( "histclasses()" )
-    #cursor = connect()
-    #data = load_histclasses( cursor )
     data = load_vocabulary( 'historical' )
+    
     return Response( data, mimetype = 'application/json; charset=utf-8' )
 
 
@@ -1842,8 +1848,6 @@ def histclasses():
 @app.route( '/classes' )
 def classes():
     logging.debug( "classes()" )
-    #cursor = connect()
-    #data = load_classes( cursor )
     data = load_vocabulary( 'modern' )
     
     return Response( data, mimetype = 'application/json; charset=utf-8' )
@@ -1868,13 +1872,12 @@ def years():
 def regions():
     logging.debug( "regions()" )
     cursor = connect()
-    #data = load_regions( cursor )
     data = load_vocabulary( "ERRHS_Vocabulary_regions" )
     
     return Response( data, mimetype = 'application/json; charset=utf-8' )
 
 
-
+"""
 @app.route( '/data' )
 def data():
     logging.debug( "data()" )
@@ -1883,10 +1886,15 @@ def data():
     datatype = '1.01'
     region = 0
     debug = 0
-    data = load_data( cursor, year, datatype, region, debug )
     
-    return Response( data, mimetype = 'application/json; charset=utf-8' )
-
+    json_list = load_data( cursor, year, datatype, region, debug )
+    
+    language = request.args.get( "language" )
+    download_key = request.args.get( "download_key" )
+    json_string = json_cache( json_list, language, 'data', download_key )
+        
+    return Response( json_string, mimetype = 'application/json; charset=utf-8' )
+"""
 
 
 @app.route( '/translate' )
@@ -1897,15 +1905,17 @@ def translate():
         data = {}
         sql = "select * from datasets.classmaps where 1=1";
         sql = sqlfilter( sql )
-
-        # execute
-        cursor.execute( sql )
-
-        # retrieve the records from the database
-        data = cursor.fetchall()
-        json_data = json_generator( cursor, 'data', data )
         
-        return Response( json_data, mimetype = 'application/json; charset=utf-8' )
+        cursor.execute( sql )       # execute
+        
+        data = cursor.fetchall()    # retrieve the records from the database
+        json_list = json_generator( cursor, 'data', data )
+        
+        language = request.args.get( "language" )
+        download_key = request.args.get( "download_key" )
+        json_string = json_cache( json_list, language, 'data', download_key )
+        
+        return Response( json_string, mimetype = 'application/json; charset=utf-8' )
 
 
 
