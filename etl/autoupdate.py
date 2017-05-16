@@ -14,8 +14,8 @@ VT-07-Jul-2016 latest change by VT
 FL-03-Mar-2017 Py2/Py3 compatibility: using pandas instead of xlsx2csv to create csv files
 FL-03-Mar-2017 Py2/Py3 compatibility: using future-0.16.0
 FL-27-Mar-2017 Also download documentation files
-FL-15-May-2017 Replace intermediate "." with ""
-FL-15-May-2017 latest change
+FL-16-May-2017 Replace value "." with ""
+FL-16-May-2017 latest change
 """
 
 # future-0.16.0 imports for Python 2/3 compatibility
@@ -603,6 +603,7 @@ def store_handle_docs( clioinfra, handle_name ):
             
             stringio_file = filter_csv( csv_dir, filename )
             cursor.copy_from( stringio_file, dbtable, sep = '|' )
+            #cursor.copy_from( stringio_file, dbtable, sep = '|', null = "None" )
             
             #csv_strings.close()  # close object and discard memory buffer
             #csvfile.close()
@@ -796,28 +797,14 @@ def filter_csv( csv_dir, in_filename ):
                     else:
                         break
             
-            # The trailing dot fields have been replace by dot+space, 
-            # now replace the central dot fields by an empty string, 
-            # because the dots hamper COUNT, and we want them in the response. 
-            for i in range( nfields ):      # histclass fields
-                #print( "%2d %s: %s" % ( i, csv_header_names[ i ], fields[ i ] ) )
-                if csv_header_names[ i ].startswith( "histclass" ):     # historical
-                    if fields[ i ] == ".":
-                        fields[ i ] = ""
-            for i in range( nfields ):      # class fields
-                #print( "%2d %s: %s" % ( i, csv_header_names[ i ], fields[ i ] ) )
-                if csv_header_names[ i ].startswith( "class" ):         # modern
-                    if fields[ i ] == ".":
-                        fields[ i ] = ""
-            
             """
-            if nzaphc != 0 or nzapc != 0:
-                print( "nzaphc: %d, nzapc: %d" % ( nzaphc, nzapc ) )
-                #print( line )
-                #print( "|".join( fields ) )
-                for i in range( len( fields ) ):
-                    print( "%2d %s: %s" % ( i, csv_header_names[ i ], fields[ i ] ) )
-                sys.exit( 0 )
+            # replace the value dot fields by an empty string, 
+            # because the dots hamper COUNT, and we want them in the response.
+            for i in range( nfields ):
+                #print( "%2d %s: %s" % ( i, csv_header_names[ i ], fields[ i ] ) )
+                if csv_header_names[ i ] == "value" :
+                    if fields[ i ] == ".":
+                        fields[ i ] = "None"
             """
             
             # check comment_source length
