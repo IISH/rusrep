@@ -981,11 +981,11 @@ def topic_counts( clioinfra ):
     cursor.execute( sql_topics )
     resp = cursor.fetchall()
     
-    skip_list = [ "1", "2", "3", "4", "5", "6", "7" ]
+    main_topics = [ "1", "2", "3", "4", "5", "6", "7" ]
     for record in resp:
         datatype   = record.datatype
         topic_name = record.topic_name
-        if datatype not in skip_list:
+        if datatype not in main_topics:
             #print( datatype, topic_name )
             sql_count  = "SELECT base_year, COUNT(*) AS count FROM russianrepository"
             sql_count += " WHERE datatype = '%s'" % datatype
@@ -1001,7 +1001,7 @@ def topic_counts( clioinfra ):
             #print( cnt_dict )
             logging.info( "datatype: %s , topic_name: %s, counts: %s" % ( datatype, topic_name, str( cnt_dict ) ) )
         else:
-            #print( "skip:", datatype, topic_name )
+            #print( "skip main topic :", datatype, topic_name )
             pass
     
     connection.commit()

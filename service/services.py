@@ -1085,6 +1085,53 @@ def topics():
 
 
 
+def filecat_subtopic( cursor, datatype, base_year ):
+    logging.debug( "filecatalog_subtopic()" )
+    
+    query  = "SELECT * FROM russianrepository "
+    query += "WHERE datatype = '%s' AND base_year = '%s'" % ( datatype, base_year )
+    
+    cursor.execute( query )
+    records = cursor.fetchall()
+    
+    json_list = json_generator( cursor, 'data', records )
+    print( json_list )
+    
+    return json_list
+
+
+
+@app.route( '/filecatalog' )
+def filecatalog():
+    logging.debug( "filecatalog()" )
+    
+    # e.g.: ?lang=en&subtopics=1_01_1795x1_02_1795
+    #logging.debug( "request.args: %s" % str( request.args ) )
+    language = request.args.get( "lang" )
+    download_key = request.args.get( "download_key" )
+    subtopics = request.args.get( "subtopics" )
+    logging.debug( "lang: %s" % language )
+    logging.debug( "subtopics: %s" % subtopics )
+    
+    cursor = connect()
+    
+    json_list = []
+    subtopic_list = subtopics.split( 'x' )
+    for subtopic in subtopic_list:
+        logging.debug( "subtopic: %s" % subtopic )
+        if len( subtopic ) == 9:    # e.g.: 1_01_1795
+            base_year = subtopic[ 5: ]
+            datatype = subtopic[ :4 ]
+            datatype = datatype.replace( '_', '.' )
+            logging.debug( "datatype: %s, base_year: %s" % ( datatype, base_year ) )
+            json_list1 = filecat_subtopic( cursor, datatype, base_year )
+            #json_list.append( json_list1 )
+    
+    json_string = json_cache( json_list, language, 'data', download_key )
+    return Response( json_string, mimetype = 'application/json; charset=utf-8' )
+
+
+
 @app.route( '/vocab' )
 def vocab():
     logging.debug( "vocab()" )
