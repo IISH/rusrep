@@ -14,8 +14,8 @@ VT-07-Jul-2016 latest change by VT
 FL-03-Mar-2017 Py2/Py3 compatibility: using pandas instead of xlsx2csv to create csv files
 FL-03-Mar-2017 Py2/Py3 compatibility: using future-0.16.0
 FL-27-Mar-2017 Also download documentation files
-FL-16-May-2017 Replace value "." with ""
-FL-16-May-2017 latest change
+FL-17-May-2017 postgresql datasets.topics counts
+FL-17-May-2017 latest change
 """
 
 # future-0.16.0 imports for Python 2/3 compatibility
@@ -949,6 +949,67 @@ def clear_mongo( mongo_client ):
 
 
 
+def topic_counts( clioinfra ):
+    logging.info( "topic_counts()" )
+    
+    configpath = RUSREP_CONFIG_PATH
+    if not os.path.isfile( configpath ):
+        logging.error( "in %s" % __file__ )
+        logging.error( "configpath %s FILE DOES NOT EXIST" % configpath )
+        logging.error( "EXIT" )
+        sys.exit( 1 )
+    
+    logging.info( "using configuration: %s" % configpath )
+
+    configparser = ConfigParser.RawConfigParser()
+    configparser.read( configpath )
+    
+    host     = configparser.get( 'config', 'dbhost' )
+    dbname   = configparser.get( 'config', 'dbname' )
+    user     = configparser.get( 'config', 'dblogin' )
+    password = configparser.get( 'config', 'dbpassword' )
+    
+    connection_string = "host = '%s' dbname = '%s' user = '%s' password = '%s'" % ( host, dbname, user, password )
+    logging.info( "connection_string: %s" % connection_string )
+
+    connection = psycopg2.connect( connection_string )
+    cursor = connection.cursor( cursor_factory = psycopg2.extras.NamedTupleCursor )
+
+    sql_topics  = "SELECT datatype, topic_name FROM datasets.topics"
+    sql_topics += " ORDER BY datatype"
+    logging.info( sql_topics )
+    cursor.execute( sql_topics )
+    resp = cursor.fetchall()
+    
+    skip_list = [ "1", "2", "3", "4", "5", "6", "7" ]
+    for record in resp:
+        datatype   = record.datatype
+        topic_name = record.topic_name
+        if datatype not in skip_list:
+            #print( datatype, topic_name )
+            sql_count  = "SELECT base_year, COUNT(*) AS count FROM russianrepository"
+            sql_count += " WHERE datatype = '%s'" % datatype
+            sql_count += " GROUP BY base_year ORDER BY base_year"
+            logging.debug( sql_count )
+            
+            cursor.execute( sql_count )
+            cnt_resp = cursor.fetchall()
+            cnt_dict = {}
+            for cnt_rec in cnt_resp:
+                #print( cnt_rec )
+                cnt_dict[ cnt_rec.base_year ] = int( cnt_rec.count )    # strip trailing 'L'
+            #print( cnt_dict )
+            logging.info( "datatype: %s , topic_name: %s, counts: %s" % ( datatype, topic_name, str( cnt_dict ) ) )
+        else:
+            #print( "skip:", datatype, topic_name )
+            pass
+    
+    connection.commit()
+    cursor.close()
+    connection.close()
+
+
+
 def format_secs( seconds ):
     nmin, nsec  = divmod( seconds, 60 )
     nhour, nmin = divmod( nmin, 60 )
@@ -1054,6 +1115,9 @@ if __name__ == "__main__":
             store_handle_docs( clioinfra, handle_name )         # local_disk => postgresql
             logging.StreamHandler().flush()
             row_count( clioinfra )
+    
+        # done on-the-fly in services/topic_counts()
+        #topic_counts( clioinfra )                               # postgresql datasets.topics counts
     
     if DO_MONGODB:
         update_handle_docs( clioinfra, mongo_client )           # postgresql => mongodb

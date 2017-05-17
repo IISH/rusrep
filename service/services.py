@@ -511,20 +511,96 @@ def sqlconstructor( sql ):
 
 
 
+def topic_counts():
+    logging.info( "topic_counts()" )
+    
+    configpath = RUSREP_CONFIG_PATH = os.environ[ "RUSREP_CONFIG_PATH" ]
+    
+    if not os.path.isfile( configpath ):
+        logging.error( "in %s" % __file__ )
+        logging.error( "configpath %s FILE DOES NOT EXIST" % configpath )
+        logging.error( "EXIT" )
+        sys.exit( 1 )
+    
+    logging.info( "using configuration: %s" % configpath )
+
+    configparser = ConfigParser.RawConfigParser()
+    configparser.read( configpath )
+    
+    host     = configparser.get( 'config', 'dbhost' )
+    dbname   = configparser.get( 'config', 'dbname' )
+    user     = configparser.get( 'config', 'dblogin' )
+    password = configparser.get( 'config', 'dbpassword' )
+    
+    connection_string = "host = '%s' dbname = '%s' user = '%s' password = '%s'" % ( host, dbname, user, password )
+    logging.info( "connection_string: %s" % connection_string )
+
+    connection = psycopg2.connect( connection_string )
+    cursor = connection.cursor( cursor_factory = psycopg2.extras.NamedTupleCursor )
+
+    sql_topics  = "SELECT datatype, topic_name FROM datasets.topics"
+    sql_topics += " ORDER BY datatype"
+    logging.info( sql_topics )
+    cursor.execute( sql_topics )
+    resp = cursor.fetchall()
+    
+    #skip_list = [ "1", "2", "3", "4", "5", "6", "7" ]
+    skip_list = []
+    all_cnt_dict = {}
+    for record in resp:
+        datatype   = record.datatype
+        topic_name = record.topic_name
+        if datatype not in skip_list:
+            #print( datatype, topic_name )
+            sql_count  = "SELECT base_year, COUNT(*) AS count FROM russianrepository"
+            sql_count += " WHERE datatype = '%s'" % datatype
+            sql_count += " GROUP BY base_year ORDER BY base_year"
+            logging.debug( sql_count )
+            
+            cursor.execute( sql_count )
+            cnt_resp = cursor.fetchall()
+            cnt_dict = {}
+            for cnt_rec in cnt_resp:
+                #print( cnt_rec )
+                cnt_dict[ cnt_rec.base_year ] = int( cnt_rec.count )    # strip trailing 'L'
+            
+            #print( cnt_dict )
+            all_cnt_dict[ datatype ] = cnt_dict
+            logging.debug( "datatype: %s , topic_name: %s, counts: %s" % ( datatype, topic_name, str( cnt_dict ) ) )
+        else:
+            #print( "skip:", datatype, topic_name )
+            pass
+    
+    #connection.commit()     # SELECT does not change anything
+    cursor.close()
+    connection.close()
+
+    return all_cnt_dict
+
+
+
 def load_topics():
     logging.debug( "load_topics()" )
+    
+    all_cnt_dict = topic_counts()
     
     sql = "SELECT * FROM datasets.topics"
     sql = sqlfilter( sql ) 
     logging.debug( "sql: %s" % sql )
-
+    
     cursor = connect()
     cursor.execute( sql )       # execute
 
     data = cursor.fetchall()    # retrieve the records from the database
-    json_list = json_generator( cursor, 'data', data )
+    json_list_in = json_generator( cursor, 'data', data )
+    json_list_out = []
+    for topic_dict in json_list_in:
+        logging.debug( topic_dict )
+        datatype = topic_dict[ "datatype" ]
+        topic_dict[ "byear_counts" ] = all_cnt_dict[ datatype ]
+        json_list_out.append(topic_dict )
     
-    return json_list
+    return json_list_out
 
 
 
