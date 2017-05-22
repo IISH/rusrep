@@ -3,7 +3,7 @@
 # VT-07-Jul-2016 latest change by VT
 # FL-12-Dec-2016 use datatype in function documentation()
 # FL-20-Jan-2017 utf8 encoding
-# FL-19-May-2017 
+# FL-22-May-2017 
 
 from __future__ import absolute_import      # VT
 """
@@ -19,6 +19,7 @@ sys.setdefaultencoding( "utf8" )
 
 import collections
 import ConfigParser
+import csv
 import datetime
 import json
 import logging
@@ -40,6 +41,7 @@ from io import BytesIO
 from flask import Flask, Response, request, send_from_directory, send_file
 from jsonmerge import merge
 from pymongo import MongoClient
+from socket import gethostname
 from StringIO import StringIO
 from sys import exc_info
 from rdflib import Graph, Literal, term
@@ -292,7 +294,6 @@ def collect_docs( qinput, download_dir, download_key ):
     classification = qinput.get( "classification" )
     language       = qinput.get( "language" )
     datatype       = qinput.get( "datatype" )
-    base_year      = qinput.get( "base_year" )
     
     if datatype is not None:
         datatype_ = datatype[ 0 ] + "_00"
@@ -335,19 +336,29 @@ def collect_docs( qinput, download_dir, download_key ):
                     get_list.append( doc )
             
             if classification == "historic":                    # only base_year docs
+                base_year = qinput.get( "base_year" )
                 if doc.find( str( base_year ) ) != -1:          # base_year
                     if doc.find( "GovReports" ) != -1:          # string
                         get_list.append( doc )
                     
                     if doc.find( datatype_ ) != -1:             # datatype
                         get_list.append( doc )
-            else:                                               # modern: all docs
+            elif classification == "modern":                    # modern: all docs
                 if doc.find( "GovReports" ) != -1:              # string
                     get_list.append( doc )
                 
                 if doc.find( datatype_ ) != -1:                 # datatype
                     get_list.append( doc )
-    
+            elif classification == "data":                      # filecatalog data
+                base_years = qinput.get( "base_years" )
+                for base_year in base_years:
+                    if doc.find( str( base_year ) ) != -1:      # base_year
+                        if doc.find( "GovReports" ) != -1:      # string
+                            get_list.append( doc )
+                    
+                        if doc.find( datatype_ ) != -1:         # datatype
+                            get_list.append( doc )
+        
     for doc in get_list:
         doc_path = os.path.join( doc_dir, doc )
         shutil.copy2( doc_path, download_dir )
@@ -1120,6 +1131,80 @@ def filecat_subtopic( cursor, datatype, base_year ):
 
 
 
+def process_csv( csv_dir, csv_filename, download_dir ):
+    logging.debug( "process_csv() %s" % csv_filename )
+    csv_pathname = os.path.join( csv_dir, csv_filename )
+
+    # dataverse column names
+    dv_column_names = [
+        "id", 
+        "territory", 
+        "ter_code", 
+        "town", 
+        "district", 
+        "year", 
+        "month", 
+        "value", 
+        "value_unit", 
+        "value_label", 
+        "datatype", 
+        "histclass1", 
+        "histclass2", 
+        "histclass3", 
+        "histclass4", 
+        "histclass5", 
+        "histclass6", 
+        "histclass7", 
+        "histclass8", 
+        "histclass9", 
+        "histclass10", 
+        "class1", 
+        "class2", 
+        "class3", 
+        "class4", 
+        "class5", 
+        "class6", 
+        "class7", 
+        "class8", 
+        "class9", 
+        "class10", 
+        "comment_source", 
+        "source", 
+        "volume", 
+        "page", 
+        "naborshik_id", 
+        "comment_naborshik", 
+        "base_year"
+    ]
+    
+    
+    with open( csv_pathname, 'rb' ) as csv_file:
+        csv_reader = csv.reader( csv_file, delimiter = '|' )
+        for row in csv_reader:
+            logging.debug( ', '.join( row ) )
+    
+    
+    """
+    sep = str(u'|').encode('utf-8')
+    kwargs_pandas   = { 'sep' : sep, 'line_terminator' : '\n' }
+    
+    df1 = pd.read_csv( csv_pathname, **kwargs_pandas )
+    root, ext = os.path.splitext( csv_filename )
+    xlsx_filename = root + ".xlsx"
+    xlsx_pathname = os.path.join( download_dir, xlsx_filename )
+    
+    kwargs_pandas   = { 'sep' : sep }
+    writer = pd.ExcelWriter( xlsx_pathname  )
+    
+    df1.to_excel( writer, "Table", encoding = 'utf-8', index = False )
+    
+    # df2 = ...
+    #df2.to_excel( writer, "Copyrights" )
+    
+    writer.save()
+    """
+
+
 @app.route( "/filecatalog" )
 def filecatalog():
     logging.debug( "filecatalog()" )
@@ -1155,16 +1240,20 @@ def filecatalog():
 def filecatalogdata():
     logging.debug( "filecatalogdata()" )
     
-    # e.g.: ?lang=en&subtopics=1_01_1795x1_02_1795
+    # e.g.: http://data.sandbox.socialhistoryservices.org/service/filecatalogdata
+    # ?lang=en&subtopics%5B0%5D=1_01_1795&subtopics%5B1%5D=1_02_1897
     logging.debug( "request.args: %s" % str( request.args ) )
     language = request.args.get( "lang" )
     
     subtopic_list = []
+    base_years = []
     for key in request.args:
         value = request.args[ key ]
         logging.debug( "key: %s, value: %s" % ( key, str( value ) ) )
         if key.startswith( "subtopics" ):
             subtopic_list.append( value )
+            base_year = value[ 5: ]
+            base_years.append( base_year )
     
     subtopic_list.sort()
     
@@ -1198,10 +1287,16 @@ def filecatalogdata():
     if not os.path.exists( download_dir ):
         os.makedirs( download_dir )
     
-    params = { "language" : language }
+    params = { 
+        "language" : language,
+        "classification" : "data",
+        "base_years" : base_years
+    }
     
+    # collect the required documentation in the download dir
     collect_docs( params, download_dir, download_key )
     
+    # process and collect the needed csv files
     logging.debug( "subtopics: %s" % str( subtopic_list ) )
     for subtopic in subtopic_list:
         datatype  = subtopic[ :4 ]
@@ -1212,17 +1307,49 @@ def filecatalogdata():
         csv_dir = os.path.join( tmp_dir, "dataverse", "csv", handle_name )
         
         
-        
         csv_filename = "ERRHS_%s_data_%s.csv" % ( datatype, base_year )
         logging.debug( "csv_filename: %s" % csv_filename )
         csv_pathname = os.path.join( csv_dir, csv_filename )
         logging.debug( "csv_pathname: %s" % csv_pathname )
 
+        # process csv file
+        process_csv( csv_dir, csv_filename, download_dir )
         
+        # copy to download dir
+        shutil.copy2( csv_pathname, download_dir )
+        
+
+    # zip download dir
+    zip_filename = "%s.zip" % download_key
+    logging.debug( "zip_filename: %s" % zip_filename )
+    zip_dirname = os.path.join( top_download_dir, download_key )
+    logging.debug( "zip_dirname: %s" % zip_dirname )
+    shutil.make_archive( zip_dirname, "zip", zip_dirname )
     
-    json_list = []
-    json_string = json_cache( json_list, language, "data", download_key )
+    hostname = gethostname()
+    json_string = str( { "url_zip" : hostname + "/service/filecatalogget?zip=" + zip_filename } )
     return Response( json_string, mimetype = "application/json; charset=utf-8" )
+
+
+
+@app.route( "/filecatalogget", methods = ['POST', 'GET' ]  )
+def filecatalogget():
+    logging.debug( "filecatalogget()" )
+    logging.debug( "request.args: %s" % str( request.args ) )
+    zip_filename = request.args.get( "zip" )
+    logging.debug( "zip_filename: %s" % zip_filename )
+
+    clioinfra = Configuration()
+    tmp_dir = clioinfra.config[ 'tmppath' ]
+    top_download_dir = os.path.join( tmp_dir, "download" )
+    zip_pathname = os.path.join( top_download_dir, zip_filename )
+    logging.debug( "zip_pathname: %s" % zip_pathname )
+
+    #json_string = str( {} )
+    #return Response( json_string, mimetype = "application/json; charset=utf-8" )
+
+    #return send_file( zip_pathname )
+    return send_file( zip_pathname, attachment_filename = zip_filename, as_attachment = True )
 
 
 
@@ -1886,7 +2013,7 @@ def download():
                             ^^^^^^^^________ This is the "lower-middle byte" your post mentions
                                     ^^^^^^^^ DOS attribute bits
             """
-            zip_fname = "%s.zip" % key
+            zip_filename = "%s.zip" % key
             memory_file = BytesIO()
             with zipfile.ZipFile( memory_file, 'w' ) as zf:
                 for root, sdirs, files in os.walk( download_dir ):
@@ -1906,8 +2033,7 @@ def download():
                             datacontents = f.read()
                             zf.writestr( info, datacontents )
             memory_file.seek( 0 )
-            return send_file( memory_file, attachment_filename = zip_fname, as_attachment = True )
-            #return send_from_directory( download_dir, zip_fname, as_attachment = True )
+            return send_file( memory_file, attachment_filename = zip_filename, as_attachment = True )
         
         dbcache = clientcache.get_database( 'datacache' )
         result = dbcache.data.find( { "key": str( request.args.get( 'key' ) ) } )
