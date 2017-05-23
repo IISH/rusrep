@@ -259,57 +259,35 @@ def json_cache( json_list, language, json_dataname, download_key ):
 
 
 
-def mk_download_dir( qinput, download_key ):
-    logging.debug( "mk_download_dir() %s" % download_key )
-    classification = "unknown"
-    language       = "EN"
-    datatype       = ""
-    datatype_      = "0_00"
-    base_year      = ""
-    
-    classification = qinput.get( "classification" )
-    language       = qinput.get( "language" )
-    datatype       = qinput.get( "datatype" )
-    datatype_      = datatype[ 0 ] + "_00"
-    base_year      = qinput.get( "base_year" )
-    ter_code_list  = qinput.get( "ter_code" )
-    
-    logging.debug( "classification: %s" % classification )
-    logging.debug( "ter_codes: %s" % str( ter_code_list ) )
-
-    clioinfra = Configuration()
-    tmp_dir = clioinfra.config[ 'tmppath' ]
-    download_dir = os.path.join( tmp_dir, "download", download_key )
-    if not os.path.exists( download_dir ):
-        os.makedirs( download_dir )
-    
-    return download_dir
-
-
-
 def collect_docs( qinput, download_dir, download_key ):
     # collect the accompanying docs in the download dir
     logging.debug( "collect_docs() %s" % download_key )
     
+    for key in qinput:
+        logging.debug( "key: %s, value: %s" % ( key, qinput[ key ] ) )
+        
     classification = qinput.get( "classification" )
     language       = qinput.get( "language" )
     datatype       = qinput.get( "datatype" )
+    
+    logging.debug( "classification: %s, language: %s, datatype: %s" % ( classification, language, datatype ) )
     
     if datatype is not None:
         datatype_ = datatype[ 0 ] + "_00"
         datatype0 = datatype_[ 0 ]
     else:
-        datatype_ = ""
         datatype0 = ""
+        datatype_ = ""
     
     # For modern classification we always use all regions (ter_codes). But for 
     # historical classification the spreadsheet must contain the same regions 
     # as selected in the frontend, so not only the regions that contain data. 
-    # As the db query only returns region with data, we save the ter_codes in 
+    # As the db query only returns regions with data, we save the ter_codes in 
     # a tmp file in the download_dir. 
-    if classification is not None and classification == "historical": 
+    if classification == "historical": 
         ter_name = "ter_codes.txt"
         ter_path = os.path.join( download_dir, ter_name )
+        ter_code_list = qinput.get( "ter_code" )
         with open( ter_path, "w" ) as f:
             f.write( str( ter_code_list ) )
     
@@ -322,20 +300,15 @@ def collect_docs( qinput, download_dir, download_key ):
     
     get_list = []   # docs for zipping
     for doc in doc_list:
-        if doc.find( "NACE 1.1_Classification") != -1:          # string
-            if datatype0 == "3" or datatype0 == "4" or datatype0 == "5":    # datatype
-                get_list.append( doc )
-        
         if doc.find( language.upper() ) != -1:                  # language
             if doc.find( "Introduction" ) != -1 or \
                doc.find( "regions" ) != -1:                     # string
                 get_list.append( doc )
             
-            if doc.find( datatype_ ) != -1:                     # datatype
-                if doc.find( "Modern_Classification" ) != -1:   # string
-                    get_list.append( doc )
-            
             if classification == "historic":                    # only base_year docs
+                if doc.find( "NACE 1.1_Classification") != -1 and datatype0 in [ "3", "4", "5"]:
+                    get_list.append( doc )
+                
                 base_year = qinput.get( "base_year" )
                 if doc.find( str( base_year ) ) != -1:          # base_year
                     if doc.find( "GovReports" ) != -1:          # string
@@ -343,20 +316,40 @@ def collect_docs( qinput, download_dir, download_key ):
                     
                     if doc.find( datatype_ ) != -1:             # datatype
                         get_list.append( doc )
-            elif classification == "modern":                    # modern: all docs
+            
+            elif classification == "modern":                    # modern: most lang docs
+                if doc.find( "NACE 1.1_Classification") != -1 and datatype0 in [ "3", "4", "5"]:
+                    get_list.append( doc )
+                
                 if doc.find( "GovReports" ) != -1:              # string
                     get_list.append( doc )
                 
                 if doc.find( datatype_ ) != -1:                 # datatype
                     get_list.append( doc )
+            
             elif classification == "data":                      # filecatalog data
-                base_years = qinput.get( "base_years" )
-                for base_year in base_years:
-                    if doc.find( str( base_year ) ) != -1:      # base_year
-                        if doc.find( "GovReports" ) != -1:      # string
+                subtopics = qinput.get( "subtopics" )
+                for subtopic in subtopics:
+                    datatype  = subtopic[ :4 ]
+                    datatype0 = datatype[ 0 ]
+                    datatype_ = datatype0 + "_00"
+                    base_year = subtopic[ 5: ]
+                    
+                    if doc.find( "NACE 1.1_Classification") != -1 and datatype0 in [ "3", "4", "5"]: 
+                        if doc not in get_list:                 # add only once
                             get_list.append( doc )
                     
-                        if doc.find( datatype_ ) != -1:         # datatype
+                    if doc.find( "Modern_Classification") != -1 and doc.find( datatype_ ) != -1:
+                        if doc not in get_list:                 # add only once
+                            get_list.append( doc )
+                    
+                    if doc.find( "GovReports" ) != -1 and doc.find( str( base_year ) ) != -1:
+                        if doc not in get_list:                 # add only once
+                            get_list.append( doc )
+                    
+                    # files that must match both datatype & base_year
+                    if doc.find( str( datatype_ ) ) != -1 and doc.find( str( base_year ) ) != -1:
+                        if doc not in get_list:                 # add only once
                             get_list.append( doc )
         
     for doc in get_list:
@@ -832,7 +825,8 @@ def translateitem( item, eng_data ):
 
 
 def load_vocabulary( vocname ):
-    logging.debug( "load_vocabulary()" )
+    logging.debug( "load_vocabulary() vocname: %s" % vocname )
+    logging.debug( "request.args: %s" % str( request.args ) )
     
     client = MongoClient()
     dbname = 'vocabulary'
@@ -846,6 +840,7 @@ def load_vocabulary( vocname ):
             newfilter[ 'vocabulary' ] = 'ERRHS_Vocabulary_histclasses'
         else:
             newfilter[ 'vocabulary' ] = 'ERRHS_Vocabulary_modclasses'
+        logging.debug( "newfilter: %s" % newfilter )
 
     if request.args.get( 'language' ) == 'en':
         thisyear = ''
@@ -1131,6 +1126,129 @@ def filecat_subtopic( cursor, datatype, base_year ):
 
 
 
+@app.route( "/filecatalog" )
+def filecatalog():
+    logging.debug( "filecatalog()" )
+    
+    # e.g.: ?lang=en&subtopics=1_01_1795x1_02_1795
+    #logging.debug( "request.args: %s" % str( request.args ) )
+    language = request.args.get( "lang" )
+    download_key = request.args.get( "download_key" )
+    subtopics = request.args.get( "subtopics" )
+    logging.debug( "lang: %s" % language )
+    logging.debug( "subtopics: %s" % subtopics )
+    
+    cursor = connect()
+    
+    json_list = []
+    subtopic_list = subtopics.split( 'x' )
+    for subtopic in subtopic_list:
+        logging.debug( "subtopic: %s" % subtopic )
+        if len( subtopic ) == 9:    # e.g.: 1_01_1795
+            base_year = subtopic[ 5: ]
+            datatype = subtopic[ :4 ]
+            datatype = datatype.replace( '_', '.' )
+            logging.debug( "datatype: %s, base_year: %s" % ( datatype, base_year ) )
+            json_list1 = filecat_subtopic( cursor, datatype, base_year )
+            #json_list.append( json_list1 )
+    
+    json_string = json_cache( json_list, language, "data", download_key )
+    return Response( json_string, mimetype = "application/json; charset=utf-8" )
+
+
+
+@app.route( "/filecatalogdata", methods = ['POST', 'GET' ]  )
+def filecatalogdata():
+    logging.debug( "filecatalogdata()" )
+    #http://ristat-demo.sandbox.socialhistoryservices.org/catalog/
+    # select what you want, and click "Get data!"
+    # http://data.sandbox.socialhistoryservices.org/service/filecatalogdata?lang=en&subtopics%5B0%5D=1_01_1795
+    # http://data.sandbox.socialhistoryservices.org/service/filecatalogdata?lang=en&subtopics%5B0%5D=1_01_1795&subtopics%5B1%5D=1_02_1897
+    language = request.args.get( "lang" )
+    subtopics = []
+    for key in request.args:
+        value = request.args[ key ]
+        logging.debug( "key: %s, value: %s" % ( key, str( value ) ) )
+        if key.startswith( "subtopics" ):
+            subtopics.append( value )
+    
+    logging.debug( "lang: %s" % language )
+    
+    handle_names = [ 
+        "hdl_errhs_population",     # ERRHS_1   39 files
+        "hdl_errhs_labour",         # ERRHS_2
+        "hdl_errhs_industry",       # ERRHS_3
+        "hdl_errhs_agriculture",    # ERRHS_4   10 files
+        "hdl_errhs_services",       # ERRHS_5
+        "hdl_errhs_capital",        # ERRHS_6
+        "hdl_errhs_land"            # ERRHS_7   10 files
+    ]
+    
+    clioinfra = Configuration()
+    tmp_dir = clioinfra.config[ 'tmppath' ]
+    top_download_dir = os.path.join( tmp_dir, "download" )
+    logging.debug( "top_download_dir: %s" % top_download_dir )
+    if not os.path.exists( top_download_dir ):
+        os.makedirs( top_download_dir )
+    else:
+        cleanup_downloads( top_download_dir )           # remove too old downloads
+    
+    random_key = str( "%05.8f" % random.random() )      # used as base name for zip download
+    download_key = "%s-d-filecatalog-%s" % ( language, random_key[ 2: ] )
+    logging.debug( "download_key: %s" % download_key )
+    
+    download_dir = os.path.join( top_download_dir, download_key )   # current download dir
+    logging.debug( "download_dir: %s" % download_dir )
+    if not os.path.exists( download_dir ):
+        os.makedirs( download_dir )
+    
+    params = { 
+        "classification" : "data",
+        "language"       : language,
+        "subtopics"      : subtopics
+    }
+    subtopics.sort()
+    
+    # collect the required documentation in the download dir
+    collect_docs( params, download_dir, download_key )
+    
+    # process and collect the needed csv files
+    logging.debug( "subtopics: %s" % str( subtopics ) )
+    for subtopic in subtopics:
+        datatype  = subtopic[ :4 ]
+        base_year = subtopic[ 5: ]
+        
+        datatype_maj = int( datatype[ 0 ] )
+        handle_name = handle_names[ datatype_maj - 1 ]
+        csv_dir = os.path.join( tmp_dir, "dataverse", "csv", handle_name )
+        
+        
+        csv_filename = "ERRHS_%s_data_%s.csv" % ( datatype, base_year )
+        logging.debug( "csv_filename: %s" % csv_filename )
+        csv_pathname = os.path.join( csv_dir, csv_filename )
+        logging.debug( "csv_pathname: %s" % csv_pathname )
+
+        # process csv file
+        process_csv( csv_dir, csv_filename, download_dir )
+        
+        # copy to download dir
+        shutil.copy2( csv_pathname, download_dir )
+        
+
+    # zip download dir
+    zip_filename = "%s.zip" % download_key
+    logging.debug( "zip_filename: %s" % zip_filename )
+    zip_dirname = os.path.join( top_download_dir, download_key )
+    logging.debug( "zip_dirname: %s" % zip_dirname )
+    shutil.make_archive( zip_dirname, "zip", zip_dirname )
+    
+    hostname = gethostname()
+    json_hash = { "url_zip" : hostname + "/service/filecatalogget?zip=" + zip_filename }
+    json_string = json.dumps( json_hash, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
+    return Response( json_string, mimetype = "application/json; charset=utf-8" )
+
+
+
 def process_csv( csv_dir, csv_filename, download_dir ):
     logging.debug( "process_csv() %s" % csv_filename )
     csv_pathname = os.path.join( csv_dir, csv_filename )
@@ -1205,132 +1323,6 @@ def process_csv( csv_dir, csv_filename, download_dir ):
     """
 
 
-@app.route( "/filecatalog" )
-def filecatalog():
-    logging.debug( "filecatalog()" )
-    
-    # e.g.: ?lang=en&subtopics=1_01_1795x1_02_1795
-    #logging.debug( "request.args: %s" % str( request.args ) )
-    language = request.args.get( "lang" )
-    download_key = request.args.get( "download_key" )
-    subtopics = request.args.get( "subtopics" )
-    logging.debug( "lang: %s" % language )
-    logging.debug( "subtopics: %s" % subtopics )
-    
-    cursor = connect()
-    
-    json_list = []
-    subtopic_list = subtopics.split( 'x' )
-    for subtopic in subtopic_list:
-        logging.debug( "subtopic: %s" % subtopic )
-        if len( subtopic ) == 9:    # e.g.: 1_01_1795
-            base_year = subtopic[ 5: ]
-            datatype = subtopic[ :4 ]
-            datatype = datatype.replace( '_', '.' )
-            logging.debug( "datatype: %s, base_year: %s" % ( datatype, base_year ) )
-            json_list1 = filecat_subtopic( cursor, datatype, base_year )
-            #json_list.append( json_list1 )
-    
-    json_string = json_cache( json_list, language, "data", download_key )
-    return Response( json_string, mimetype = "application/json; charset=utf-8" )
-
-
-
-@app.route( "/filecatalogdata", methods = ['POST', 'GET' ]  )
-def filecatalogdata():
-    logging.debug( "filecatalogdata()" )
-    
-    # e.g.: http://data.sandbox.socialhistoryservices.org/service/filecatalogdata
-    # ?lang=en&subtopics%5B0%5D=1_01_1795&subtopics%5B1%5D=1_02_1897
-    logging.debug( "request.args: %s" % str( request.args ) )
-    language = request.args.get( "lang" )
-    
-    subtopic_list = []
-    base_years = []
-    for key in request.args:
-        value = request.args[ key ]
-        logging.debug( "key: %s, value: %s" % ( key, str( value ) ) )
-        if key.startswith( "subtopics" ):
-            subtopic_list.append( value )
-            base_year = value[ 5: ]
-            base_years.append( base_year )
-    
-    subtopic_list.sort()
-    
-    logging.debug( "lang: %s" % language )
-    
-    handle_names = [ 
-        "hdl_errhs_population",     # ERRHS_1   39 files
-        "hdl_errhs_labour",         # ERRHS_2
-        "hdl_errhs_industry",       # ERRHS_3
-        "hdl_errhs_agriculture",    # ERRHS_4   10 files
-        "hdl_errhs_services",       # ERRHS_5
-        "hdl_errhs_capital",        # ERRHS_6
-        "hdl_errhs_land"            # ERRHS_7   10 files
-    ]
-    
-    clioinfra = Configuration()
-    tmp_dir = clioinfra.config[ 'tmppath' ]
-    top_download_dir = os.path.join( tmp_dir, "download" )
-    logging.debug( "top_download_dir: %s" % top_download_dir )
-    if not os.path.exists( top_download_dir ):
-        os.makedirs( top_download_dir )
-    else:
-        cleanup_downloads( top_download_dir )           # remove too old downloads
-    
-    random_key = str( "%05.8f" % random.random() )      # used as base name for zip download
-    download_key = "%s-d-filecatalog-%s" % ( language, random_key[ 2: ] )
-    logging.debug( "download_key: %s" % download_key )
-    
-    download_dir = os.path.join( top_download_dir, download_key )   # current download dir
-    logging.debug( "download_dir: %s" % download_dir )
-    if not os.path.exists( download_dir ):
-        os.makedirs( download_dir )
-    
-    params = { 
-        "language" : language,
-        "classification" : "data",
-        "base_years" : base_years
-    }
-    
-    # collect the required documentation in the download dir
-    collect_docs( params, download_dir, download_key )
-    
-    # process and collect the needed csv files
-    logging.debug( "subtopics: %s" % str( subtopic_list ) )
-    for subtopic in subtopic_list:
-        datatype  = subtopic[ :4 ]
-        base_year = subtopic[ 5: ]
-        
-        datatype_maj = int( datatype[ 0 ] )
-        handle_name = handle_names[ datatype_maj - 1 ]
-        csv_dir = os.path.join( tmp_dir, "dataverse", "csv", handle_name )
-        
-        
-        csv_filename = "ERRHS_%s_data_%s.csv" % ( datatype, base_year )
-        logging.debug( "csv_filename: %s" % csv_filename )
-        csv_pathname = os.path.join( csv_dir, csv_filename )
-        logging.debug( "csv_pathname: %s" % csv_pathname )
-
-        # process csv file
-        process_csv( csv_dir, csv_filename, download_dir )
-        
-        # copy to download dir
-        shutil.copy2( csv_pathname, download_dir )
-        
-
-    # zip download dir
-    zip_filename = "%s.zip" % download_key
-    logging.debug( "zip_filename: %s" % zip_filename )
-    zip_dirname = os.path.join( top_download_dir, download_key )
-    logging.debug( "zip_dirname: %s" % zip_dirname )
-    shutil.make_archive( zip_dirname, "zip", zip_dirname )
-    
-    hostname = gethostname()
-    json_string = str( { "url_zip" : hostname + "/service/filecatalogget?zip=" + zip_filename } )
-    return Response( json_string, mimetype = "application/json; charset=utf-8" )
-
-
 
 @app.route( "/filecatalogget", methods = ['POST', 'GET' ]  )
 def filecatalogget():
@@ -1397,6 +1389,12 @@ def aggregation():
     download_key = "%s-%s-%s-%s-%s" % ( language, classification[ 0 ], datatype, base_year, download_key[ 2: ] )
     logging.debug( "download_key: %s" % download_key )
     
+    clioinfra = Configuration()
+    tmp_dir = clioinfra.config[ 'tmppath' ]
+    download_dir = os.path.join( tmp_dir, "download", download_key )
+    if not os.path.exists( download_dir ):
+        os.makedirs( download_dir )
+    
     if classification == "historical":
         # historical has base_year in qinput
         #json_data = aggregation_1year( qinput, download_key )
@@ -1404,7 +1402,6 @@ def aggregation():
         json_string = json_cache( json_list, language, "data", download_key )
         logging.debug( "aggregated json_string: \n%s" % json_string )
         
-        mk_download_dir = collect_docs_dir( qinput, download_key )
         collect_docs( qinput, download_dir, download_key )  # collect doc files in download dir
         
         return Response( json_string, mimetype = "application/json; charset=utf-8" )
@@ -1425,7 +1422,6 @@ def aggregation():
         json_string = json_cache( json_list, language, "data", download_key )
         logging.debug( "aggregated json_string: \n%s" % json_string )
         
-        mk_download_dir = collect_docs_dir( qinput, download_key )
         collect_docs( qinput, download_dir, download_key )  # collect doc files in download dir
         
         return Response( json_string, mimetype = "application/json; charset=utf-8" )
@@ -2187,7 +2183,7 @@ def documentation():
 def histclasses():
     logging.debug( "histclasses()" )
     data = load_vocabulary( 'historical' )
-    
+    logging.debug( "histclasses() before return Response" )
     return Response( data, mimetype = "application/json; charset=utf-8" )
 
 
@@ -2196,7 +2192,7 @@ def histclasses():
 def classes():
     logging.debug( "classes()" )
     data = load_vocabulary( "modern" )
-    
+    logging.debug( "classes() before return Response" )
     return Response( data, mimetype = "application/json; charset=utf-8" )
 
 
