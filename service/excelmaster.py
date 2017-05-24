@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # VT-07-Jul-2016 Latest change by VT
-# FL-15-May-2017 Latest change
+# FL-24-May-2017 Latest change
 
 import json
 import logging
@@ -206,8 +206,8 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
     logging.debug( "lang: %s, hist_mod: %s, base_year_str: %s" % ( lang, hist_mod, base_year_str ) )
     
     logging.debug( "keys in vocab_regs_terms:" )
-    for key in vocab_regs_terms:
-        logging.debug( "key: %s" % key )
+    for k in vocab_regs_terms:
+        logging.debug( "key in vocab_regs_terms: %s" % k )
     
     #na = vocab_regs_terms[ "terms" ][ "na" ]
     #logging.debug( "na: %s" % na )
@@ -215,24 +215,35 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
     nsheets = 0
     ter_code_list = []
     wb = openpyxl.Workbook( encoding = 'utf-8' )
+    
+    clientcache = MongoClient()
+    
+    dbcache = clientcache.get_database( 'datacache' )
+    logging.debug( "dbcache.data.find with key: %s" % key )
+    result = dbcache.data.find( { "key": key } )
+    
     if hist_mod == 'h':
         nsheets = 1
         base_years = [ base_year ]
         ws_0 = wb.get_active_sheet()
         ws_0.title = "Dataset"
         
-        ter_name = "ter_codes.txt"
-        ter_path = os.path.join( download_dir, ter_name )
-        with open( ter_path, "r" ) as f:
-            ter_code_str = f.read()
-            logging.debug( "ter_code_str: %s, %s" % ( ter_code_str, type( ter_code_str ) ) )
-            ter_code_str = ter_code_str[ 1: -1 ]    # remove leading and trailing bracket
-            ter_code_str = ter_code_str.replace( "'", "" )
-            ter_code_list = ter_code_str.split( ',' )
+        qinput_name = "qinput.txt"
+        qinput_path = os.path.join( download_dir, qinput_name )
+        with open( qinput_path, "r" ) as f:
+            qinput = json.load( f )
+            logging.debug( "qinput: %s, %s" % ( qinput, type( qinput ) ) )
+            """
+            qinput_str = qinput_str[ 1: -1 ]    # remove leading and trailing bracket
+            qinput_str = qinput_str.replace( "'", "" )
+            qinput_list = qinput_str.split( ',' )
+            logging.debug( "qinput_list: %s, %s" % ( str( qinput_list ), type( qinput_list ) ) )
+            """
+            ter_code_list = qinput[ "ter_code" ]
             logging.debug( "ter_code_list: %s, %s" % ( str( ter_code_list ), type( ter_code_list ) ) )
-        
-        os.remove( ter_path )       # not in download
-    
+            
+        os.remove( qinput_path )       # not in download
+
     elif hist_mod == 'm':
         nsheets = 5
         base_years = [ 1795, 1858, 1897, 1959, 2002 ]
@@ -242,6 +253,15 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         ws_2 = wb.create_sheet( 2, "1897" )
         ws_3 = wb.create_sheet( 3, "1959" )
         ws_4 = wb.create_sheet( 4, "2002" )
+        
+        dbvocab = clientcache.get_database( 'vocabulary' )   # vocabulary
+        vocab_regions = dbvocab.data.find( { "vocabulary": "ERRHS_Vocabulary_regions" } )
+        logging.debug( "vocab_regions: %s" % vocab_regions )
+        ter_code_list = []
+        for region in vocab_regions:
+            logging.debug( "region: %s" % str( region ) )
+            ter_code_list.append( region[ "ID" ] )
+        
     
     # loop over the data sheets, and select the correct year data
     for sheet_idx in range( nsheets ):
@@ -258,21 +278,15 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         elif sheet_idx == 4:
             ws = ws_4
         
-        
-        clientcache = MongoClient()
-        dbcache = clientcache.get_database( 'datacache' )
-        logging.debug( "dbcache.data.find with key: %s" % key )
-        result = dbcache.data.find( { "key": key } )
-        db = clientcache.get_database( 'vocabulary' )   # vocabulary
-        
         # load regions for base_year
         regions_filter = {}
         regions_filter[ "vocabulary" ] = "ERRHS_Vocabulary_regions"
         regions_filter[ 'basisyear' ] = str( base_year )
-        vocab_regions = db.data.find( regions_filter )
+        vocab_regions = dbvocab.data.find( regions_filter )
         
         regions = {}
-        ter_codes = vocab_regs_terms[ "ter_codes" ]
+        #ter_codes = vocab_regs_terms[ "ter_codes" ]     # from sql result
+        ter_codes = ter_code_list                       # from qinput or all (modern)
         logging.debug( "ter_codes: %s" % str( ter_codes ) )
         for item in vocab_regions:
             #logging.debug( str( item ) )
@@ -309,6 +323,14 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         # sheet_header line here; lines above for legend
         i = 9
         logging.debug( "# of itemchains in lex_lands: %d" % len( lex_lands ) )
+        
+        # empty level strings are not in the data, but we need same # of colums for all rows
+        max_cols = 0
+        for itemchain in lex_lands:
+            chain = json.loads( itemchain )
+            max_cols = max( max_cols, len( chain ) )
+            logging.debug( "max_cols: %d" % max_cols )
+        
         for itemchain in lex_lands:
             j = 0
             
@@ -319,6 +341,7 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                 
                 logging.debug( "# of names in chain: %d" % len( chain ) )
                 logging.debug( "names in chain: %s" % str( chain ) )
+                
                 for name in sorted( chain ):
                     if name == "count":         # skip 'count' column in download
                         continue
@@ -329,8 +352,6 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                     c.value = column_name
                     logging.debug( "column %d: %s" % ( j, column_name ) )
                     j += 1
-                
-                
                 
                 logging.debug( "# of ter_names in sorted_regions: %d" % len( sorted_regions ) )
                 for ter_name in sorted_regions:
@@ -349,7 +370,8 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                 logging.debug( "itemchain" )
                 j = 0
                 chain = json.loads( itemchain )
-                logging.debug( "# of items: %d" % len( chain ))
+                logging.debug( "# of names in chain: %d" % len( chain ) )
+                logging.debug( "names in chain: %s" % str( chain ) )
                 if base_year != chain.get( "base_year" ):
                     logging.debug( "skip: %s, base_year not in chain" % base_year )
                     continue
@@ -357,8 +379,13 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                 ter_data = lex_lands[ itemchain ]
                 logging.debug( "ter_data: %s: " % str( ter_data ) )
                 for name in sorted( chain ):
-                    if name == "count":         # skip 'count' column in download
+                    logging.debug( "column %d, name: %s: " % ( j, name ) )
+                    if name == "count":                 # skip 'count' column in download
                         continue
+                    if name == "value_unit":
+                        skip = max_cols - len( chain )
+                        logging.debug( "skip: %d" % skip )
+                        j += skip    # skip missing levels
                     c = ws.cell( row = i, column = j )
                     c.value = chain[ name ] 
                     logging.debug( "%d: %s" % ( j, name ) )

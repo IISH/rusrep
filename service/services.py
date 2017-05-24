@@ -3,7 +3,7 @@
 # VT-07-Jul-2016 latest change by VT
 # FL-12-Dec-2016 use datatype in function documentation()
 # FL-20-Jan-2017 utf8 encoding
-# FL-22-May-2017 
+# FL-24-May-2017 
 
 from __future__ import absolute_import      # VT
 """
@@ -273,23 +273,25 @@ def collect_docs( qinput, download_dir, download_key ):
     logging.debug( "classification: %s, language: %s, datatype: %s" % ( classification, language, datatype ) )
     
     if datatype is not None:
-        datatype_ = datatype[ 0 ] + "_00"
-        datatype0 = datatype_[ 0 ]
+        datatype0 = datatype[ 0 ]
+        datatype_ = datatype0 + "_00"
     else:
         datatype0 = ""
         datatype_ = ""
     
+    logging.debug( "datatype0: %s, datatype_: %s" % ( datatype0, datatype_ ) )
+
     # For modern classification we always use all regions (ter_codes). But for 
     # historical classification the spreadsheet must contain the same regions 
     # as selected in the frontend, so not only the regions that contain data. 
     # As the db query only returns regions with data, we save the ter_codes in 
     # a tmp file in the download_dir. 
     if classification == "historical": 
-        ter_name = "ter_codes.txt"
-        ter_path = os.path.join( download_dir, ter_name )
-        ter_code_list = qinput.get( "ter_code" )
-        with open( ter_path, "w" ) as f:
-            f.write( str( ter_code_list ) )
+        qinput_name = "qinput.txt"
+        qinput_path = os.path.join( download_dir, qinput_name )
+        with open( qinput_path, "w" ) as f:
+            #f.write( str( qinput ) )
+            json.dump( qinput, f )
     
     clioinfra = Configuration()
     tmp_dir = clioinfra.config[ 'tmppath' ]
@@ -305,7 +307,7 @@ def collect_docs( qinput, download_dir, download_key ):
                doc.find( "regions" ) != -1:                     # string
                 get_list.append( doc )
             
-            if classification == "historic":                    # only base_year docs
+            if classification == "historical":                  # only base_year docs
                 if doc.find( "NACE 1.1_Classification") != -1 and datatype0 in [ "3", "4", "5"]:
                     get_list.append( doc )
                 
@@ -918,10 +920,10 @@ def load_vocabulary( vocname ):
 
     json_hash = {}
     if vocname == "ERRHS_Vocabulary_regions":
-        json_hash[ 'regions' ] = data
-    elif vocname == 'modern':
+        json_hash[ "regions" ] = data
+    elif vocname == "modern":
         json_hash = data
-    elif vocname == 'historical':
+    elif vocname == "historical":
         json_hash = data
     else:
         json_hash[ "data" ] = data
@@ -1489,26 +1491,26 @@ def aggregation_1year( qinput, download_key ):
     forbidden = [ "classification", "action", "language", "path" ]
     
     if cursor:
-        # extra = "%s<br>%s=%s<br>" % (extra, key, value)
-        if 'language' in qinput:
-            if qinput[ 'language' ]== 'en':
-                vocab_filter = {}
-                base_year = qinput.get( "base_year" )
-                if base_year and qinput.get( "classification" ) == "historical":
-                    vocab_filter[ "YEAR" ] = base_year
-                
-                datatype = qinput.get( "datatype" )
-                if datatype:
-                    vocab_filter[ "DATATYPE" ] = datatype
-                
-                eng_data = translated_vocabulary( vocab_filter )
-                units = translated_vocabulary( { "vocabulary": "ERRHS_Vocabulary_units" } )
-                logging.debug( "translated_vocabulary returned %d items" % len( units ) )
-                logging.debug( "vocab_filter: %s" % str( vocab_filter ) )
-                logging.debug( "eng_data: %s" % str( eng_data ) )
-                logging.debug( "units: %s" % str( units ) )
-                for item in units:
-                    eng_data[ item ] = units[ item ]
+        if qinput.get( 'language' ) == 'en':
+            # translate input english term to russian sql terms
+            vocab_filter = {}
+            base_year = qinput.get( "base_year" )
+            if base_year and qinput.get( "classification" ) == "historical":
+                vocab_filter[ "YEAR" ] = base_year
+            
+            datatype = qinput.get( "datatype" )
+            if datatype:
+                vocab_filter[ "DATATYPE" ] = datatype
+            
+            eng_data = translated_vocabulary( vocab_filter )
+            units = translated_vocabulary( { "vocabulary": "ERRHS_Vocabulary_units" } )
+            
+            logging.debug( "translated_vocabulary returned %d items" % len( units ) )
+            logging.debug( "vocab_filter: %s" % str( vocab_filter ) )
+            logging.debug( "eng_data: %s" % str( eng_data ) )
+            logging.debug( "units: %s" % str( units ) )
+            for item in units:
+                eng_data[ item ] = units[ item ]
     
     known_fields = {}
     sql = {}
@@ -1603,6 +1605,7 @@ def aggregation_1year( qinput, download_key ):
     #sql_query = "SELECT COUNT(*) AS datarecords, COUNT(*) - COUNT(value) AS data_active, SUM(CAST(value AS DOUBLE PRECISION)) AS total, value_unit, ter_code"
     sql_query  = "SELECT COUNT(*) AS datarecords" 
     sql_query += ", SUM(CAST(value AS DOUBLE PRECISION)) AS total"
+    #sql_query += ", SUM(CASE WHEN (value <> '.' AND value <> '. ') THEN CAST(value AS DOUBLE PRECISION) ELSE 0 END) AS total"
     sql_query += ", COUNT(*) AS count"
     sql_query += ", COUNT(*) - COUNT(value) AS data_active"
     sql_query += ", value_unit, ter_code"
