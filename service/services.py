@@ -1433,7 +1433,8 @@ def aggregation():
 
 
 def aggregation_1year( qinput, download_key ):
-    logging.debug( "aggregation_1year() %s" % download_key )
+    logging.debug( "aggregation_1year() download_key: %s" % download_key )
+    logging.debug( "qinput %s" % str( qinput ) )
     
     thisyear = ''
     
