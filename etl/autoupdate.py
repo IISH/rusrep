@@ -15,7 +15,7 @@ FL-03-Mar-2017 Py2/Py3 compatibility: using pandas instead of xlsx2csv to create
 FL-03-Mar-2017 Py2/Py3 compatibility: using future-0.16.0
 FL-27-Mar-2017 Also download documentation files
 FL-17-May-2017 postgresql datasets.topics counts
-FL-17-May-2017 latest change
+FL-29-May-2017 latest change
 """
 
 # future-0.16.0 imports for Python 2/3 compatibility
@@ -374,7 +374,7 @@ def update_vocabularies( clioinfra, mongo_client, dv_format, copy_local = False,
     update_vocabularies():
     -1- retrieves ERRHS_Vocabulary_*.tab files from dataverse
     -2- with copy_local=True stores them locally
-    -3- stores the new data in MogoDB db = 'vocabulary', collection = 'data
+    -3- stores the new data in MogoDB db = 'vocabulary', collection = 'data'
     """
     
     handle_name = "hdl_vocabularies"
