@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # VT-07-Jul-2016 Latest change by VT
-# FL-24-May-2017 Latest change
+# FL-29-May-2017 Latest change
 
 import json
 import logging
@@ -38,9 +38,9 @@ def preprocessor( datafilter ):
             topic = key_comps[ 2 ]
         
         clientcache = MongoClient()
-        dbcache = clientcache.get_database( 'datacache' )
-        logging.debug( "dbcache.data.find with key: %s" % key )
-        result = dbcache.data.find( { "key": key } )
+        db_datacache = clientcache.get_database( 'datacache' )
+        logging.debug( "db_datacache.data.find with key: %s" % key )
+        result = db_datacache.data.find( { "key": key } )
         
         ter_codes = []      # actually used region codes
         for rowitem in result:
@@ -91,7 +91,7 @@ def preprocessor( datafilter ):
         vocab_regs_terms = {}       # regions and terms
         vocab_regs_terms[ "ter_codes" ] = ter_codes
         
-        db = clientcache.get_database( 'vocabulary' )   # vocabulary
+        db_vocabulary = clientcache.get_database( 'vocabulary' )   # vocabulary
         
         """
         # moved to aggregate_dataset()
@@ -100,7 +100,7 @@ def preprocessor( datafilter ):
         regions_filter[ "vocabulary" ] = "ERRHS_Vocabulary_regions"
         if hist_mod == 'h' and year:
             regions_filter[ 'basisyear' ] = str( year )
-        vocab_regions = db.data.find( regions_filter )
+        vocab_regions = db_vocabulary.data.find( regions_filter )
         regions = {}
         
         logging.debug( "ter_codes: %s" % str( ter_codes ) )
@@ -126,7 +126,7 @@ def preprocessor( datafilter ):
             terms_needed += [ "class1", "class2", "class3", "class4", "class5", "class6", "class7", "class8", "class9", "class10" ]
         
         terms = {}
-        vocab_download = db.data.find( { "vocabulary": "ERRHS_Vocabulary_download" } )
+        vocab_download = db_vocabulary.data.find( { "vocabulary": "ERRHS_Vocabulary_download" } )
         topic_name = ""
         for item in vocab_download:
             #logging.debug( str( item ) )
@@ -218,9 +218,11 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
     
     clientcache = MongoClient()
     
-    dbcache = clientcache.get_database( 'datacache' )
-    logging.debug( "dbcache.data.find with key: %s" % key )
-    result = dbcache.data.find( { "key": key } )
+    db_datacache = clientcache.get_database( 'datacache' )
+    logging.debug( "db_datacache.data.find with key: %s" % key )
+    result = db_datacache.data.find( { "key": key } )
+    
+    db_vocabulary = clientcache.get_database( 'vocabulary' )   # vocabulary
     
     if hist_mod == 'h':
         nsheets = 1
@@ -254,8 +256,7 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         ws_3 = wb.create_sheet( 3, "1959" )
         ws_4 = wb.create_sheet( 4, "2002" )
         
-        dbvocab = clientcache.get_database( 'vocabulary' )   # vocabulary
-        vocab_regions = dbvocab.data.find( { "vocabulary": "ERRHS_Vocabulary_regions" } )
+        vocab_regions = db_vocabulary.data.find( { "vocabulary": "ERRHS_Vocabulary_regions" } )
         logging.debug( "vocab_regions: %s" % vocab_regions )
         ter_code_list = []
         for region in vocab_regions:
@@ -282,7 +283,7 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         regions_filter = {}
         regions_filter[ "vocabulary" ] = "ERRHS_Vocabulary_regions"
         regions_filter[ 'basisyear' ] = str( base_year )
-        vocab_regions = dbvocab.data.find( regions_filter )
+        vocab_regions = db_vocabulary.data.find( regions_filter )
         
         regions = {}
         #ter_codes = vocab_regs_terms[ "ter_codes" ]     # from sql result
@@ -341,6 +342,8 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                 
                 logging.debug( "# of names in chain: %d" % len( chain ) )
                 logging.debug( "names in chain: %s" % str( chain ) )
+                nlevels = len( chain ) - 4      # 4: base_year, count, datatype, value_unit
+                logging.debug( "levels in chain: %d" % nlevels )
                 
                 for name in sorted( chain ):
                     if name == "count":         # skip 'count' column in download
@@ -378,20 +381,36 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                 
                 ter_data = lex_lands[ itemchain ]
                 logging.debug( "ter_data: %s: " % str( ter_data ) )
+                nclasses = 0
                 for name in sorted( chain ):
-                    logging.debug( "column %d, name: %s: " % ( j, name ) )
-                    if name == "count":                 # skip 'count' column in download
+                    if name in [ "class1", "histclass1" ]:
+                        j = 1
+                    elif name in [ "class2", "histclass2" ]:
+                        j = 2
+                    elif name in [ "class3", "histclass3" ]:
+                        j = 3
+                    elif name in [ "class4", "histclass4" ]:
+                        j = 4
+                    elif name == "base_year":
+                        j = 0
+                    elif name == "count":                 # skip 'count' column in download
                         continue
-                    if name == "value_unit":
-                        skip = max_cols - len( chain )
-                        logging.debug( "skip: %d" % skip )
-                        j += skip    # skip missing levels
+                    elif name == "datatype":
+                        j = nlevels + 1
+                    elif name == "value_unit":
+                        j = nlevels + 2
+                    else:
+                        logging.debug( "name: %s ???" % name )
+                    
+                    logging.debug( "column: %d, name: %s" % ( j, name ) )
                     c = ws.cell( row = i, column = j )
-                    c.value = chain[ name ] 
-                    logging.debug( "%d: %s" % ( j, name ) )
-                    j += 1
+                    value = chain[ name ]
+                    if value == '.':
+                        value = ''
+                    c.value = value
                 
                 # Sorting
+                j = nlevels + 3
                 for ter_name in sorted_regions:
                     ter_code = regions[ ter_name ]
                     logging.debug( "ter_name: %s, ter_code: %s: " % ( ter_name, ter_code ) )
