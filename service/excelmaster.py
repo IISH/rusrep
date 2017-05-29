@@ -263,6 +263,13 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
             logging.debug( "region: %s" % str( region ) )
             ter_code_list.append( region[ "ID" ] )
         
+    byear_counts = {
+        "1795" : 0,
+        "1858" : 0,
+        "1897" : 0,
+        "1959" : 0,
+        "2002" : 0
+    }
     
     # loop over the data sheets, and select the correct year data
     for sheet_idx in range( nsheets ):
@@ -378,6 +385,8 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                 if base_year != chain.get( "base_year" ):
                     logging.debug( "skip: %s, base_year not in chain" % base_year )
                     continue
+                else:
+                    byear_counts[ str( base_year ) ] = 1 + byear_counts[ str( base_year ) ]
                 
                 ter_data = lex_lands[ itemchain ]
                 logging.debug( "ter_data: %s: " % str( ter_data ) )
@@ -427,6 +436,7 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                 
                 i += 1
         
+    logging.debug( "byear_counts: %s" % str( byear_counts ) )
     
     #logging.debug( "# of lines in sheet_header: %d" % len( sheet_header ) )
     if hist_mod == 'h':
