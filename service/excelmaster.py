@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # VT-07-Jul-2016 Latest change by VT
-# FL-29-May-2017 Latest change
+# FL-30-May-2017 Latest change
 
 import json
 import logging
@@ -22,7 +22,7 @@ def preprocessor( datafilter ):
     dataset = []
     lex_lands = {}
     lands   = {}
-    year    = 0
+    base_year = 0
     lang    = ""
 
     key = datafilter[ "key" ]
@@ -43,8 +43,9 @@ def preprocessor( datafilter ):
         result = db_datacache.data.find( { "key": key } )
         
         ter_codes = []      # actually used region codes
+        logging.debug( "# of rowitems: %d" % result.count() )
         for rowitem in result:
-            logging.debug( "rowitem: " + str( rowitem ) )
+            logging.debug( "rowitem: %s" % str( rowitem ) )
             
             del rowitem[ 'key' ]
             del rowitem[ '_id' ]
@@ -53,6 +54,7 @@ def preprocessor( datafilter ):
                 lang = rowitem[ 'language' ]
                 del rowitem['language']
             
+            logging.debug( "# of items in rowitem: %d" % len( rowitem[ 'data' ] ) )
             for item in rowitem[ 'data' ]:
                 dataitem = item
                 if 'path' in item:
@@ -61,10 +63,10 @@ def preprocessor( datafilter ):
                     clist = {}
                     for classname in classes:
                         dataitem[ classname] = classes[ classname ]
-                if 'year' in item:
-                    year = item[ 'year' ]
+                #if 'year' in item:
+                #    year = item[ 'year' ]
                 if 'base_year' in item:
-                    year = item[ 'base_year' ]
+                    base_year = item[ 'base_year' ]
                 
                 itemlexicon = dataitem
                 lands = {}
@@ -76,14 +78,20 @@ def preprocessor( datafilter ):
                 if 'total' in itemlexicon:
                     del itemlexicon[ 'total' ]
                 
+                count = itemlexicon[ 'count' ]
+                del itemlexicon[ 'count' ]          # 'count' should not be part of lexkey
                 lexkey = json.dumps( itemlexicon )
+                #itemlexicon[ 'count' ] = count      # put it back
+                
                 itemlexicon[ 'lands' ] = lands
                 if lexkey in lex_lands:
+                    logging.debug( "old lexkey: %s" % lexkey )
                     currentlands = lex_lands[ lexkey ]
                     for item in lands:
                         currentlands[ item ] = lands[ item ]
                     lex_lands[ lexkey ] = currentlands
                 else:
+                    logging.debug( "new lexkey: %s" % lexkey )
                     lex_lands[ lexkey ] = lands
                 
                 dataset.append( dataitem )
@@ -98,8 +106,8 @@ def preprocessor( datafilter ):
         # load regions
         regions_filter = {}
         regions_filter[ "vocabulary" ] = "ERRHS_Vocabulary_regions"
-        if hist_mod == 'h' and year:
-            regions_filter[ 'basisyear' ] = str( year )
+        if hist_mod == 'h' and base_year:
+            regions_filter[ 'basisyear' ] = str( base_year )
         vocab_regions = db_vocabulary.data.find( regions_filter )
         regions = {}
         
@@ -159,7 +167,7 @@ def preprocessor( datafilter ):
             sheet_header.append( { "r" : 3, "c" : 0, "value" : "TOPIC:" } )
             sheet_header.append( { "r" : 3, "c" : 1, "value" : topic_name } )
             sheet_header.append( { "r" : 4, "c" : 0, "value" : "BENCHMARK-YEAR:" } )
-            sheet_header.append( { "r" : 4, "c" : 1, "value" : year } )
+            sheet_header.append( { "r" : 4, "c" : 1, "value" : base_year } )
             sheet_header.append( { "r" : 5, "c" : 0, "value" : "CLASSIFICATION:" } )
             sheet_header.append( { "r" : 5, "c" : 1, "value" : classification } )
         else:
@@ -174,13 +182,15 @@ def preprocessor( datafilter ):
             sheet_header.append( { "r" : 3, "c" : 0, "value" : "ТЕМА:" } )
             sheet_header.append( { "r" : 3, "c" : 1, "value" : topic_name } )
             sheet_header.append( { "r" : 4, "c" : 0, "value" : "ГОД:" } )
-            sheet_header.append( { "r" : 4, "c" : 1, "value" : year } )
+            sheet_header.append( { "r" : 4, "c" : 1, "value" : base_year } )
             sheet_header.append( { "r" : 5, "c" : 0, "value" : "КЛАССИФИКАЦИЯ:" } )
             sheet_header.append( { "r" : 5, "c" : 1, "value" : classification } )
     
-    logging.debug( "preprocessor lex_lands: %s" % str( lex_lands ) )
-    logging.debug( "preprocessor vocab_regs_terms: %s" % str( vocab_regs_terms ) )
-    logging.debug( "preprocessor sheet_header: %s" % str( sheet_header ) )
+    logging.debug( "preprocessor (%d) dataset: %s"          % ( len( dataset ),          str( dataset ) ) )
+    logging.debug( "preprocessor (%d) ter_codes: %s"        % ( len( ter_codes ),        str( ter_codes ) ) )
+    logging.debug( "preprocessor (%d) lex_lands: %s"        % ( len( lex_lands ),        str( lex_lands ) ) )
+    logging.debug( "preprocessor (%d) vocab_regs_terms: %s" % ( len( vocab_regs_terms ), str( vocab_regs_terms ) ) )
+    logging.debug( "preprocessor (%d) sheet_header: %s"     % ( len( sheet_header ),     str( sheet_header ) ) )
     
     return ( lex_lands, vocab_regs_terms, sheet_header )
 
@@ -322,7 +332,7 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
             ter_name = tmpname.decode( 'utf-8' )
             regions[ ter_name ] = ter_code
             reg_names.append( ter_name ) 
-
+        
         locale = Locale( 'ru' )  # 'el' is the locale code for Greek
         collator = Collator.createInstance( locale )
         sorted_regions = sorted( reg_names, cmp = collator.compare )
@@ -349,7 +359,8 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                 
                 logging.debug( "# of names in chain: %d" % len( chain ) )
                 logging.debug( "names in chain: %s" % str( chain ) )
-                nlevels = len( chain ) - 4      # 4: base_year, count, datatype, value_unit
+                #nlevels = len( chain ) - 4      # 4: base_year, count, datatype, value_unit
+                nlevels = len( chain ) - 3      # 4: base_year, datatype, value_unit
                 logging.debug( "levels in chain: %d" % nlevels )
                 
                 for name in sorted( chain ):
@@ -449,7 +460,7 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
             prev_value = ""
             for line in sheet_header:
                 c = ws.cell( row = line[ "r" ], column = line[ "c" ] )
-                if prev_value == "BENCHMARK-YEAR:":
+                if prev_value in [ "BENCHMARK-YEAR:", "ГОД:" ]:
                     c.value = ws.title
                 else:
                     c.value = line[ "value" ]

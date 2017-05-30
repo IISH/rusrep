@@ -1412,6 +1412,7 @@ def aggregation():
         #json_datas = {}
         json_list = []
         base_years = [ "1795", "1858", "1897", "1959", "2002" ]
+        #base_years = [ "1795" ]
         for base_year in base_years:
             logging.debug( "base_year: %s" % base_year )
             qinput[ "base_year" ] = base_year   # add base_year to qinput
@@ -1495,13 +1496,17 @@ def aggregation_1year( qinput, download_key ):
         if qinput.get( 'language' ) == 'en':
             # translate input english term to russian sql terms
             vocab_filter = {}
+            classification = qinput.get( "classification" )
             base_year = qinput.get( "base_year" )
-            if base_year and qinput.get( "classification" ) == "historical":
+            if base_year and classification == "historical":
                 vocab_filter[ "YEAR" ] = base_year
             
             datatype = qinput.get( "datatype" )
             if datatype:
-                vocab_filter[ "DATATYPE" ] = datatype
+                if classification == "historical":
+                    vocab_filter[ "DATATYPE" ] = datatype
+                elif classification == "modern":
+                    vocab_filter[ "DATATYPE" ] = "MOD_" + datatype
             
             eng_data = translated_vocabulary( vocab_filter )
             units = translated_vocabulary( { "vocabulary": "ERRHS_Vocabulary_units" } )
@@ -1637,14 +1642,11 @@ def aggregation_1year( qinput, download_key ):
     sql_query += " AND value <> '.'"            # suppress a 'lone' "optional point", used in the table to flag missing data
     sql_query += " AND value ~ '^\d*\.?\d*$'"   # plus an optional single . for floating point values
     
-    if classification == "modern":
-        #sql[ "group_by" ] = " GROUP BY value_unit, base_year, ter_code, "
-        sql[ "group_by" ] = " GROUP BY value_unit, ter_code, "
-    else:
-        sql[ "group_by" ] = " GROUP BY value_unit, ter_code, "
+    sql[ "group_by" ] = " GROUP BY value_unit, ter_code, "
     
     for field in known_fields:
         sql[ "group_by" ] += "%s," % field
+    
     sql[ "group_by" ] = sql[ "group_by" ][ :-1 ]
     logging.debug( "group_by: %s" % sql[ "group_by" ] )
     sql_query += sql[ "group_by" ]
@@ -1662,6 +1664,7 @@ def aggregation_1year( qinput, download_key ):
         ikey = u"class%d" % i
         if known_fields.get( ikey ):
             class_list.append( ikey )
+    class_list.append( "value_unit" )
     for iclass in class_list:
         if sql[ "order_by" ] != " ORDER BY ":
             sql[ "order_by" ] += ", "
