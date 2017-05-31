@@ -281,6 +281,9 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         "2002" : 0
     }
     
+    skip_list = [ "count" ]
+    #skip_list = [ "count", "datatype" ]
+    
     # loop over the data sheets, and select the correct year data
     for sheet_idx in range( nsheets ):
         base_year = base_years[ sheet_idx ]
@@ -342,30 +345,35 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         i = 9
         logging.debug( "# of itemchains in lex_lands: %d" % len( lex_lands ) )
         
-        # empty level strings are not in the data, but we need same # of colums for all rows
+        # empty level strings are not in the data, but we need same # of colums 
+        # for all rows; find the maximum number of levels
         max_cols = 0
+        header_chain = {}
         for itemchain in lex_lands:
             chain = json.loads( itemchain )
-            max_cols = max( max_cols, len( chain ) )
-            logging.debug( "max_cols: %d" % max_cols )
+            if len( chain ) > max_cols:
+                max_cols = max( max_cols, len( chain ) )
+                header_chain = json.loads( itemchain )
+                
+        logging.debug( "max_cols: %d" % max_cols )
+        logging.debug( "# of names in header_chain: %d" % len( header_chain ) )
+        logging.debug( "names in chain: %s" % str( header_chain ) )
+                
+        #nlevels = max_cols - 4      # 4: base_year, count, datatype, value_unit
+        nlevels = max_cols - 3      # 4: base_year, datatype, value_unit
+        logging.debug( "levels in header_chain: %d" % nlevels )
         
         for itemchain in lex_lands:
             j = 0
             
             # sheet_header
             if i == 9:
-                chain = json.loads( itemchain )
-                ter_data = lex_lands[ itemchain ]
-                
-                logging.debug( "# of names in chain: %d" % len( chain ) )
-                logging.debug( "names in chain: %s" % str( chain ) )
-                #nlevels = len( chain ) - 4      # 4: base_year, count, datatype, value_unit
-                nlevels = len( chain ) - 3      # 4: base_year, datatype, value_unit
-                logging.debug( "levels in chain: %d" % nlevels )
-                
-                for name in sorted( chain ):
-                    if name == "count":         # skip 'count' column in download
+                logging.debug( "# of names in header_chain: %d" % len( header_chain ) )
+                logging.debug( "names in header_chain: %s" % str( header_chain ) )
+                for name in sorted( header_chain ):
+                    if name in skip_list:           # not in download
                         continue
+                    
                     c = ws.cell( row = i, column = j )
                     column_name = name
                     if column_name in vocab_regs_terms[ "terms" ]:
@@ -374,6 +382,7 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                     logging.debug( "column %d: %s" % ( j, column_name ) )
                     j += 1
                 
+                j = max_cols
                 logging.debug( "# of ter_names in sorted_regions: %d" % len( sorted_regions ) )
                 for ter_name in sorted_regions:
                     ter_code = regions[ ter_name ]
@@ -403,24 +412,29 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                 logging.debug( "ter_data: %s: " % str( ter_data ) )
                 nclasses = 0
                 for name in sorted( chain ):
-                    if name in [ "class1", "histclass1" ]:
-                        j = 1
-                    elif name in [ "class2", "histclass2" ]:
-                        j = 2
-                    elif name in [ "class3", "histclass3" ]:
-                        j = 3
-                    elif name in [ "class4", "histclass4" ]:
-                        j = 4
-                    elif name == "base_year":
+                    if name == "base_year":
                         j = 0
-                    elif name == "count":                 # skip 'count' column in download
-                        continue
                     elif name == "datatype":
-                        j = nlevels + 1
+                        j = 1
+                    elif name in [ "class1", "histclass1" ]:
+                        j = 2
+                    elif name in [ "class2", "histclass2" ]:
+                        j = 3
+                    elif name in [ "class3", "histclass3" ]:
+                        j = 4
+                    elif name in [ "class4", "histclass4" ]:
+                        j = 5
+                    elif name in [ "class5", "histclass5" ]:
+                        j = 6
+                    elif name in [ "class6", "histclass6" ]:
+                        j = 7
                     elif name == "value_unit":
                         j = nlevels + 2
+                    elif name in skip_list:
+                        continue
                     else:
                         logging.debug( "name: %s ???" % name )
+                        continue
                     
                     logging.debug( "column: %d, name: %s" % ( j, name ) )
                     c = ws.cell( row = i, column = j )
@@ -430,7 +444,7 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                     c.value = value
                 
                 # Sorting
-                j = nlevels + 3
+                j = max_cols
                 for ter_name in sorted_regions:
                     ter_code = regions[ ter_name ]
                     logging.debug( "ter_name: %s, ter_code: %s: " % ( ter_name, ter_code ) )

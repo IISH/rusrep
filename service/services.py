@@ -188,6 +188,14 @@ def json_generator( cursor, json_dataname, data, download_key = None ):
                 #logging.debug( "i: %d, name: %s, value: %s" % ( i, thisname, value ) )
                 # ". " marks a trailing dot in histclass or class: skip
                 continue
+            else:
+                try:
+                    num_value = float( value )
+                    if num_value < 0.0:
+                        logging.debug( "negative value: %f" % num_value )
+                        logging.debug( "in value_str: %s" % value_str )
+                except:
+                    pass
             
             if name not in forbidden:
                 data_keys[ name ] = value
@@ -1638,9 +1646,11 @@ def aggregation_1year( qinput, download_key ):
         logging.debug( "internal: %s" % sql[ "internal" ] )
         sql_query += " AND (%s) " % sql[ 'internal' ]
     
-    #sql_query += " AND value ~ '^\d+$'"         # regexp (~) to require that value only contains digits
     sql_query += " AND value <> '.'"            # suppress a 'lone' "optional point", used in the table to flag missing data
-    sql_query += " AND value ~ '^\d*\.?\d*$'"   # plus an optional single . for floating point values
+    #sql_query += " AND value ~ '^\d+$'"         # regexp (~) to require that value only contains digits
+    #sql_query += " AND value ~ '^\d*\.?\d*$'"
+    # plus an optional single . for floating point values, and plus an optional leading sign
+    sql_query += " AND value ~ '^[-+]?\d*\.?\d*$'"
     
     sql[ "group_by" ] = " GROUP BY value_unit, ter_code, "
     
