@@ -234,27 +234,26 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
     
     db_vocabulary = clientcache.get_database( 'vocabulary' )   # vocabulary
     
+    qinput_name = "qinput.txt"
+    qinput_path = os.path.join( download_dir, qinput_name )
+    with open( qinput_path, "r" ) as f:
+        qinput = json.load( f )
+        logging.debug( "qinput: %s, %s" % ( qinput, type( qinput ) ) )
+        ter_code_list = qinput[ "ter_code" ]
+        logging.debug( "ter_code_list: %s, %s" % ( str( ter_code_list ), type( ter_code_list ) ) )
+        
+        level_paths = qinput[ "path" ]
+        logging.debug( "# of level paths: %d" % len( level_paths ) )
+        for level_path in level_paths:
+            logging.debug( "level path: %s" % level_path )
+    os.remove( qinput_path )       # not in download
+    
+    
     if hist_mod == 'h':
         nsheets = 1
         base_years = [ base_year ]
         ws_0 = wb.get_active_sheet()
         ws_0.title = "Dataset"
-        
-        qinput_name = "qinput.txt"
-        qinput_path = os.path.join( download_dir, qinput_name )
-        with open( qinput_path, "r" ) as f:
-            qinput = json.load( f )
-            logging.debug( "qinput: %s, %s" % ( qinput, type( qinput ) ) )
-            """
-            qinput_str = qinput_str[ 1: -1 ]    # remove leading and trailing bracket
-            qinput_str = qinput_str.replace( "'", "" )
-            qinput_list = qinput_str.split( ',' )
-            logging.debug( "qinput_list: %s, %s" % ( str( qinput_list ), type( qinput_list ) ) )
-            """
-            ter_code_list = qinput[ "ter_code" ]
-            logging.debug( "ter_code_list: %s, %s" % ( str( ter_code_list ), type( ter_code_list ) ) )
-            
-        os.remove( qinput_path )       # not in download
 
     elif hist_mod == 'm':
         nsheets = 5
@@ -341,31 +340,101 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         sorted_regions = sorted( reg_names, cmp = collator.compare )
         logging.debug( "sorted_regions: %s" % str( sorted_regions ) )
         
+        # empty level strings are not in the data, but we need same # of colums 
+        # for all rows; find the maximum number of levels
+        header_chain = set()
+        for itemchain in lex_lands:
+            chain = json.loads( itemchain )
+            for name in sorted( chain ):
+                header_chain.add( name )
+        
+        max_cols = len( header_chain )
+        logging.debug( "# of names in header_chain: %d" % len( header_chain ) )
+        logging.debug( "names in chain: %s" % str( header_chain ) )
+        
+        nlevels = 0
+        for name in header_chain:
+            if name.find( "class" ) != -1:
+                nlevels += 1
+        logging.debug( "levels in header_chain: %d" % nlevels )
+        
         # sheet_header line here; lines above for legend
         i = 9
         logging.debug( "# of itemchains in lex_lands: %d" % len( lex_lands ) )
+        logging.debug( "lex_lands old: %s" % str( lex_lands ) )
         
-        # empty level strings are not in the data, but we need same # of colums 
-        # for all rows; find the maximum number of levels
-        max_cols = 0
-        header_chain = {}
-        for itemchain in lex_lands:
-            chain = json.loads( itemchain )
-            if len( chain ) > max_cols:
-                max_cols = max( max_cols, len( chain ) )
-                header_chain = json.loads( itemchain )
-                
-        logging.debug( "max_cols: %d" % max_cols )
-        logging.debug( "# of names in header_chain: %d" % len( header_chain ) )
-        logging.debug( "names in chain: %s" % str( header_chain ) )
-                
-        #nlevels = max_cols - 4      # 4: base_year, count, datatype, value_unit
-        nlevels = max_cols - 3      # 4: base_year, datatype, value_unit
-        logging.debug( "levels in header_chain: %d" % nlevels )
-        
-        for itemchain in lex_lands:
-            j = 0
+        # sql query suppressed values with nonnumeric"dot" contents
+        nmissing = len( level_paths ) - len( lex_lands )
+        if nmissing > 0:
+            logging.debug( "# missing itemchains in lex_lands: %d" % nmissing )
+            # collect level_path dicts of lex_lands:
+            level_paths_ll = []
+            for itemchain in lex_lands:
+                chain = json.loads( itemchain )
+                level_path_ll = {}
+                for name in chain:
+                    value = chain[ name ]
+                    if name.find( "class" ) != -1:
+                        #logging.debug( "name: %s, value: %s" % ( name, value ) )
+                        level_path_ll[ name ] = value
+                logging.debug( "level_path_ll: %s" % str( level_path_ll ) )
+                level_paths_ll.append( level_path_ll )
+            #logging.debug( "level_paths_ll: %s" % str( level_paths_ll ) )
             
+            # remove matching level_paths_ll from input level_paths, remains are the missing class cominations
+            for level_path_ll in level_paths_ll:
+                for level_path in level_paths:
+                    if cmp( level_path_ll, level_path ) == 0:    # match
+                        level_paths.remove( level_path_ll )
+            
+            logging.debug( "missing level_paths in data: %s" % str( level_paths ) )
+            # add missing records (without counts) to lex_lands
+            nlevel_path = 0
+            for level_path in level_paths:
+                logging.debug( "nlevel_path: %d" % nlevel_path )
+                nlevel_path += 1
+                
+                # create a new itemchain, using an existing k/v pair
+                key0_str = lex_lands.keys()[ 0 ]
+                key0 = json.loads( key0_str )
+                itemchain0 = lex_lands[ key0_str ]
+                logging.debug( "copy key: %s" % key0_str )
+                logging.debug( "copy chain: %s" % itemchain0 )
+                # copy non-class components from existing key
+                new_key = {}
+                for k in key0:
+                    if k.find( "class" ) == -1:                 # skip existing classes
+                        new_key[ k ] = key0[ k ]
+                # add the missing class components
+                for k in level_path:
+                    new_key[ k ] = level_path[ k ]
+                new_key_str = json.dumps( new_key )
+                logging.debug( "new key: %s" % new_key_str )
+                
+                # copy ter_codes from existing value
+                new_itemchain = {}
+                for k in itemchain0:
+                    new_itemchain[ k ] = 'na'
+                    #new_itemchain[ k ] = -1.0
+                logging.debug( "new chain: %s" % str( new_itemchain ) )
+                
+                # add to lex_lands
+                lex_lands[ new_key_str ] = new_itemchain
+        
+        logging.debug( "new # of itemchains in lex_lands: %d" % len( lex_lands ) )
+        for itemchain in lex_lands:
+            value = lex_lands[ itemchain ]
+            logging.debug( "key:   %s" % itemchain )
+            logging.debug( "value: %s" % value )
+        
+        nitemchain = 0
+        for itemchain in lex_lands:
+            logging.debug( "itemchain %d: %s, %s" % ( nitemchain, itemchain, type( itemchain ) ) )
+            nitemchain += 1
+            chain = json.loads( itemchain )
+            logging.debug( "chain: %s" %  str( chain ) )
+            
+            j = 0
             # sheet_header
             if i == 9:
                 logging.debug( "# of names in header_chain: %d" % len( header_chain ) )
@@ -396,71 +465,76 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                 i += 1
             
             # data
-            if itemchain:
-                logging.debug( "itemchain" )
-                j = 0
-                chain = json.loads( itemchain )
-                logging.debug( "# of names in chain: %d" % len( chain ) )
-                logging.debug( "names in chain: %s" % str( chain ) )
-                if base_year != chain.get( "base_year" ):
-                    logging.debug( "skip: %s, base_year not in chain" % base_year )
+            j = 0
+            logging.debug( "# of names in chain: %d" % len( chain ) )
+            logging.debug( "names in chain: %s" % str( chain ) )
+            if base_year != chain.get( "base_year" ):
+                logging.debug( "skip: %s, base_year not in chain" % base_year )
+                continue
+            else:
+                byear_counts[ str( base_year ) ] = 1 + byear_counts[ str( base_year ) ]
+            
+            ter_data = lex_lands[ itemchain ]
+            logging.debug( "ter_data: %s: " % str( ter_data ) )
+            nclasses = 0
+            for name in sorted( chain ):
+                if name == "base_year":
+                    j = 0
+                elif name == "datatype":
+                    j = 1
+                elif name in [ "class1", "histclass1" ]:
+                    j = 2
+                elif name in [ "class2", "histclass2" ]:
+                    j = 3
+                elif name in [ "class3", "histclass3" ]:
+                    j = 4
+                elif name in [ "class4", "histclass4" ]:
+                    j = 5
+                elif name in [ "class5", "histclass5" ]:
+                    j = 6
+                elif name in [ "class6", "histclass6" ]:
+                    j = 7
+                elif name in [ "class7", "histclass7" ]:
+                    j = 8
+                elif name in [ "class8", "histclass8" ]:
+                    j = 9
+                elif name in [ "class9", "histclass9" ]:
+                    j = 10
+                elif name in [ "class10", "histclass10" ]:
+                    j = 11
+                elif name == "value_unit":
+                    j = nlevels + 2
+                elif name in skip_list:
                     continue
                 else:
-                    byear_counts[ str( base_year ) ] = 1 + byear_counts[ str( base_year ) ]
+                    logging.debug( "name: %s ???" % name )
+                    continue
                 
-                ter_data = lex_lands[ itemchain ]
-                logging.debug( "ter_data: %s: " % str( ter_data ) )
-                nclasses = 0
-                for name in sorted( chain ):
-                    if name == "base_year":
-                        j = 0
-                    elif name == "datatype":
-                        j = 1
-                    elif name in [ "class1", "histclass1" ]:
-                        j = 2
-                    elif name in [ "class2", "histclass2" ]:
-                        j = 3
-                    elif name in [ "class3", "histclass3" ]:
-                        j = 4
-                    elif name in [ "class4", "histclass4" ]:
-                        j = 5
-                    elif name in [ "class5", "histclass5" ]:
-                        j = 6
-                    elif name in [ "class6", "histclass6" ]:
-                        j = 7
-                    elif name == "value_unit":
-                        j = nlevels + 2
-                    elif name in skip_list:
-                        continue
-                    else:
-                        logging.debug( "name: %s ???" % name )
-                        continue
-                    
-                    logging.debug( "column: %d, name: %s" % ( j, name ) )
-                    c = ws.cell( row = i, column = j )
-                    value = chain[ name ]
-                    if value == '.':
-                        value = ''
-                    c.value = value
+                logging.debug( "column: %d, name: %s" % ( j, name ) )
+                c = ws.cell( row = i, column = j )
+                value = chain[ name ]
+                if value == '.':
+                    value = ''
+                c.value = value
+            
+            # Sorting
+            j = max_cols
+            for ter_name in sorted_regions:
+                ter_code = regions[ ter_name ]
+                logging.debug( "ter_name: %s, ter_code: %s: " % ( ter_name, ter_code ) )
+                if ter_code in ter_data:
+                    ter_value = ter_data[ ter_code ]
+                    ter_value = re.sub( r'\.0', '', str( ter_value ) )
+                else:
+                    ter_value = na
                 
-                # Sorting
-                j = max_cols
-                for ter_name in sorted_regions:
-                    ter_code = regions[ ter_name ]
-                    logging.debug( "ter_name: %s, ter_code: %s: " % ( ter_name, ter_code ) )
-                    if ter_code in ter_data:
-                        ter_value = ter_data[ ter_code ]
-                        ter_value = re.sub( r'\.0', '', str( ter_value ) )
-                    else:
-                        ter_value = na
-                    
-                    c = ws.cell( row = i, column = j )
-                    c.value = ter_value
-                    logging.debug( "%d: %s" % ( j, ter_value ) )
-                    j += 1
-                
-                i += 1
-        
+                c = ws.cell( row = i, column = j )
+                c.value = ter_value
+                logging.debug( "%d: %s" % ( j, ter_value ) )
+                j += 1
+            
+            i += 1
+    
     logging.debug( "byear_counts: %s" % str( byear_counts ) )
     
     #logging.debug( "# of lines in sheet_header: %d" % len( sheet_header ) )
