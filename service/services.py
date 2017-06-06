@@ -113,16 +113,22 @@ def connect():
 
 def classcollector( keywords ):
     logging.debug( "classcollector()" )
-    logging.debug( keywords )
+    logging.debug( "keywords: %s" % keywords )
     
     classdict  = {}
     normaldict = {}
+    
     for item in keywords:
+        logging.debug( "item: %s" % item )
         classmatch = re.search( r'class', item )
         if classmatch:
+            logging.debug( "class: %s" % item )
             classdict[ item ] = keywords[ item ]
         else:
             normaldict[ item ] = keywords[ item ]
+    
+    logging.debug( "classdict:  %s" % classdict )
+    logging.debug( "normaldict: %s" % normaldict )
     return ( classdict, normaldict )
 
 
@@ -152,6 +158,7 @@ def json_generator( cursor, json_dataname, data, download_key = None ):
     datatype       = ""
     datatype_      = "0_00"
     base_year      = ""
+    path_list      = []
     
     try:
         qinput = json.loads( request.data )
@@ -164,13 +171,19 @@ def json_generator( cursor, json_dataname, data, download_key = None ):
         datatype       = qinput.get( "datatype" )
         datatype_      = datatype[ 0 ] + "_00"
         base_year      = qinput.get( "base_year" )
+        path_list      = qinput.get( "path" )
         
         logging.debug( "classification : %s" % classification )
         logging.debug( "language       : %s" % language )
         logging.debug( "datatype       : %s" % datatype )
         logging.debug( "base_year      : %s" % base_year )
+        logging.debug( "path_list      : %s" % path_list )
     except:
         pass
+
+    logging.debug( "# entries in path_list: %d" % len( path_list ) )
+    for path_entry in path_list:
+        logging.debug( path_entry )
 
     sql_names  = [ desc[ 0 ] for desc in cursor.description ]
     forbidden = { 'data_active', 0, 'datarecords', 1 }
@@ -179,6 +192,7 @@ def json_generator( cursor, json_dataname, data, download_key = None ):
     
     logging.debug( "# values in data: %d" % len( data ) )
     for value_str in data:
+        logging.debug( "# value_str: %s" % value_str )
         data_keys   = {}
         extravalues = {}
         for i in range( len( value_str ) ):
@@ -218,14 +232,42 @@ def json_generator( cursor, json_dataname, data, download_key = None ):
     
     #logging.debug( json_string )
     #return json_string
-    logging.debug( json_list )
+    
+    #logging.debug( json_list )
+    value_unit = ''
+    logging.debug( "# of entries in json_list: %d" % len( json_list ) )
+    for json_entry in json_list:
+        logging.debug( "json_entry: %s" % json_entry )
+        value_unit = json_entry.get( "value_unit" )
+        entry_path = json_entry.get( "path" )
+        logging.debug( "entry_path: %s" % entry_path )
+        try:
+            path_list.remove( entry_path )
+        except:
+            pass
+    
+    if len( path_list ) != 0:
+        # pure '.' dot entries are not returned from db
+        logging.debug( "missing path entries: %d" % len( path_list ) )
+        for path_entry in path_list:
+            logging.debug( path_entry )
+            new_entry = {}
+            # also want to see 'NA" entries in preview and download
+            new_entry[ "path" ]       = path_entry
+            new_entry[ "base_year" ]  = base_year
+            new_entry[ "value_unit" ] = value_unit
+            new_entry[ "datatype" ]   = datatype
+            new_entry[ "count" ]      = ''
+            new_entry[ "ter_code" ]   = ''
+            json_list.append( new_entry )
+    
     return json_list
 
 
 
 def json_cache( json_list, language, json_dataname, download_key ):
     # cache json_list in mongodb with download_key as key
-    logging.debug( "json_cache()" )
+    logging.debug( "json_cache() # entries in list: %d" %  len( json_list ) )
     
     configparser = ConfigParser.RawConfigParser()
     

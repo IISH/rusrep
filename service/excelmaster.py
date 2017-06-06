@@ -73,13 +73,18 @@ def preprocessor( datafilter ):
                 if 'ter_code' in itemlexicon:
                     ter_code = itemlexicon[ 'ter_code' ]
                     ter_codes.append( ter_code )
-                    lands[ itemlexicon[ 'ter_code' ] ] = itemlexicon[ 'total' ]
+                    #lands[ itemlexicon[ 'ter_code' ] ] = itemlexicon[ 'total' ]
+                    lands[ itemlexicon[ 'ter_code' ] ] = itemlexicon.get( "total" )
                     del itemlexicon[ 'ter_code' ]
                 if 'total' in itemlexicon:
                     del itemlexicon[ 'total' ]
                 
-                count = itemlexicon[ 'count' ]
-                del itemlexicon[ 'count' ]          # 'count' should not be part of lexkey
+                try:
+                    count = itemlexicon[ 'count' ]
+                    del itemlexicon[ 'count' ]          # 'count' should not be part of lexkey
+                except:
+                    pass
+                
                 lexkey = json.dumps( itemlexicon )
                 #itemlexicon[ 'count' ] = count      # put it back
                 
@@ -363,6 +368,7 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         logging.debug( "# of itemchains in lex_lands: %d" % len( lex_lands ) )
         logging.debug( "lex_lands old: %s" % str( lex_lands ) )
         
+        """
         # sql query suppressed values with nonnumeric"dot" contents
         nmissing = len( level_paths ) - len( lex_lands )
         if nmissing > 0:
@@ -426,6 +432,7 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
             value = lex_lands[ itemchain ]
             logging.debug( "key:   %s" % itemchain )
             logging.debug( "value: %s" % value )
+        """
         
         nitemchain = 0
         for itemchain in lex_lands:
@@ -468,8 +475,13 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
             j = 0
             logging.debug( "# of names in chain: %d" % len( chain ) )
             logging.debug( "names in chain: %s" % str( chain ) )
-            if base_year != chain.get( "base_year" ):
-                logging.debug( "skip: %s, base_year not in chain" % base_year )
+            try:
+                base_year_chain = int( chain.get( "base_year" ) )
+            except:
+                base_year_chain = 0
+            
+            if base_year != base_year_chain:
+                logging.debug( "skip: %s, base_year %d not equal to base_year_chain" % ( base_year, base_year_chain ) )
                 continue
             else:
                 byear_counts[ str( base_year ) ] = 1 + byear_counts[ str( base_year ) ]
@@ -510,7 +522,7 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                     logging.debug( "name: %s ???" % name )
                     continue
                 
-                logging.debug( "column: %d, name: %s" % ( j, name ) )
+                logging.debug( "row: %d, column: %d, name: %s" % ( i, j, name ) )
                 c = ws.cell( row = i, column = j )
                 value = chain[ name ]
                 if value == '.':
