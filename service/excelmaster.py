@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # VT-07-Jul-2016 Latest change by VT
-# FL-30-May-2017 Latest change
+# FL-07-Jun-2017 Latest change
 
 import json
 import logging
@@ -39,6 +39,14 @@ def preprocessor( datafilter ):
         
         clientcache = MongoClient()
         db_datacache = clientcache.get_database( 'datacache' )
+        
+        qinput_key = key + "-qinput"
+        logging.debug( "db_datacache.data.find with key: %s" % qinput_key )
+        qinput_result = db_datacache.data.find( { "key": qinput_key } )
+        qinput_data = qinput_result[ 0 ]
+        qinput = qinput_data[ "data" ][ 0 ]
+        logging.debug( "qinput: %s" % str( qinput ) )
+        
         logging.debug( "db_datacache.data.find with key: %s" % key )
         result = db_datacache.data.find( { "key": key } )
         
@@ -197,11 +205,11 @@ def preprocessor( datafilter ):
     logging.debug( "preprocessor (%d) vocab_regs_terms: %s" % ( len( vocab_regs_terms ), str( vocab_regs_terms ) ) )
     logging.debug( "preprocessor (%d) sheet_header: %s"     % ( len( sheet_header ),     str( sheet_header ) ) )
     
-    return ( lex_lands, vocab_regs_terms, sheet_header )
+    return ( lex_lands, vocab_regs_terms, sheet_header, qinput )
 
 
 
-def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header ):
+def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header, qinput ):
     logging.debug( "aggregate_dataset() key: %s" % key )
     
     xlsx_pathname = os.path.abspath( os.path.join( download_dir, xlsx_name ) )
@@ -239,6 +247,7 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
     
     db_vocabulary = clientcache.get_database( 'vocabulary' )   # vocabulary
     
+    """
     qinput_name = "qinput.txt"
     qinput_path = os.path.join( download_dir, qinput_name )
     with open( qinput_path, "r" ) as f:
@@ -252,6 +261,17 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         for level_path in level_paths:
             logging.debug( "level path: %s" % level_path )
     os.remove( qinput_path )       # not in download
+    """
+    logging.debug( "qinput: %s, %s" % ( qinput, type( qinput ) ) )
+    for k in qinput:
+        logging.debug( "key: %s, value: %s" % ( k, qinput[ k ] ) )
+    ter_code_list = qinput[ "ter_code" ]
+    logging.debug( "ter_code_list: %s, %s" % ( str( ter_code_list ), type( ter_code_list ) ) )
+    
+    level_paths = qinput[ "path" ]
+    logging.debug( "# of level paths: %d" % len( level_paths ) )
+    for level_path in level_paths:
+        logging.debug( "level path: %s" % level_path )
     
     
     if hist_mod == 'h':

@@ -3,7 +3,7 @@
 # VT-07-Jul-2016 latest change by VT
 # FL-12-Dec-2016 use datatype in function documentation()
 # FL-20-Jan-2017 utf8 encoding
-# FL-24-May-2017 
+# FL-07-Jun-2017 
 
 from __future__ import absolute_import      # VT
 """
@@ -37,6 +37,7 @@ import psycopg2
 import psycopg2.extras
 import zipfile
 
+from datetime import date
 from io import BytesIO
 from flask import Flask, Response, request, send_from_directory, send_file
 from jsonmerge import merge
@@ -192,7 +193,7 @@ def json_generator( cursor, json_dataname, data, download_key = None ):
     
     logging.debug( "# values in data: %d" % len( data ) )
     for value_str in data:
-        logging.debug( "# value_str: %s" % value_str )
+        logging.debug( "value_str: %s" % str( value_str ) )
         data_keys   = {}
         extravalues = {}
         for i in range( len( value_str ) ):
@@ -320,6 +321,9 @@ def collect_docs( qinput, download_dir, download_key ):
     language       = qinput.get( "language" )
     datatype       = qinput.get( "datatype" )
     
+    if language is None:
+        language = "en"
+    
     logging.debug( "classification: %s, language: %s, datatype: %s" % ( classification, language, datatype ) )
     
     if datatype is not None:
@@ -331,17 +335,19 @@ def collect_docs( qinput, download_dir, download_key ):
     
     logging.debug( "datatype0: %s, datatype_: %s" % ( datatype0, datatype_ ) )
 
-    # For modern classification we always use all regions (ter_codes). But for 
-    # historical classification the spreadsheet must contain the same regions 
-    # as selected in the frontend, so not only the regions that contain data. 
-    # As the db query only returns regions with data, we save the ter_codes in 
-    # a tmp file in the download_dir. 
-    if classification == "historical": 
-        qinput_name = "qinput.txt"
-        qinput_path = os.path.join( download_dir, qinput_name )
-        with open( qinput_path, "w" ) as f:
-            #f.write( str( qinput ) )
-            json.dump( qinput, f )
+    # Separately cache the input query parameters
+    qinput_key = download_key + "-qinput"
+    logging.debug( "qinput_key: %s" % qinput_key )
+    json_string = json_cache( [ qinput ], language, "data", qinput_key )
+    logging.debug( "json_string: %s" % json_string )
+    
+    """
+    qinput_name = "qinput.txt"
+    qinput_path = os.path.join( download_dir, qinput_name )
+    with open( qinput_path, "w" ) as f:
+        #f.write( str( qinput ) )
+        json.dump( qinput, f )
+    """
     
     clioinfra = Configuration()
     tmp_dir = clioinfra.config[ 'tmppath' ]
@@ -1172,7 +1178,7 @@ def filecat_subtopic( cursor, datatype, base_year ):
     records = cursor.fetchall()
     
     json_list = json_generator( cursor, "data", records )
-    print( json_list )
+    logging.debug( json_list )
     
     return json_list
 
@@ -1183,26 +1189,35 @@ def filecatalog():
     logging.debug( "filecatalog()" )
     
     # e.g.: ?lang=en&subtopics=1_01_1795x1_02_1795
-    #logging.debug( "request.args: %s" % str( request.args ) )
+    subtopic_list = []
+    logging.debug( "# of arguments %s" % len( request.args ) )
+    for arg in request.args:
+        logging.debug( "arg: %s, value: %s" % ( arg, request.args[ arg ] ) )
+        if arg.startswith( "subtopics" ):
+            subtopic_list.append( request.args[ arg ] )
+    
     language = request.args.get( "lang" )
     download_key = request.args.get( "download_key" )
-    subtopics = request.args.get( "subtopics" )
-    logging.debug( "lang: %s" % language )
-    logging.debug( "subtopics: %s" % subtopics )
     
-    cursor = connect()
+    logging.debug( "lang: %s" % language )
+    logging.debug( "download_key: %s" % download_key )
+    logging.debug( "subtopics: %s" % subtopic_list )
     
     json_list = []
-    subtopic_list = subtopics.split( 'x' )
-    for subtopic in subtopic_list:
-        logging.debug( "subtopic: %s" % subtopic )
-        if len( subtopic ) == 9:    # e.g.: 1_01_1795
-            base_year = subtopic[ 5: ]
-            datatype = subtopic[ :4 ]
-            datatype = datatype.replace( '_', '.' )
-            logging.debug( "datatype: %s, base_year: %s" % ( datatype, base_year ) )
-            json_list1 = filecat_subtopic( cursor, datatype, base_year )
-            #json_list.append( json_list1 )
+    
+    if subtopic_list is not None:
+        cursor = connect()
+        for subtopic in subtopic_list:
+            logging.debug( "subtopic: %s" % subtopic )
+            if len( subtopic ) == 9:    # e.g.: 1_01_1795
+                base_year = subtopic[ 5: ]
+                datatype = subtopic[ :4 ]
+                datatype = datatype.replace( '_', '.' )
+                logging.debug( "datatype: %s, base_year: %s" % ( datatype, base_year ) )
+                json_list1 = filecat_subtopic( cursor, datatype, base_year )
+                #json_list.append( json_list1 )
+        
+    
     
     json_string = json_cache( json_list, language, "data", download_key )
     return Response( json_string, mimetype = "application/json; charset=utf-8" )
@@ -1217,6 +1232,9 @@ def filecatalogdata():
     # http://data.sandbox.socialhistoryservices.org/service/filecatalogdata?lang=en&subtopics%5B0%5D=1_01_1795
     # http://data.sandbox.socialhistoryservices.org/service/filecatalogdata?lang=en&subtopics%5B0%5D=1_01_1795&subtopics%5B1%5D=1_02_1897
     language = request.args.get( "lang" )
+    if language is None:
+        language = "en"
+    
     subtopics = []
     for key in request.args:
         value = request.args[ key ]
@@ -1224,7 +1242,7 @@ def filecatalogdata():
         if key.startswith( "subtopics" ):
             subtopics.append( value )
     
-    logging.debug( "lang: %s" % language )
+    logging.debug( "language: %s" % language )
     
     handle_names = [ 
         "hdl_errhs_population",     # ERRHS_1   39 files
@@ -1281,7 +1299,8 @@ def filecatalogdata():
         logging.debug( "csv_pathname: %s" % csv_pathname )
 
         # process csv file
-        process_csv( csv_dir, csv_filename, download_dir )
+        to_xlsx = True
+        process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx )
         
         # copy to download dir
         shutil.copy2( csv_pathname, download_dir )
@@ -1301,7 +1320,7 @@ def filecatalogdata():
 
 
 
-def process_csv( csv_dir, csv_filename, download_dir ):
+def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
     logging.debug( "process_csv() %s" % csv_filename )
     csv_pathname = os.path.join( csv_dir, csv_filename )
 
@@ -1353,26 +1372,74 @@ def process_csv( csv_dir, csv_filename, download_dir ):
         for row in csv_reader:
             logging.debug( ', '.join( row ) )
     
-    
-    """
-    sep = str(u'|').encode('utf-8')
-    kwargs_pandas   = { 'sep' : sep, 'line_terminator' : '\n' }
-    
-    df1 = pd.read_csv( csv_pathname, **kwargs_pandas )
-    root, ext = os.path.splitext( csv_filename )
-    xlsx_filename = root + ".xlsx"
-    xlsx_pathname = os.path.join( download_dir, xlsx_filename )
-    
-    kwargs_pandas   = { 'sep' : sep }
-    writer = pd.ExcelWriter( xlsx_pathname  )
-    
-    df1.to_excel( writer, "Table", encoding = 'utf-8', index = False )
-    
-    # df2 = ...
-    #df2.to_excel( writer, "Copyrights" )
-    
-    writer.save()
-    """
+    if to_xlsx:
+        sep = str( u'|' ).encode( "utf-8" )
+        kwargs_pandas = { 
+            "sep" : sep 
+            #,"line_terminator" : '\n'   # TypeError: parser_f() got an unexpected keyword argument 'line_terminator'
+        }
+        
+        
+        df1 = pd.read_csv( csv_pathname, **kwargs_pandas )
+        root, ext = os.path.splitext( csv_filename )
+        xlsx_filename = root + ".xlsx"
+        xlsx_pathname = os.path.join( download_dir, xlsx_filename )
+        
+        writer = pd.ExcelWriter( xlsx_pathname  )
+        df1.to_excel( writer, "Table", encoding = "utf-8", index = False )
+        
+        # Create a Pandas dataframe from the data.
+        if language == "en":
+            df2 = pd.DataFrame( { " ": [ 
+                "",
+                "",
+                "Creative Commons License", 
+                "This work is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License.", 
+                "http://creativecommons.org/licenses/by-nc-sa/4.0/", 
+                "", 
+                "By downloading and using data from the Electronic Repository of Russian Historical Statistics the user agrees to the terms of this license. Providing a correct reference to the resource is a formal requirement of the license: ", 
+                "Kessler, Gijs and Andrei Markevich (%d), Electronic Repository of Russian Historical Statistics, 18th - 21st centuries, http://ristat.org/" % date.today().year, 
+            ] } )
+            """
+            c = ws_cr.cell( row = 4, column = 0 )
+            c.value = "Creative Commons License"
+            c = ws_cr.cell( row = 5, column = 0 )
+            c.value = "This work is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License."
+            c = ws_cr.cell( row = 6, column = 0 )
+            c.value = "http://creativecommons.org/licenses/by-nc-sa/4.0/"
+            c = ws_cr.cell( row = 8, column = 0 )
+            c.value = "By downloading and using data from the Electronic Repository of Russian Historical Statistics the user agrees to the terms of this license. Providing a correct reference to the resource is a formal requirement of the license: "
+            c = ws_cr.cell( row = 9, column = 0 )
+            c.value = "Kessler, Gijs and Andrei Markevich (%d), Electronic Repository of Russian Historical Statistics, 18th - 21st centuries, http://ristat.org/" % date.today().year
+            """
+        elif language == "ru":
+            df2 = pd.DataFrame( { " ": [ 
+                "",
+                "",
+                "Лицензия Creative Commons", 
+                "Это произведение доступно по лицензии Creative Commons «Attribution-NonCommercial-ShareAlike» («Атрибуция — Некоммерческое использование — На тех же условиях») 4.0 Всемирная.", 
+                "http://creativecommons.org/licenses/by-nc-sa/4.0/deed.ru", 
+                "",
+                "Скачивая и начиная использовать данные пользователь автоматически соглашается с этой лицензией. Наличие корректно оформленной ссылки является обязательным требованием лицензии:", 
+                "Кесслер Хайс и Маркевич Андрей (%d), Электронный архив Российской исторической статистики, XVIII – XXI вв., [Электронный ресурс] : [сайт]. — Режим доступа: http://ristat.org/" % date.today().year, 
+            ] } )
+            """
+            c = ws_cr.cell( row = 4, column = 0 )
+            c.value = "Лицензия Creative Commons"
+            c = ws_cr.cell( row = 5, column = 0 )
+            c.value = "Это произведение доступно по лицензии Creative Commons «Attribution-NonCommercial-ShareAlike» («Атрибуция — Некоммерческое использование — На тех же условиях») 4.0 Всемирная."
+            c = ws_cr.cell( row = 6, column = 0 )
+            c.value = "http://creativecommons.org/licenses/by-nc-sa/4.0/deed.ru"
+            c = ws_cr.cell( row = 8, column = 0 )
+            c.value = "Скачивая и начиная использовать данные пользователь автоматически соглашается с этой лицензией. Наличие корректно оформленной ссылки является обязательным требованием лицензии:"
+            c = ws_cr.cell( row = 9, column = 0 )
+            c.value = "Кесслер Хайс и Маркевич Андрей (%d), Электронный архив Российской исторической статистики, XVIII – XXI вв., [Электронный ресурс] : [сайт]. — Режим доступа: http://ristat.org/" % date.today().year
+            """
+
+        # Convert the dataframe to an XlsxWriter Excel object.
+        df2.to_excel( writer, sheet_name = "Copyrights", encoding = "utf-8", index = False )
+        
+        writer.save()
 
 
 
@@ -2009,10 +2076,10 @@ def download():
         clientcache = MongoClient()
         datafilter = {}
         datafilter[ 'key' ] = key
-        ( lex_lands, vocab_regs_terms, sheet_header ) = preprocessor( datafilter )
+        ( lex_lands, vocab_regs_terms, sheet_header, qinput ) = preprocessor( datafilter )
         
         xlsx_name = "%s.xlsx" % key
-        filename = aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header )
+        filename = aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header, qinput )
         logging.debug( "filename: %s" % filename )
         with open( filename, 'rb' ) as f:
             datacontents = f.read()
