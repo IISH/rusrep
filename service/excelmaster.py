@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # VT-07-Jul-2016 Latest change by VT
-# FL-07-Jun-2017 Latest change
+# FL-09-Jun-2017 Latest change
 
 import json
 import logging
@@ -40,13 +40,6 @@ def preprocessor( datafilter ):
         clientcache = MongoClient()
         db_datacache = clientcache.get_database( 'datacache' )
         
-        qinput_key = key + "-qinput"
-        logging.debug( "db_datacache.data.find with key: %s" % qinput_key )
-        qinput_result = db_datacache.data.find( { "key": qinput_key } )
-        qinput_data = qinput_result[ 0 ]
-        qinput = qinput_data[ "data" ][ 0 ]
-        logging.debug( "qinput: %s" % str( qinput ) )
-        
         logging.debug( "db_datacache.data.find with key: %s" % key )
         result = db_datacache.data.find( { "key": key } )
         
@@ -58,9 +51,14 @@ def preprocessor( datafilter ):
             del rowitem[ 'key' ]
             del rowitem[ '_id' ]
             
-            if 'language' in rowitem:
-                lang = rowitem[ 'language' ]
-                del rowitem['language']
+            if "qinput" in rowitem:
+                qinput = rowitem[ "qinput" ]
+                logging.debug( "qinput: %s" % str( qinput ) )
+                del rowitem[ "qinput" ]
+            
+            if "language" in rowitem:
+                lang = rowitem[ "language" ]
+                del rowitem[ "language" ]
             
             logging.debug( "# of items in rowitem: %d" % len( rowitem[ 'data' ] ) )
             for item in rowitem[ 'data' ]:
@@ -71,8 +69,6 @@ def preprocessor( datafilter ):
                     clist = {}
                     for classname in classes:
                         dataitem[ classname] = classes[ classname ]
-                #if 'year' in item:
-                #    year = item[ 'year' ]
                 if 'base_year' in item:
                     base_year = item[ 'base_year' ]
                 
@@ -81,7 +77,6 @@ def preprocessor( datafilter ):
                 if 'ter_code' in itemlexicon:
                     ter_code = itemlexicon[ 'ter_code' ]
                     ter_codes.append( ter_code )
-                    #lands[ itemlexicon[ 'ter_code' ] ] = itemlexicon[ 'total' ]
                     lands[ itemlexicon[ 'ter_code' ] ] = itemlexicon.get( "total" )
                     del itemlexicon[ 'ter_code' ]
                 if 'total' in itemlexicon:
@@ -94,7 +89,6 @@ def preprocessor( datafilter ):
                     pass
                 
                 lexkey = json.dumps( itemlexicon )
-                #itemlexicon[ 'count' ] = count      # put it back
                 
                 itemlexicon[ 'lands' ] = lands
                 if lexkey in lex_lands:
@@ -113,29 +107,6 @@ def preprocessor( datafilter ):
         vocab_regs_terms[ "ter_codes" ] = ter_codes
         
         db_vocabulary = clientcache.get_database( 'vocabulary' )   # vocabulary
-        
-        """
-        # moved to aggregate_dataset()
-        # load regions
-        regions_filter = {}
-        regions_filter[ "vocabulary" ] = "ERRHS_Vocabulary_regions"
-        if hist_mod == 'h' and base_year:
-            regions_filter[ 'basisyear' ] = str( base_year )
-        vocab_regions = db_vocabulary.data.find( regions_filter )
-        regions = {}
-        
-        logging.debug( "ter_codes: %s" % str( ter_codes ) )
-        for item in vocab_regions:
-            #logging.debug( str( item ) )
-            ID = item[ 'ID' ]
-            if ID in ter_codes:
-                if lang == 'en':
-                    regions[ item[ 'ID' ] ] = item[ 'EN' ]
-                else:
-                    regions[ item[ 'ID' ] ] = item[ 'RUS' ]
-        
-        vocab_regs_terms[ "regions" ] = regions
-        """
         
         # create sheet_header
         sheet_header = []
@@ -232,9 +203,6 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
     for k in vocab_regs_terms:
         logging.debug( "key in vocab_regs_terms: %s" % k )
     
-    #na = vocab_regs_terms[ "terms" ][ "na" ]
-    #logging.debug( "na: %s" % na )
-    
     nsheets = 0
     ter_code_list = []
     wb = openpyxl.Workbook( encoding = 'utf-8' )
@@ -247,25 +215,10 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
     
     db_vocabulary = clientcache.get_database( 'vocabulary' )   # vocabulary
     
-    """
-    qinput_name = "qinput.txt"
-    qinput_path = os.path.join( download_dir, qinput_name )
-    with open( qinput_path, "r" ) as f:
-        qinput = json.load( f )
-        logging.debug( "qinput: %s, %s" % ( qinput, type( qinput ) ) )
-        ter_code_list = qinput[ "ter_code" ]
-        logging.debug( "ter_code_list: %s, %s" % ( str( ter_code_list ), type( ter_code_list ) ) )
-        
-        level_paths = qinput[ "path" ]
-        logging.debug( "# of level paths: %d" % len( level_paths ) )
-        for level_path in level_paths:
-            logging.debug( "level path: %s" % level_path )
-    os.remove( qinput_path )       # not in download
-    """
     logging.debug( "qinput: %s, %s" % ( qinput, type( qinput ) ) )
     for k in qinput:
         logging.debug( "key: %s, value: %s" % ( k, qinput[ k ] ) )
-    ter_code_list = qinput[ "ter_code" ]
+    ter_code_list = qinput.get( "ter_code" )
     logging.debug( "ter_code_list: %s, %s" % ( str( ter_code_list ), type( ter_code_list ) ) )
     
     level_paths = qinput[ "path" ]
@@ -387,72 +340,6 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         i = 9
         logging.debug( "# of itemchains in lex_lands: %d" % len( lex_lands ) )
         logging.debug( "lex_lands old: %s" % str( lex_lands ) )
-        
-        """
-        # sql query suppressed values with nonnumeric"dot" contents
-        nmissing = len( level_paths ) - len( lex_lands )
-        if nmissing > 0:
-            logging.debug( "# missing itemchains in lex_lands: %d" % nmissing )
-            # collect level_path dicts of lex_lands:
-            level_paths_ll = []
-            for itemchain in lex_lands:
-                chain = json.loads( itemchain )
-                level_path_ll = {}
-                for name in chain:
-                    value = chain[ name ]
-                    if name.find( "class" ) != -1:
-                        #logging.debug( "name: %s, value: %s" % ( name, value ) )
-                        level_path_ll[ name ] = value
-                logging.debug( "level_path_ll: %s" % str( level_path_ll ) )
-                level_paths_ll.append( level_path_ll )
-            #logging.debug( "level_paths_ll: %s" % str( level_paths_ll ) )
-            
-            # remove matching level_paths_ll from input level_paths, remains are the missing class cominations
-            for level_path_ll in level_paths_ll:
-                for level_path in level_paths:
-                    if cmp( level_path_ll, level_path ) == 0:    # match
-                        level_paths.remove( level_path_ll )
-            
-            logging.debug( "missing level_paths in data: %s" % str( level_paths ) )
-            # add missing records (without counts) to lex_lands
-            nlevel_path = 0
-            for level_path in level_paths:
-                logging.debug( "nlevel_path: %d" % nlevel_path )
-                nlevel_path += 1
-                
-                # create a new itemchain, using an existing k/v pair
-                key0_str = lex_lands.keys()[ 0 ]
-                key0 = json.loads( key0_str )
-                itemchain0 = lex_lands[ key0_str ]
-                logging.debug( "copy key: %s" % key0_str )
-                logging.debug( "copy chain: %s" % itemchain0 )
-                # copy non-class components from existing key
-                new_key = {}
-                for k in key0:
-                    if k.find( "class" ) == -1:                 # skip existing classes
-                        new_key[ k ] = key0[ k ]
-                # add the missing class components
-                for k in level_path:
-                    new_key[ k ] = level_path[ k ]
-                new_key_str = json.dumps( new_key )
-                logging.debug( "new key: %s" % new_key_str )
-                
-                # copy ter_codes from existing value
-                new_itemchain = {}
-                for k in itemchain0:
-                    new_itemchain[ k ] = 'na'
-                    #new_itemchain[ k ] = -1.0
-                logging.debug( "new chain: %s" % str( new_itemchain ) )
-                
-                # add to lex_lands
-                lex_lands[ new_key_str ] = new_itemchain
-        
-        logging.debug( "new # of itemchains in lex_lands: %d" % len( lex_lands ) )
-        for itemchain in lex_lands:
-            value = lex_lands[ itemchain ]
-            logging.debug( "key:   %s" % itemchain )
-            logging.debug( "value: %s" % value )
-        """
         
         nitemchain = 0
         for itemchain in lex_lands:

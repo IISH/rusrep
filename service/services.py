@@ -3,7 +3,7 @@
 # VT-07-Jul-2016 latest change by VT
 # FL-12-Dec-2016 use datatype in function documentation()
 # FL-20-Jan-2017 utf8 encoding
-# FL-07-Jun-2017 
+# FL-09-Jun-2017 
 
 from __future__ import absolute_import      # VT
 """
@@ -39,7 +39,7 @@ import zipfile
 
 from datetime import date
 from io import BytesIO
-from flask import Flask, Response, request, send_from_directory, send_file
+from flask import Flask, jsonify, Response, request, send_from_directory, send_file
 from jsonmerge import merge
 from pymongo import MongoClient
 from socket import gethostname
@@ -266,7 +266,7 @@ def json_generator( cursor, json_dataname, data, download_key = None ):
 
 
 
-def json_cache( json_list, language, json_dataname, download_key ):
+def json_cache( json_list, language, json_dataname, download_key, qinput = {} ):
     # cache json_list in mongodb with download_key as key
     logging.debug( "json_cache() # entries in list: %d" %  len( json_list ) )
     
@@ -294,15 +294,17 @@ def json_cache( json_list, language, json_dataname, download_key ):
     json_string = json.dumps( json_hash, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
     
     try:
-        thisdata = json_hash
-        del thisdata[ 'url' ]
-        thisdata[ 'key' ] = download_key
-        thisdata[ 'language' ] = language
+        this_data = json_hash
+        del this_data[ 'url' ]
+        this_data[ 'key' ] = download_key
+        this_data[ 'language' ] = language
+        if qinput is not None:
+            this_data[ 'qinput' ] = qinput
         
         logging.debug( "dbcache.data.insert with key: %s" % download_key )
         clientcache = MongoClient()
         dbcache = clientcache.get_database( 'datacache' )
-        result = dbcache.data.insert( thisdata )
+        result = dbcache.data.insert( this_data )
     except:
         logging.error( "caching failed" )
 
@@ -338,16 +340,8 @@ def collect_docs( qinput, download_dir, download_key ):
     # Separately cache the input query parameters
     qinput_key = download_key + "-qinput"
     logging.debug( "qinput_key: %s" % qinput_key )
-    json_string = json_cache( [ qinput ], language, "data", qinput_key )
+    json_string = json_cache( [ qinput ], language, "data", qinput_key, qinput )
     logging.debug( "json_string: %s" % json_string )
-    
-    """
-    qinput_name = "qinput.txt"
-    qinput_path = os.path.join( download_dir, qinput_name )
-    with open( qinput_path, "w" ) as f:
-        #f.write( str( qinput ) )
-        json.dump( qinput, f )
-    """
     
     clioinfra = Configuration()
     tmp_dir = clioinfra.config[ 'tmppath' ]
@@ -1143,7 +1137,7 @@ def test():
 
 @app.route( "/export" )
 def export():
-    logging.debug( "export()" )
+    logging.debug( "/export" )
     settings = Configuration()
     keys = [ "intro", "intro_rus", "datatype_intro", "datatype_intro_rus", "note", "note_rus", "downloadpage1", "downloadpage1_rus" "downloadclick", "downloadclick_rus", "warningblank", "warningblank_rus", "mapintro", "mapintro_rus" ]
     exportkeys = {}
@@ -1157,7 +1151,7 @@ def export():
 
 @app.route( "/topics" )
 def topics():
-    logging.debug( "topics()" )
+    logging.debug( "/topics" )
     language = request.args.get( "language" )
     download_key = request.args.get( "download_key" )
     
@@ -1184,9 +1178,9 @@ def filecat_subtopic( cursor, datatype, base_year ):
 
 
 
-@app.route( "/filecatalog" )
+@app.route( "/filecatalog", methods = [ 'POST', 'GET' ] )
 def filecatalog():
-    logging.debug( "filecatalog()" )
+    logging.debug( "/filecatalog" )
     
     # e.g.: ?lang=en&subtopics=1_01_1795x1_02_1795
     subtopic_list = []
@@ -1224,16 +1218,17 @@ def filecatalog():
 
 
 
-@app.route( "/filecatalogdata", methods = ['POST', 'GET' ]  )
+@app.route( "/filecatalogdata", methods = [ 'POST', 'GET' ]  )
 def filecatalogdata():
-    logging.debug( "filecatalogdata()" )
+    logging.debug( "/filecatalogdata" )
+    logging.debug( "request: %s" % str( request ) )
+    logging.debug( "request.args: %s" % str( request.args ) )
+    logging.debug( "request.form: %s" % str( request.form ) )
+    
     #http://ristat-demo.sandbox.socialhistoryservices.org/catalog/
     # select what you want, and click "Get data!"
     # http://data.sandbox.socialhistoryservices.org/service/filecatalogdata?lang=en&subtopics%5B0%5D=1_01_1795
     # http://data.sandbox.socialhistoryservices.org/service/filecatalogdata?lang=en&subtopics%5B0%5D=1_01_1795&subtopics%5B1%5D=1_02_1897
-    language = request.args.get( "lang" )
-    if language is None:
-        language = "en"
     
     subtopics = []
     for key in request.args:
@@ -1241,6 +1236,11 @@ def filecatalogdata():
         logging.debug( "key: %s, value: %s" % ( key, str( value ) ) )
         if key.startswith( "subtopics" ):
             subtopics.append( value )
+    
+    
+    language = request.args.get( "lang" )
+    if language is None:
+        language = "en"
     
     logging.debug( "language: %s" % language )
     
@@ -1316,6 +1316,8 @@ def filecatalogdata():
     hostname = gethostname()
     json_hash = { "url_zip" : hostname + "/service/filecatalogget?zip=" + zip_filename }
     json_string = json.dumps( json_hash, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
+    
+    logging.debug( "/filecatalogdata before Response()" )
     return Response( json_string, mimetype = "application/json; charset=utf-8" )
 
 
@@ -1443,9 +1445,9 @@ def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
 
 
 
-@app.route( "/filecatalogget", methods = ['POST', 'GET' ]  )
+@app.route( "/filecatalogget", methods = [ 'POST', 'GET' ] )
 def filecatalogget():
-    logging.debug( "filecatalogget()" )
+    logging.debug( "/filecatalogget" )
     logging.debug( "request.args: %s" % str( request.args ) )
     zip_filename = request.args.get( "zip" )
     logging.debug( "zip_filename: %s" % zip_filename )
@@ -1466,7 +1468,7 @@ def filecatalogget():
 
 @app.route( "/vocab" )
 def vocab():
-    logging.debug( "vocab()" )
+    logging.debug( "/vocab" )
     url = "https://datasets.socialhistory.org/api/access/datafile/586?&key=6f07ea5d-be76-444a-8a20-0ee2f02fda21&show_entity_ids=true&q=authorName:*"
     g = rdfconvertor( url )
     showformat = 'json'
@@ -1492,7 +1494,7 @@ def getvocabulary():
 
 @app.route( "/aggregation", methods = ["POST", "GET" ] )
 def aggregation():
-    logging.debug( "aggregation()" )
+    logging.debug( "/aggregation" )
 
     qinput = simplejson.loads( request.data )
     language = qinput.get( "language" )
@@ -1518,7 +1520,7 @@ def aggregation():
         # historical has base_year in qinput
         #json_data = aggregation_1year( qinput, download_key )
         json_list = aggregation_1year( qinput, download_key )
-        json_string = json_cache( json_list, language, "data", download_key )
+        json_string = json_cache( json_list, language, "data", download_key, qinput )
         logging.debug( "aggregated json_string: \n%s" % json_string )
         
         collect_docs( qinput, download_dir, download_key )  # collect doc files in download dir
@@ -1539,7 +1541,7 @@ def aggregation():
             logging.debug( "json_list1: \n%s" % str( json_list1 ) )
             json_list.extend( json_list1 )
             
-        json_string = json_cache( json_list, language, "data", download_key )
+        json_string = json_cache( json_list, language, "data", download_key, qinput )
         logging.debug( "aggregated json_string: \n%s" % json_string )
         
         collect_docs( qinput, download_dir, download_key )  # collect doc files in download dir
@@ -2042,6 +2044,7 @@ def aggr():
 
 @app.route( "/download" )
 def download():
+    logging.debug( "/download" )
     logging.debug( request.args )
     
     clioinfra = Configuration()
@@ -2207,7 +2210,7 @@ def cleanup_downloads( download_dir ):
 
 @app.route( "/documentation" )
 def documentation():
-    logging.debug( "documentation()" )
+    logging.debug( "/documentation" )
     #cursor = connect()
     
     # TODO should be read from config
@@ -2307,7 +2310,7 @@ def documentation():
 
 @app.route( "/histclasses" )
 def histclasses():
-    logging.debug( "histclasses()" )
+    logging.debug( "/histclasses" )
     data = load_vocabulary( 'historical' )
     logging.debug( "histclasses() before return Response" )
     return Response( data, mimetype = "application/json; charset=utf-8" )
@@ -2316,7 +2319,7 @@ def histclasses():
 
 @app.route( "/classes" )
 def classes():
-    logging.debug( "classes()" )
+    logging.debug( "/classes" )
     data = load_vocabulary( "modern" )
     logging.debug( "classes() before return Response" )
     return Response( data, mimetype = "application/json; charset=utf-8" )
@@ -2325,7 +2328,7 @@ def classes():
 
 @app.route( "/years" )
 def years():
-    logging.debug( "years()" )
+    logging.debug( "/years" )
     cursor = connect()
     settings = DataFilter( request.args )
     datatype = ''
@@ -2339,7 +2342,7 @@ def years():
 
 @app.route( "/regions" )
 def regions():
-    logging.debug( "regions()" )
+    logging.debug( "/regions" )
     cursor = connect()
     data = load_vocabulary( "ERRHS_Vocabulary_regions" )
     
@@ -2349,7 +2352,7 @@ def regions():
 """
 @app.route( "/data" )
 def data():
-    logging.debug( "data()" )
+    logging.debug( "/data" )
     cursor = connect()
     year = 0
     datatype = '1.01'
@@ -2368,7 +2371,7 @@ def data():
 
 @app.route( "/translate" )
 def translate():
-    logging.debug( "translate()" )
+    logging.debug( "/translate" )
     cursor = connect()
     if cursor:
         data = {}
@@ -2429,7 +2432,7 @@ def login( settings = '' ):
 # http://bl.ocks.org/mbostock/raw/4090846/us.json
 @app.route( "/maps" )
 def maps():
-    logging.debug( "maps()" )
+    logging.debug( "/maps" )
     donors_choose_url = "http://bl.ocks.org/mbostock/raw/4090846/us.json"
     response = urllib2.urlopen( donors_choose_url )
     json_response = json.load( response )
@@ -2441,7 +2444,7 @@ def maps():
 @app.route("/export")           def export():
 @app.route("/topics")           def topics():
 @app.route("/vocab")            def vocab():
-@app.route("/vocabulary")       def getvocabulary():
+#@app.route("/vocabulary")       def getvocabulary():
 @app.route("/aggregation")      def aggregation():
 @app.route("/aggregate")        def aggr():
 @app.route("/download")         def download():
