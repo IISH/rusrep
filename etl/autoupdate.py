@@ -480,7 +480,7 @@ def retrieve_handle_docs( clioinfra, handle_name, dv_format = "", copy_local = F
 def row_count( clioinfra ):
     logging.debug( "row_count()" )
 
-    configpath = RUSREP_CONFIG_PATH
+    configpath = RUSSIANREPO_CONFIG_PATH
     if not os.path.isfile( configpath ):
         print( "in %s" % __file__ )
         print( "configpath %s FILE DOES NOT EXIST" % configpath )
@@ -519,7 +519,7 @@ def row_count( clioinfra ):
 def clear_postgres( clioinfra ):
     logging.info( "clear_postgres()" )
 
-    configpath = RUSREP_CONFIG_PATH
+    configpath = RUSSIANREPO_CONFIG_PATH
     if not os.path.isfile( configpath ):
         print( "in %s" % __file__ )
         print( "configpath %s FILE DOES NOT EXIST" % configpath )
@@ -565,7 +565,7 @@ def store_handle_docs( clioinfra, handle_name ):
     
     logging.info( "using csv directory: %s" % csv_dir )
 
-    configpath = RUSREP_CONFIG_PATH
+    configpath = RUSSIANREPO_CONFIG_PATH
     if not os.path.isfile( configpath ):
         print( "in %s" % __file__ )
         print( "configpath %s FILE DOES NOT EXIST" % configpath )
@@ -921,7 +921,7 @@ def update_handle_docs( clioinfra, mongo_client ):
     logging.info( "" )
     logging.info( "update_handle_docs()" )
     
-    configpath = RUSREP_CONFIG_PATH
+    configpath = RUSSIANREPO_CONFIG_PATH
     logging.info( "using configuration: %s" % configpath )
     # classupdate() uses postgresql access parameters from cpath contents
     classdata = classupdate( configpath )   # fetching historic and modern class data from postgresql table 
@@ -952,7 +952,7 @@ def clear_mongo( mongo_client ):
 def topic_counts( clioinfra ):
     logging.info( "topic_counts()" )
     
-    configpath = RUSREP_CONFIG_PATH
+    configpath = RUSSIANREPO_CONFIG_PATH
     if not os.path.isfile( configpath ):
         logging.error( "in %s" % __file__ )
         logging.error( "configpath %s FILE DOES NOT EXIST" % configpath )
@@ -1061,11 +1061,14 @@ if __name__ == "__main__":
     python_version = str( python_vertuple[ 0 ] ) + '.' + str( python_vertuple[ 1 ] ) + '.' + str( python_vertuple[ 2 ] )
     logging.info( "Python version: %s" % python_version  )
     
-    CLIOINFRA_CONFIG_PATH = os.environ[ "CLIOINFRA_CONFIG_PATH" ]
-    logging.info( "CLIOINFRA_CONFIG_PATH: %s" % CLIOINFRA_CONFIG_PATH )
+    #CLIOINFRA_CONFIG_PATH = os.environ[ "CLIOINFRA_CONFIG_PATH" ]
+    #logging.info( "CLIOINFRA_CONFIG_PATH: %s" % CLIOINFRA_CONFIG_PATH )
     
-    RUSREP_CONFIG_PATH = os.environ[ "RUSREP_CONFIG_PATH" ]
-    logging.info( "RUSREP_CONFIG_PATH: %s" % RUSREP_CONFIG_PATH )
+    #RUSREP_CONFIG_PATH = os.environ[ "RUSREP_CONFIG_PATH" ]
+    #logging.info( "RUSREP_CONFIG_PATH: %s" % RUSREP_CONFIG_PATH )
+    
+    RUSSIANREPO_CONFIG_PATH = os.environ[ "RUSSIANREPO_CONFIG_PATH" ]
+    logging.info( "RUSSIANREPO_CONFIG_PATH: %s" % RUSSIANREPO_CONFIG_PATH )
     
     clioinfra    = Configuration()
     mongo_client = MongoClient()
