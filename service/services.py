@@ -1252,6 +1252,10 @@ def aggregation_1year( qinput, download_key ):
         logging.debug( "where: %s" % sql[ "where" ] )
         sql_query += ", %s" % sql[ 'condition' ]
         sql_query  = sql_query[ :-2 ]
+        if classification == "historical":
+            sql_query += ", histclass7, histclass8, histclass9, histclass10"
+        elif classification == "modern":
+            sql_query += ", class7, class8, class9, class10"
         
         sql_query += " FROM russianrepository WHERE %s" % sql[ 'where' ]
         sql_query  = sql_query[ :-4 ]
@@ -1274,7 +1278,11 @@ def aggregation_1year( qinput, download_key ):
     sql[ "group_by" ] = sql[ "group_by" ][ :-1 ]
     logging.debug( "group_by: %s" % sql[ "group_by" ] )
     sql_query += sql[ "group_by" ]
-
+    if classification == "historical":
+        sql_query += ", histclass7, histclass8, histclass9, histclass10"
+    elif classification == "modern":
+        sql_query += ", class7, class8, class9, class10"
+    
     # ordering by the db: applied to the russian contents, so the ordering of 
     # the english translation will not be perfect, but at least grouped. 
     logging.debug( "known_fields: %s" % str( known_fields ) )
@@ -1288,6 +1296,7 @@ def aggregation_1year( qinput, download_key ):
         ikey = u"class%d" % i
         if known_fields.get( ikey ):
             class_list.append( ikey )
+    
     class_list.append( "value_unit" )
     for iclass in class_list:
         if sql[ "order_by" ] != " ORDER BY ":
@@ -1295,7 +1304,11 @@ def aggregation_1year( qinput, download_key ):
         sql[ "order_by" ] += "%s" % iclass
     logging.debug( "order_by: %s" % sql[ "order_by" ] )
     sql_query += " %s" % sql[ "order_by" ]
-
+    if classification == "historical":
+        sql_query += ", histclass7, histclass8, histclass9, histclass10"
+    elif classification == "modern":
+        sql_query += ", class7, class8, class9, class10"
+    
     logging.debug( "sql_query: %s" % sql_query )
 
     if sql_query:

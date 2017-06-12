@@ -1,5 +1,5 @@
 # VT-13-Jul-2016
-# FL-08-Feb-2017
+# FL-12-Jun-2017
 
 from __future__ import absolute_import
 
@@ -8,7 +8,7 @@ import sys
 
 database = "datasets"
 
-config_path = os.environ[ "CLIOINFRA_CONFIG_PATH" ]
+config_path = os.environ[ "RUSSIANREPO_CONFIG_PATH" ]
 
 if os.path.isfile( config_path ):
     #print( __file__ )
