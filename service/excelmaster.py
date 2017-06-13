@@ -353,17 +353,28 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
             if i == 9:
                 logging.debug( "# of names in header_chain: %d" % len( header_chain ) )
                 logging.debug( "names in header_chain: %s" % str( header_chain ) )
+                i_name = 0
                 for name in sorted( header_chain ):
                     if name in skip_list:           # not in download
                         continue
                     
-                    c = ws.cell( row = i, column = j )
                     column_name = name
                     if column_name in vocab_regs_terms[ "terms" ]:
                         column_name = vocab_regs_terms[ "terms" ][ column_name ]
-                    c.value = column_name
+
+                    # prevent that [hist]class10 ends between 1 & 2
+                    p = name.find( "class" )
+                    if p != -1:
+                        n = name[ p+5: ]
+                        #logging.debug( "p: %d, n: %s" % ( p, n ) )
+                        j = int( n ) + 1
+                    else:
+                        j = i_name
                     logging.debug( "column %d: %s" % ( j, column_name ) )
-                    j += 1
+                    
+                    c = ws.cell( row = i, column = j )
+                    c.value = column_name
+                    i_name += 1
                 
                 j = max_cols
                 logging.debug( "# of ter_names in sorted_regions: %d" % len( sorted_regions ) )
