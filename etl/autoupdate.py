@@ -15,7 +15,7 @@ FL-03-Mar-2017 Py2/Py3 compatibility: using pandas instead of xlsx2csv to create
 FL-03-Mar-2017 Py2/Py3 compatibility: using future-0.16.0
 FL-27-Mar-2017 Also download documentation files
 FL-17-May-2017 postgresql datasets.topics counts
-FL-29-May-2017 latest change
+FL-13-Jun-2017 latest change
 """
 
 # future-0.16.0 imports for Python 2/3 compatibility
@@ -66,7 +66,6 @@ sys.path.insert( 0, os.path.abspath( os.path.join(os.path.dirname( "__file__" ),
 
 from dataverse import Connection
 
-#from cliocore.configutils import Configuration, Utils, DataFilter
 from service.configutils import Configuration, DataFilter
 
 # column comment_source of postgresql table russianrepository of db ristat
@@ -84,78 +83,6 @@ def loadjson( apiurl ):
     f = opener.open( req )
     dataframe = simplejson.load( f )
     return dataframe
-
-
-"""
-def connect():
-    logging.debug("connect()")
-    cparser = ConfigParser.RawConfigParser()
-    cpath = "/etc/apache2/rusrep.config"
-    cparser.read(cpath)
-
-    conn_string = "host='%s' dbname='%s' user='%s' password='%s'" % (cparser.get('config', 'dbhost'), cparser.get('config', 'dbname'), cparser.get('config', 'dblogin'), cparser.get('config', 'dbpassword'))
-
-    # get a connection, if a connect cannot be made an exception will be raised here
-    conn = psycopg2.connect(conn_string)
-    cursor = conn.cursor()
-    return cursor
-"""
-
-"""
-def alldatasets(clioinfra, copy_local):
-    logging.info("%s alldatasets()" % __file__)
-    #cursor = connect()
-    
-    host = clioinfra.config['dataverseroot']
-    dom = re.match(r'https\:\/\/(.+)$', host)
-    if dom:
-        host = dom.group(1)
-    connection = Connection(host, clioinfra.config['ristatkey'])
-    dataverse = connection.get_dataverse('RISTAT')
-    
-    #settings = DataFilter('')
-    papers = []
-    kwargs = { 'delimiter' : '|' }
-
-    for item in dataverse.get_contents():
-        handle = str(item['protocol']) + ':' + str(item['authority']) + "/" + str(item['identifier'])
-        
-        #if handle not in [clioinfra.config['hdl_documentation'], clioinfra.config['hdl_vocabularies']]:
-        if handle == clioinfra.config['hdl_population']:
-            logging.info("use:  handle: %s" % handle)
-            datasetid = item['id']
-            url = "https://" + str(host) + "/api/datasets/" + str(datasetid) + "/?&key=" + str(clioinfra.config['ristatkey'])
-            dataframe = loadjson(url)
-            
-            try:
-                for files in dataframe['data']['latestVersion']['files']:
-                    paperitem = {}
-                    paperitem['id'] = str(files['datafile']['id'])
-                    paperitem['name'] = str(files['datafile']['name'])
-                    url = "https://%s/api/access/datafile/%s?&key=%s&show_entity_ids=true&q=authorName:*" % (host, paperitem['id'], clioinfra.config['ristatkey'])
-                    logging.info( url )
-                    
-                    if copy_local:
-                        filepath = "%s/%s" % (clioinfra.config['tmppath'], paperitem['name'])
-                        csvfile = "%s/%s.csv" % (clioinfra.config['tmppath'], paperitem['name'])
-                        logging.info("filepath: %s" % filepath)
-                        logging.info("csvfile: %s" % csvfile)
-                        
-                        f = urllib.urlopen(url)
-                        fh = open(filepath, 'wb')
-                        fh.write(f.read())
-                        fh.close()
-                        outfile = open(csvfile, 'w+')
-                        Xlsx2csv(filepath, outfile, **kwargs)
-            except:
-                print("alldatasets()")
-                type, value, tb = sys.exc_info()
-                logging.error( "%s" % value )
-            
-        logging.info("skip: handle: %s" % handle)
-    
-    return papers
-"""
 
 
 
@@ -209,18 +136,17 @@ def empty_dir( dst_dir ):
 
 
 
-def documents_by_handle( clioinfra, handle_name, dst_dir, dv_format = "", copy_local = False, to_csv = False, remove_xlsx = True ):
+def documents_by_handle( configuration, handle_name, dst_dir, dv_format = "", copy_local = False, to_csv = False, remove_xlsx = True ):
     logging.info( "documents_by_handle() copy_local: %s, to_csv: %s" % ( copy_local, to_csv ) )
     logging.debug( "handle_name: %s" % handle_name )
     logging.info( "dst_dir: %s, dv_format: %s, copy_local: %s, to_csv: %s" % ( dst_dir, dv_format, copy_local, to_csv ) )
     
     host = "datasets.socialhistory.org"
-    ristat_key = clioinfra.config[ 'ristatkey' ]
+    ristat_key = configuration.config[ 'ristatkey' ]
     logging.debug( "host: %s" % host )
     logging.debug( "ristat_key: %s" % ristat_key )
     
     connection = Connection( host, ristat_key )
-    
     dataverse  = connection.get_dataverse( 'RISTAT' )
     
     logging.debug( "title: %s" % dataverse.title )
@@ -235,7 +161,7 @@ def documents_by_handle( clioinfra, handle_name, dst_dir, dv_format = "", copy_l
     sep = str(u'|').encode('utf-8')
     kwargs_pandas   = { 'sep' : sep, 'line_terminator' : '\n' }
     
-    tmp_dir = clioinfra.config[ 'tmppath' ]
+    tmp_dir = configuration.config[ 'tmppath' ]
     if copy_local:
         download_dir = os.path.join( tmp_dir, "dataverse", dst_dir, handle_name )
         logging.info( "downloading dataverse files to: %s" % download_dir )
@@ -255,7 +181,7 @@ def documents_by_handle( clioinfra, handle_name, dst_dir, dv_format = "", copy_l
         # item dict keys: protocol, authority, persistentUrl, identifier, type, id
         handle = str( item[ 'protocol' ] ) + ':' + str( item[ 'authority' ] ) + "/" + str( item[ 'identifier' ] )
         logging.debug( "handle: %s" % handle )
-        clio_handle = clioinfra.config.get( handle_name )
+        clio_handle = configuration.config.get( handle_name )
         logging.debug( "clio_handle: %s" % clio_handle )
         
         if handle == clio_handle:
@@ -352,14 +278,14 @@ def documents_by_handle( clioinfra, handle_name, dst_dir, dv_format = "", copy_l
 
 
 
-def update_documentation( clioinfra, copy_local, remove_xlsx = False ):
+def update_documentation( configuration, copy_local, remove_xlsx = False ):
     logging.info( "%s update_documentation()" % __file__ )
 
     handle_name = "hdl_documentation"
     logging.info( "retrieving documents from dataverse for handle name %s ..." % handle_name )
     dst_dir = "doc"
     dv_format = ""
-    ( docs, ids ) = documents_by_handle( clioinfra, handle_name, dst_dir, dv_format, copy_local, remove_xlsx )
+    ( docs, ids ) = documents_by_handle( configuration, handle_name, dst_dir, dv_format, copy_local, remove_xlsx )
     ndoc =  len( docs )
     logging.info( "%d documents retrieved from dataverse" % ndoc )
     if ndoc == 0:
@@ -368,7 +294,7 @@ def update_documentation( clioinfra, copy_local, remove_xlsx = False ):
 
 
 
-def update_vocabularies( clioinfra, mongo_client, dv_format, copy_local = False, to_csv = False, remove_xlsx = False):
+def update_vocabularies( configuration, mongo_client, dv_format, copy_local = False, to_csv = False, remove_xlsx = False):
     logging.info( "%s update_vocabularies()" % __file__ )
     """
     update_vocabularies():
@@ -388,7 +314,7 @@ def update_vocabularies( clioinfra, mongo_client, dv_format, copy_local = False,
         dst_dir   = "vocab/tab"
         ascii_dir = dst_dir
     
-    ( docs, ids ) = documents_by_handle( clioinfra, handle_name, dst_dir, dv_format, copy_local, to_csv, remove_xlsx )
+    ( docs, ids ) = documents_by_handle( configuration, handle_name, dst_dir, dv_format, copy_local, to_csv, remove_xlsx )
     ndoc =  len( docs )
     logging.info( "%d documents retrieved from dataverse" % ndoc )
     if ndoc == 0:
@@ -404,9 +330,9 @@ def update_vocabularies( clioinfra, mongo_client, dv_format, copy_local = False,
         logging.debug( doc )
     
     # parameters to retrieve the vocabulary files
-    host   = clioinfra.config[ "dataverseroot" ]
-    apikey = clioinfra.config[ "ristatkey" ]
-    dbname = clioinfra.config[ "vocabulary" ]
+    host   = configuration.config[ "dataverseroot" ]
+    apikey = configuration.config[ "ristatkey" ]
+    dbname = configuration.config[ "vocabulary" ]
     logging.debug( "host:   %s" % host )
     logging.debug( "apikey: %s" % apikey )
     logging.debug( "dbname: %s" % dbname )
@@ -417,7 +343,7 @@ def update_vocabularies( clioinfra, mongo_client, dv_format, copy_local = False,
     # with ".csv" extension vocabulary() retrieves them locally, 
     # and --together with some filtering-- 
     # appends them to a bigvocabulary
-    tmp_dir = clioinfra.config[ 'tmppath' ]
+    tmp_dir = configuration.config[ 'tmppath' ]
     abs_ascii_dir = os.path.join( tmp_dir, "dataverse", ascii_dir, handle_name )
     bigvocabulary = vocabulary( host, apikey, ids, abs_ascii_dir )    # type: <class 'pandas.core.frame.DataFrame'>
     #print bigvocabulary.to_json( orient = 'records' )
@@ -446,20 +372,20 @@ def update_vocabularies( clioinfra, mongo_client, dv_format, copy_local = False,
         if 'basisyear' in item:
             item[ 'basisyear' ] = re.sub( r'\.0', '', str( item[ 'basisyear' ] ) )
     
-    dbname_vocab = clioinfra.config[ "vocabulary" ]
+    dbname_vocab = configuration.config[ "vocabulary" ]
     db_vocab = mongo_client.get_database( dbname_vocab )
     logging.info( "inserting vocabulary in mongodb '%s'" % dbname_vocab )
     result = db_vocab.data.insert( vocab_json )
 
 
 
-def retrieve_handle_docs( clioinfra, handle_name, dv_format = "", copy_local = False, to_csv = False, remove_xlsx = False ):
+def retrieve_handle_docs( configuration, handle_name, dv_format = "", copy_local = False, to_csv = False, remove_xlsx = False ):
     logging.info( "" )
     logging.info( "retrieve_handle_docs() copy_local: %s" % copy_local )
 
     logging.info( "retrieving documents from dataverse for handle name %s ..." % handle_name )
     dst_dir = "xlsx"
-    ( docs, ids ) = documents_by_handle( clioinfra, handle_name, dst_dir, dv_format, copy_local, to_csv, remove_xlsx )
+    ( docs, ids ) = documents_by_handle( configuration, handle_name, dst_dir, dv_format, copy_local, to_csv, remove_xlsx )
     ndoc =  len( docs )
     if ndoc == 0:
         logging.info( "no documents retrieved." )
@@ -477,7 +403,7 @@ def retrieve_handle_docs( clioinfra, handle_name, dv_format = "", copy_local = F
 
 
 
-def row_count( clioinfra ):
+def row_count( configuration ):
     logging.debug( "row_count()" )
 
     configpath = RUSSIANREPO_CONFIG_PATH
@@ -516,7 +442,7 @@ def row_count( clioinfra ):
 
 
 
-def clear_postgres( clioinfra ):
+def clear_postgres( configuration ):
     logging.info( "clear_postgres()" )
 
     configpath = RUSSIANREPO_CONFIG_PATH
@@ -553,11 +479,11 @@ def clear_postgres( clioinfra ):
 
 
 
-def store_handle_docs( clioinfra, handle_name ):
+def store_handle_docs( configuration, handle_name ):
     logging.info( "" )
     logging.info( "store_handle_docs() %s" % handle_name )
     
-    tmp_dir = clioinfra.config[ 'tmppath' ]
+    tmp_dir = configuration.config[ 'tmppath' ]
     csv_dir  = os.path.join( tmp_dir, "dataverse", "csv", handle_name )
     dir_list = []
     if os.path.isdir( csv_dir ):
@@ -610,7 +536,7 @@ def store_handle_docs( clioinfra, handle_name ):
             
             # debug strange record duplications
             connection.commit()
-            row_count( clioinfra )
+            row_count( configuration )
             
         else:
             logging.info( "skip: %s" % filename )
@@ -917,7 +843,7 @@ def filter_csv( csv_dir, in_filename ):
 
 
 
-def update_handle_docs( clioinfra, mongo_client ):
+def update_handle_docs( configuration, mongo_client ):
     logging.info( "" )
     logging.info( "update_handle_docs()" )
     
@@ -926,7 +852,7 @@ def update_handle_docs( clioinfra, mongo_client ):
     # classupdate() uses postgresql access parameters from cpath contents
     classdata = classupdate( configpath )   # fetching historic and modern class data from postgresql table 
     
-    dbname = clioinfra.config[ 'vocabulary' ]
+    dbname = configuration.config[ 'vocabulary' ]
     logging.info( "inserting historic and modern class data in mongodb '%s'" % dbname )
     
     db = mongo_client.get_database( dbname )
@@ -937,7 +863,7 @@ def update_handle_docs( clioinfra, mongo_client ):
 def clear_mongo( mongo_client ):
     logging.info( "clear_mongo()" )
     
-    dbname_vocab = clioinfra.config[ "vocabulary" ]
+    dbname_vocab = configuration.config[ "vocabulary" ]
     db_vocab = mongo_client.get_database( dbname_vocab )
     logging.info( "delete all documents from collection 'data' in mongodb db '%s'" % dbname_vocab )
     # drop the documents from collection 'data'; same as: db.drop_collection( coll_name )
@@ -949,7 +875,7 @@ def clear_mongo( mongo_client ):
 
 
 
-def topic_counts( clioinfra ):
+def topic_counts( configuration ):
     logging.info( "topic_counts()" )
     
     configpath = RUSSIANREPO_CONFIG_PATH
@@ -1061,24 +987,18 @@ if __name__ == "__main__":
     python_version = str( python_vertuple[ 0 ] ) + '.' + str( python_vertuple[ 1 ] ) + '.' + str( python_vertuple[ 2 ] )
     logging.info( "Python version: %s" % python_version  )
     
-    #CLIOINFRA_CONFIG_PATH = os.environ[ "CLIOINFRA_CONFIG_PATH" ]
-    #logging.info( "CLIOINFRA_CONFIG_PATH: %s" % CLIOINFRA_CONFIG_PATH )
-    
-    #RUSREP_CONFIG_PATH = os.environ[ "RUSREP_CONFIG_PATH" ]
-    #logging.info( "RUSREP_CONFIG_PATH: %s" % RUSREP_CONFIG_PATH )
-    
     RUSSIANREPO_CONFIG_PATH = os.environ[ "RUSSIANREPO_CONFIG_PATH" ]
     logging.info( "RUSSIANREPO_CONFIG_PATH: %s" % RUSSIANREPO_CONFIG_PATH )
     
-    clioinfra    = Configuration()
-    mongo_client = MongoClient()
+    configuration = Configuration()
+    mongo_client  = MongoClient()
     
     if DO_VOCABULARY or DO_MONGODB:
         clear_mongo( mongo_client )
     
     if DO_DOCUMENTATION:
         copy_local  = True      # for ziped downloads
-        update_documentation( clioinfra, copy_local )
+        update_documentation( configuration, copy_local )
     
     if DO_VOCABULARY:
         # Downloaded vocabulary documents are not used to update the vocabularies, 
@@ -1088,7 +1008,7 @@ if __name__ == "__main__":
             to_csv = False      # we get .tab
         else:
             to_csv = True       # we get .xlsx
-        update_vocabularies( clioinfra, mongo_client, dv_format, copy_local, to_csv )
+        update_vocabularies( configuration, mongo_client, dv_format, copy_local, to_csv )
     #"""
     handle_names = [ 
         "hdl_errhs_population",     # ERRHS_1   39 files
@@ -1107,23 +1027,23 @@ if __name__ == "__main__":
         to_csv      = True
         remove_xlsx = False
         for handle_name in handle_names:
-            retrieve_handle_docs( clioinfra, handle_name, dv_format, copy_local, to_csv, remove_xlsx ) # dataverse  => local_disk
+            retrieve_handle_docs( configuration, handle_name, dv_format, copy_local, to_csv, remove_xlsx ) # dataverse  => local_disk
     
     if DO_POSTGRES:
         logging.StreamHandler().flush()
-        row_count( clioinfra )
-        clear_postgres( clioinfra )
-        row_count( clioinfra )
+        row_count( configuration )
+        clear_postgres( configuration )
+        row_count( configuration )
         for handle_name in handle_names:
-            store_handle_docs( clioinfra, handle_name )         # local_disk => postgresql
+            store_handle_docs( configuration, handle_name )         # local_disk => postgresql
             logging.StreamHandler().flush()
-            row_count( clioinfra )
+            row_count( configuration )
     
         # done on-the-fly in services/topic_counts()
-        #topic_counts( clioinfra )                               # postgresql datasets.topics counts
+        #topic_counts( configuration )                               # postgresql datasets.topics counts
     
     if DO_MONGODB:
-        update_handle_docs( clioinfra, mongo_client )           # postgresql => mongodb
+        update_handle_docs( configuration, mongo_client )           # postgresql => mongodb
     
     logging.info( "stop: %s" % datetime.datetime.now() )
     str_elapsed = format_secs( time() - time0 )

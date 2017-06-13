@@ -4,10 +4,9 @@
 VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
-FL-12-Jun-2017 
+FL-13-Jun-2017 
 
 TODO
-- cleanup_downloads()   read timeout from config
 - documentation()       read host from config
 
 def connect():
@@ -69,6 +68,7 @@ sys.setdefaultencoding( "utf8" )
 
 import collections
 import ConfigParser
+import copy
 import csv
 import datetime
 import json
@@ -98,6 +98,7 @@ from rdflib import Graph, Literal, term
 
 from dataverse import Connection
 from excelmaster import aggregate_dataset, preprocessor
+
 from ristatcore.configutils import Configuration, DataFilter
 
 sys.path.insert( 0, os.path.abspath( os.path.join( os.path.dirname( "__file__" ), './' ) ) )
@@ -105,10 +106,7 @@ sys.path.insert( 0, os.path.abspath( os.path.join( os.path.dirname( "__file__" )
 forbidden = [ "classification", "action", "language", "path" ]
 
 
-def connect():
-    logging.debug( "connect()" )
-    configparser = ConfigParser.RawConfigParser()
-    
+def get_configparser():
     RUSSIANREPO_CONFIG_PATH = os.environ[ "RUSSIANREPO_CONFIG_PATH" ]
     logging.info( "RUSSIANREPO_CONFIG_PATH: %s" % RUSSIANREPO_CONFIG_PATH )
     
@@ -119,10 +117,20 @@ def connect():
         print( "EXIT" )
         sys.exit( 1 )
     
-    logging.info( "using configuration: %s" % configpath )
+    logging.info( "configpath: %s" % configpath )
     
+    configparser = ConfigParser.RawConfigParser()
     configparser.read( configpath )
-    logging.debug( "configpath: %s" % configpath )
+    
+    return configparser
+
+
+
+def connect():
+    logging.debug( "connect()" )
+    
+    configparser = get_configparser()
+    
     host     = configparser.get( 'config', 'dbhost' )
     dbname   = configparser.get( 'config', 'dbname' )
     user     = configparser.get( 'config', 'dblogin' )
@@ -166,6 +174,31 @@ def classcollector( keywords ):
 
 
 
+def strip_path_list( old_path ):
+    logging.debug( "strip_path_list()" )
+    # temporary fix until Pieter removes [hist]class5&6 from qinput
+    new_path = []
+    logging.debug( "old path: (%s) %s" % ( type( old_path ), str( old_path ) ) )
+    for old_entry in old_path:
+        logging.debug( "old entry: %s" % old_entry )
+        new_entry = copy.deepcopy( old_entry )
+        for k in old_entry:
+            v = old_entry[ k ]
+            #logging.debug( "k: %s, v: %s" % ( k, v ) )
+            p = k.find( "class" )
+            if p != -1:
+                n = k[ p+5: ]
+                #logging.debug( "n: %s" % n )
+                if n in [ "5", "6" ]:
+                    del new_entry[ k ]
+        logging.debug( "new entry: %s" % new_entry )
+        new_path.append( new_entry )
+    logging.debug( "new path: (%s) %s" % ( type( new_path ), str( new_path ) ) )
+    
+    return new_path
+
+
+
 def json_generator( cursor, json_dataname, data, download_key = None ):
     logging.debug( "json_generator() cursor: %s, json_dataname: %s" % ( cursor, json_dataname ) )
     logging.debug( "data: %s" % data )
@@ -188,7 +221,9 @@ def json_generator( cursor, json_dataname, data, download_key = None ):
         datatype       = qinput.get( "datatype" )
         datatype_      = datatype[ 0 ] + "_00"
         base_year      = qinput.get( "base_year" )
-        path_list      = qinput.get( "path" )
+        
+        old_path_list = qinput.get( "path" )
+        path_list = strip_path_list( old_path_list )
         
         logging.debug( "classification : %s" % classification )
         logging.debug( "language       : %s" % language )
@@ -250,12 +285,28 @@ def json_generator( cursor, json_dataname, data, download_key = None ):
     for json_entry in json_list:
         logging.debug( "json_entry: %s" % json_entry )
         value_unit = json_entry.get( "value_unit" )
+        
+        # compare qinput paths with db returned paths; add missing paths (fill with NA values). 
         entry_path = json_entry.get( "path" )
-        logging.debug( "entry_path: %s" % entry_path )
+        # path_list from qinput does not contain our added [hist]classes; 
+        # remove them from entry_path before comparison
+        entry_path_cpy = copy.deepcopy( entry_path )
+        
+        if classification == "historical":
+            delete_list = [ "histclass5", "histclass6", "histclass7", "histclass8", "histclass9", "histclass10" ]
+        elif classification == "modern":
+            delete_list = [ "class5", "class6", "class7", "class8", "class9", "class10" ]
+        for e in delete_list:
+            try:
+                del entry_path_cpy[ e ]
+            except:
+                pass
         try:
-            path_list.remove( entry_path )
+            path_list.remove( entry_path_cpy )
         except:
-            pass
+            logging.debug( "keep entry_path: %s" % entry_path_cpy )
+        else:
+            logging.debug( "remove entry_path: %s" % entry_path_cpy )
     
     if len( path_list ) != 0:
         # pure '.' dot entries are not returned from db
@@ -280,25 +331,14 @@ def json_cache( json_list, language, json_dataname, download_key, qinput = {} ):
     # cache json_list in mongodb with download_key as key
     logging.debug( "json_cache() # entries in list: %d" %  len( json_list ) )
     
-    configparser = ConfigParser.RawConfigParser()
-    
-    RUSSIANREPO_CONFIG_PATH = os.environ[ "RUSSIANREPO_CONFIG_PATH" ]
-    logging.info( "RUSSIANREPO_CONFIG_PATH: %s" % RUSSIANREPO_CONFIG_PATH )
-    
-    configpath = RUSSIANREPO_CONFIG_PATH
-    if not os.path.isfile( configpath ):
-        print( "in %s" % __file__ )
-        print( "configpath %s FILE DOES NOT EXIST" % configpath )
-        print( "EXIT" )
-        sys.exit( 1 )
-    
-    configparser.read( configpath )
+    configparser = get_configparser()
+    root = configparser.get( 'config', 'root' )
     
     json_hash = {}
     json_hash[ "language" ] = language
     json_hash[ json_dataname ] = json_list
     
-    json_hash[ "url" ] = "%s/service/download?key=%s" % ( configparser.get( 'config', 'root' ), download_key )
+    json_hash[ "url" ] = "%s/service/download?key=%s" % ( root, download_key )
     logging.debug( "json_hash: %s" % json_hash )
     
     json_string = json.dumps( json_hash, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
@@ -347,8 +387,8 @@ def collect_docs( qinput, download_dir, download_key ):
     
     logging.debug( "datatype0: %s, datatype_: %s" % ( datatype0, datatype_ ) )
     
-    clioinfra = Configuration()
-    tmp_dir = clioinfra.config[ 'tmppath' ]
+    configuration = Configuration()
+    tmp_dir = configuration.config[ 'tmppath' ]
     
     doc_dir = os.path.join( tmp_dir, "dataverse", "doc", "hdl_documentation" )
     doc_list = os.listdir( doc_dir )
@@ -523,8 +563,8 @@ def translatedclasses( cursor, classinfo ):
 
 def load_years( cursor, datatype ):
     logging.debug( "load_years()" )
-    clioinfra = Configuration()
-    years = clioinfra.config[ 'years' ].split( ',' )
+    configuration = Configuration()
+    years = configuration.config[ 'years' ].split( ',' )
     data = {}
     sql = "select base_year, count(*) as c from russianrepository where 1=1"
     if datatype:
@@ -592,19 +632,8 @@ def sqlconstructor( sql ):
 
 def topic_counts():
     logging.info( "topic_counts()" )
-    
-    configpath = RUSSIANREPO_CONFIG_PATH = os.environ[ "RUSSIANREPO_CONFIG_PATH" ]
-    
-    if not os.path.isfile( configpath ):
-        logging.error( "in %s" % __file__ )
-        logging.error( "configpath %s FILE DOES NOT EXIST" % configpath )
-        logging.error( "EXIT" )
-        sys.exit( 1 )
-    
-    logging.info( "using configuration: %s" % configpath )
 
-    configparser = ConfigParser.RawConfigParser()
-    configparser.read( configpath )
+    configparser = get_configparser()
     
     host     = configparser.get( 'config', 'dbhost' )
     dbname   = configparser.get( 'config', 'dbname' )
@@ -1253,9 +1282,9 @@ def aggregation_1year( qinput, download_key ):
         sql_query += ", %s" % sql[ 'condition' ]
         sql_query  = sql_query[ :-2 ]
         if classification == "historical":
-            sql_query += ", histclass7, histclass8, histclass9, histclass10"
+            sql_query += ", histclass5, histclass6, histclass7, histclass8, histclass9, histclass10"
         elif classification == "modern":
-            sql_query += ", class7, class8, class9, class10"
+            sql_query += ", class5, class6, class7, class8, class9, class10"
         
         sql_query += " FROM russianrepository WHERE %s" % sql[ 'where' ]
         sql_query  = sql_query[ :-4 ]
@@ -1279,20 +1308,20 @@ def aggregation_1year( qinput, download_key ):
     logging.debug( "group_by: %s" % sql[ "group_by" ] )
     sql_query += sql[ "group_by" ]
     if classification == "historical":
-        sql_query += ", histclass7, histclass8, histclass9, histclass10"
+        sql_query += ", histclass5, histclass6, histclass7, histclass8, histclass9, histclass10"
     elif classification == "modern":
-        sql_query += ", class7, class8, class9, class10"
+        sql_query += ", class5, class6, class7, class8, class9, class10"
     
     # ordering by the db: applied to the russian contents, so the ordering of 
     # the english translation will not be perfect, but at least grouped. 
     logging.debug( "known_fields: %s" % str( known_fields ) )
     sql[ "order_by" ] = " ORDER BY "
     class_list = []
-    for i in range( 1, 6 ):
+    for i in range( 1, 4 ):
         ikey = u"histclass%d" % i
         if known_fields.get( ikey ):
             class_list.append( ikey )
-    for i in range( 1, 6 ):
+    for i in range( 1, 4 ):
         ikey = u"class%d" % i
         if known_fields.get( ikey ):
             class_list.append( ikey )
@@ -1305,9 +1334,9 @@ def aggregation_1year( qinput, download_key ):
     logging.debug( "order_by: %s" % sql[ "order_by" ] )
     sql_query += " %s" % sql[ "order_by" ]
     if classification == "historical":
-        sql_query += ", histclass7, histclass8, histclass9, histclass10"
+        sql_query += ", histclass5, histclass6, histclass7, histclass8, histclass9, histclass10"
     elif classification == "modern":
-        sql_query += ", class7, class8, class9, class10"
+        sql_query += ", class5, class6, class7, class8, class9, class10"
     
     logging.debug( "sql_query: %s" % sql_query )
 
@@ -1347,12 +1376,10 @@ def aggregation_1year( qinput, download_key ):
 
 
 
-def cleanup_downloads( download_dir ):
+def cleanup_downloads( download_dir, time_limit ):
     # remove too old downloads
     logging.debug( "cleanup_downloads() download_dir: %s" % download_dir )
     
-    seconds_per_day = 60 * 60 * 24
-    time_limit = seconds_per_day        # 1 day
     dt_now = datetime.datetime.now()
     
     ndeleted = 0
@@ -1457,8 +1484,6 @@ def filecatalog():
                 logging.debug( "datatype: %s, base_year: %s" % ( datatype, base_year ) )
                 json_list1 = filecat_subtopic( cursor, datatype, base_year )
                 #json_list.append( json_list1 )
-        
-    
     
     json_string = json_cache( json_list, language, "data", download_key )
     return Response( json_string, mimetype = "application/json; charset=utf-8" )
@@ -1478,14 +1503,20 @@ def filecatalogdata():
     logging.debug( "request.data: %s"      % str( request.data ) )
     
     subtopics = []
-    for key in request.args:
-        value = request.args[ key ]
+    
+    args = {}
+    if request.method == "GET":
+        args = request.args
+    elif request.method == "POST":
+        args = request.form
+    
+    for key in args:
+        value = args[ key ]
         logging.debug( "key: %s, value: %s" % ( key, str( value ) ) )
         if key.startswith( "subtopics" ):
             subtopics.append( value )
     
-    
-    language = request.args.get( "lang" )
+    language = args.get( "lang" )
     if language is None:
         language = "en"
     
@@ -1501,16 +1532,31 @@ def filecatalogdata():
         "hdl_errhs_land"            # ERRHS_7   10 files
     ]
     
-    clioinfra = Configuration()
-    tmp_dir = clioinfra.config[ 'tmppath' ]
+    #configuration = Configuration()
+    configparser = get_configparser()
+    try:
+        config_fname = configparser.get( "config", "config_fname" )
+        logging.debug( "config_fname: %s" % config_fname )
+    except:
+        logging.debug( "configparser: %s" % str( configparser ) )
+    
+    tmp_dir    = configparser.get( "config", "tmppath" )
+    time_limit = configparser.get( "config", "time_limit" )
+    
     top_download_dir = os.path.join( tmp_dir, "download" )
     logging.debug( "top_download_dir: %s" % top_download_dir )
     if not os.path.exists( top_download_dir ):
         os.makedirs( top_download_dir )
     else:
-        cleanup_downloads( top_download_dir )           # remove too old downloads
+        seconds_per_day = 60 * 60 * 24
+        time_limit = seconds_per_day        # 1 day
+        
+        #configparser.get( "config", "time_limit" )
+        logging.debug( "time_limit: %d" % time_limit )
+        
+        cleanup_downloads( top_download_dir, time_limit )   # remove too old downloads
     
-    random_key = str( "%05.8f" % random.random() )      # used as base name for zip download
+    random_key = str( "%05.8f" % random.random() )          # used as base name for zip download
     download_key = "%s-d-filecatalog-%s" % ( language, random_key[ 2: ] )
     logging.debug( "download_key: %s" % download_key )
     
@@ -1538,7 +1584,6 @@ def filecatalogdata():
         datatype_maj = int( datatype[ 0 ] )
         handle_name = handle_names[ datatype_maj - 1 ]
         csv_dir = os.path.join( tmp_dir, "dataverse", "csv", handle_name )
-        
         
         csv_filename = "ERRHS_%s_data_%s.csv" % ( datatype, base_year )
         logging.debug( "csv_filename: %s" % csv_filename )
@@ -1577,8 +1622,8 @@ def filecatalogget():
     zip_filename = request.args.get( "zip" )
     logging.debug( "zip_filename: %s" % zip_filename )
 
-    clioinfra = Configuration()
-    tmp_dir = clioinfra.config[ 'tmppath' ]
+    configuration = Configuration()
+    tmp_dir = configuration.config[ 'tmppath' ]
     top_download_dir = os.path.join( tmp_dir, "download" )
     zip_pathname = os.path.join( top_download_dir, zip_filename )
     logging.debug( "zip_pathname: %s" % zip_pathname )
@@ -1613,10 +1658,16 @@ def aggregation():
     logging.debug( "/aggregation" )
 
     qinput = simplejson.loads( request.data )
+    
     language = qinput.get( "language" )
     classification = qinput.get( "classification" )
     datatype = qinput.get( "datatype" )
     logging.debug( "language: %s, classification: %s, datatype: %s" % ( language, classification, datatype ) )
+    
+    # strip [hist]class5 & 6 from path (no longer needed)
+    old_path = qinput.get( "path" )
+    new_path = strip_path_list( old_path )
+    qinput[ "path" ] = new_path     # replace
     
     download_key = str( "%05.8f" % random.random() )  # used as base name for zip download
     # put some additional info in the key
@@ -1626,8 +1677,8 @@ def aggregation():
     download_key = "%s-%s-%s-%s-%s" % ( language, classification[ 0 ], datatype, base_year, download_key[ 2: ] )
     logging.debug( "download_key: %s" % download_key )
     
-    clioinfra = Configuration()
-    tmp_dir = clioinfra.config[ 'tmppath' ]
+    configuration = Configuration()
+    tmp_dir = configuration.config[ 'tmppath' ]
     download_dir = os.path.join( tmp_dir, "download", download_key )
     if not os.path.exists( download_dir ):
         os.makedirs( download_dir )
@@ -1727,12 +1778,12 @@ def download():
     logging.debug( "/download" )
     logging.debug( request.args )
     
-    clioinfra = Configuration()
+    configuration = Configuration()
     
     if request.args.get( 'id' ):
         logging.debug( "download() id" )
         host = "datasets.socialhistory.org"
-        url = "https://%s/api/access/datafile/%s?&key=%s&show_entity_ids=true&q=authorName:*" % (host, request.args.get('id'), clioinfra.config['ristatkey'])
+        url = "https://%s/api/access/datafile/%s?&key=%s&show_entity_ids=true&q=authorName:*" % (host, request.args.get('id'), configuration.config['ristatkey'])
         f = urllib2.urlopen( url )
         pdfdata = f.read()
         filetype = "application/pdf"
@@ -1749,7 +1800,7 @@ def download():
         zipping = True
         logging.debug( "download() zip: %s" % zipping )
     
-        tmp_dir = clioinfra.config[ 'tmppath' ]
+        tmp_dir = configuration.config[ 'tmppath' ]
         top_download_dir = os.path.join( tmp_dir, "download" )
         logging.debug( "top_download_dir: %s" % top_download_dir )
         cleanup_downloads( top_download_dir )                   # remove too old downloads
@@ -1862,8 +1913,8 @@ def documentation():
     #host = "data.socialhistory.org"        # virtualenv python273
     logging.debug( "host: %s" % host )
     
-    clioinfra = Configuration()
-    ristatkey = clioinfra.config[ "ristatkey" ]
+    configuration = Configuration()
+    ristatkey = configuration.config[ "ristatkey" ]
     logging.debug( "ristatkey: %s" % ristatkey )
     
     connection = Connection( host, ristatkey )
@@ -1892,9 +1943,9 @@ def documentation():
     
     for item in dataverse.get_contents():
         handle = str( item[ 'protocol' ] ) + ':' + str( item[ 'authority' ] ) + "/" + str( item[ 'identifier' ] )
-        if handle == clioinfra.config[ 'ristatdocs' ]:
+        if handle == configuration.config[ 'ristatdocs' ]:
             datasetid = item[ 'id' ]
-            url = "https://" + str( host ) + "/api/datasets/" + str( datasetid ) + "/?&key=" + str( clioinfra.config[ 'ristatkey' ] )
+            url = "https://" + str( host ) + "/api/datasets/" + str( datasetid ) + "/?&key=" + str( configuration.config[ 'ristatkey' ] )
             dataframe = loadjson( url )
             for files in dataframe[ "data" ][ "latestVersion" ][ "files" ]:
                 paperitem = {}
