@@ -26,6 +26,7 @@
 # delete this exception statement from all source files in the program,
 # then also delete it in the license file.
 
+import os
 import urllib2 
 import simplejson
 import json
@@ -35,11 +36,22 @@ import ConfigParser
 import sys
 import ldap
 from flask import Flask, request, redirect
-from . import config_path, FORBIDDENURI, FORBIDDENPIPES, ERROR1, ERROR2
+
+#from . import FORBIDDENURI, FORBIDDENPIPES, ERROR1, ERROR2
 
 
 class Configuration:
     def __init__( self ):
+        RUSSIANREPO_CONFIG_PATH = os.environ[ "RUSSIANREPO_CONFIG_PATH" ]
+        print( "RUSSIANREPO_CONFIG_PATH: %s" % RUSSIANREPO_CONFIG_PATH )
+    
+        config_path = RUSSIANREPO_CONFIG_PATH
+        if not os.path.isfile( config_path ):
+            print( "in %s" % __file__ )
+            print( "configpath %s FILE DOES NOT EXIST" % config_path )
+            print( "EXIT" )
+            sys.exit( 1 )
+        
         self.config = {}
         configparser = ConfigParser.RawConfigParser()
         configparser.read( config_path )
@@ -49,7 +61,7 @@ class Configuration:
             self.config[ key ] = value
 
         # Extract host for Dataverse connection
-        findhost = re.search('(http\:\/\/|https\:\/\/)(.+)', self.config['dataverseroot'])
+        findhost = re.search('(http\:\/\/|https\:\/\/)(.+)', self.config['dataverse_root'])
         if findhost:
             self.config['hostname'] = findhost.group(2)
         self.config['remote'] = ''
@@ -90,6 +102,7 @@ class Configuration:
 	    return False
 
 	return True
+
 
 class DataFilter(Configuration):
     def __init__(self, params):
@@ -268,7 +281,7 @@ class Utils(Configuration):
         data = {}
         config = configuration()
         if dataset:
-            url = config['dataverseroot'] + '/api/search?q=' + dataset + "&key=" + config['key'] + "&per_page=1000"
+            url = config['dataverse_root'] + '/api/search?q=' + dataset + "&key=" + config['key'] + "&per_page=1000"
     	result = json.load(urllib2.urlopen(url))
     	try:
     	   data = result['data']['items']
@@ -284,7 +297,7 @@ class Utils(Configuration):
         data = {}
         if pid:
             query = pid
-            apiurl = config['dataverseroot'] + "/api/search?q=" + query + '&key=' + config['key'] + '&type=dataset&per_page=1000'
+            apiurl = config['dataverse_root'] + "/api/search?q=" + query + '&key=' + config['key'] + '&type=dataset&per_page=1000'
             data = load_dataverse(apiurl)
         return (data, pid, fileid, cliohandle)
 
@@ -334,7 +347,7 @@ class Utils(Configuration):
         condition = True # emulate do-while
         datasets = {}
         while (condition):
-            url = self.config['dataverseroot'] + '/api/search?q=*' + "&key=" + config['key'] + "&start=" + str(start) 
+            url = self.config['dataverse_root'] + '/api/search?q=*' + "&key=" + config['key'] + "&start=" + str(start) 
     	#+ "&type=dataset"
             if branch:
                 url = url + "&subtree=" + branch

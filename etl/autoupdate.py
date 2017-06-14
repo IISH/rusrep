@@ -15,7 +15,7 @@ FL-03-Mar-2017 Py2/Py3 compatibility: using pandas instead of xlsx2csv to create
 FL-03-Mar-2017 Py2/Py3 compatibility: using future-0.16.0
 FL-27-Mar-2017 Also download documentation files
 FL-17-May-2017 postgresql datasets.topics counts
-FL-13-Jun-2017 latest change
+FL-14-Jun-2017 latest change
 """
 
 # future-0.16.0 imports for Python 2/3 compatibility
@@ -43,20 +43,7 @@ import StringIO
 from pymongo import MongoClient
 from time import ctime, time
 from vocab import vocabulary, classupdate
-#from xlsx2csv import Xlsx2csv
 
-#import collections
-#import ConfigParser
-#import csv
-#import getopt
-#import glob
-#import pprint
-#import requests
-#import tables
-#import unittest
-#import xlwt
-#from flask import Flask, Response, request
-#from twisted.web import http
 
 sys.path.insert( 0, os.path.abspath( os.path.join(os.path.dirname( "__file__" ), './' ) ) )
 sys.path.insert( 0, os.path.abspath( os.path.join(os.path.dirname( "__file__" ), '../' ) ) )

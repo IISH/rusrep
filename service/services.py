@@ -4,10 +4,7 @@
 VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
-FL-13-Jun-2017 
-
-TODO
-- documentation()       read host from config
+FL-14-Jun-2017 
 
 def connect():
 def classcollector( keywords ):
@@ -99,7 +96,7 @@ from rdflib import Graph, Literal, term
 from dataverse import Connection
 from excelmaster import aggregate_dataset, preprocessor
 
-from ristatcore.configutils import Configuration, DataFilter
+from configutils import DataFilter
 
 sys.path.insert( 0, os.path.abspath( os.path.join( os.path.dirname( "__file__" ), './' ) ) )
 
@@ -135,6 +132,7 @@ def connect():
     dbname   = configparser.get( 'config', 'dbname' )
     user     = configparser.get( 'config', 'dblogin' )
     password = configparser.get( 'config', 'dbpassword' )
+    
     logging.debug( "host:       %s" % host )
     logging.debug( "dbname:     %s" % dbname )
     logging.debug( "user:       %s" % user )
@@ -387,8 +385,8 @@ def collect_docs( qinput, download_dir, download_key ):
     
     logging.debug( "datatype0: %s, datatype_: %s" % ( datatype0, datatype_ ) )
     
-    configuration = Configuration()
-    tmp_dir = configuration.config[ 'tmppath' ]
+    configparser = get_configparser()
+    tmp_dir = configparser.get( 'config', 'tmppath' )
     
     doc_dir = os.path.join( tmp_dir, "dataverse", "doc", "hdl_documentation" )
     doc_list = os.listdir( doc_dir )
@@ -563,8 +561,9 @@ def translatedclasses( cursor, classinfo ):
 
 def load_years( cursor, datatype ):
     logging.debug( "load_years()" )
-    configuration = Configuration()
-    years = configuration.config[ 'years' ].split( ',' )
+    
+    configparser = get_configparser()
+    years = configparser.get( 'config', 'years' ).split( ',' )
     data = {}
     sql = "select base_year, count(*) as c from russianrepository where 1=1"
     if datatype:
@@ -939,16 +938,20 @@ def load_data( cursor, year, datatype, region, debug ):
 
 def rdfconvertor( url ):
     logging.debug( "rdfconvertor()" )
+    
     f = urllib.urlopen( url )
     data = f.read()
     csvio = StringIO( str( data ) )
     dataframe = pd.read_csv( csvio, sep = '\t', dtype = 'unicode' )
     finalsubset = dataframe
     columns = finalsubset.columns
-    rdf = "@prefix ristat: <http://ristat.org/api/vocabulary#> .\n"
-    #vocab_uri = "http://ristat.org/service/vocab#"
-    vocab_uri = "http://data.sandbox.socialhistoryservices.org/service/vocab#"
-    g = Graph()
+    
+    configparser = get_configparser()
+    rdf_prefix = configparser.get( 'config', "rdf_prefix" )
+    vocab_uri  = configparser.get( 'config', "vocab_uri" )
+    
+    rdf = rdf_prefix
+    g   = Graph()
 
     for ids in finalsubset.index:
         item = finalsubset.ix[ ids ]
@@ -988,9 +991,8 @@ def get_sql_query( name, value ):
 
 
 
-def loadjson( apiurl ):
-    logging.debug( "loadjson()" )
-    json_dataurl = apiurl
+def loadjson( json_dataurl ):
+    logging.debug( "loadjson() %s" % json_dataurl )
 
     req = urllib2.Request( json_dataurl )
     opener = urllib2.build_opener()
@@ -1428,12 +1430,13 @@ def test():
 @app.route( "/export" )
 def export():
     logging.debug( "/export" )
-    settings = Configuration()
+    
+    configparser = get_configparser()
     keys = [ "intro", "intro_rus", "datatype_intro", "datatype_intro_rus", "note", "note_rus", "downloadpage1", "downloadpage1_rus" "downloadclick", "downloadclick_rus", "warningblank", "warningblank_rus", "mapintro", "mapintro_rus" ]
     exportkeys = {}
     for ikey in keys:
-        if ikey in settings.config:
-            exportkeys[ ikey ] = settings.config[ ikey ]
+        if configparser.get( 'config', ikey ) is not None:
+            exportkeys[ ikey ] = configparser.get( 'config', ikey )
     result = json.dumps( exportkeys, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
     return Response( result, mimetype = "application/json; charset=utf-8" )
 
@@ -1532,10 +1535,9 @@ def filecatalogdata():
         "hdl_errhs_land"            # ERRHS_7   10 files
     ]
     
-    #configuration = Configuration()
     configparser = get_configparser()
     try:
-        config_fname = configparser.get( "config", "config_fname" )
+        config_fname = configparser.config.get( "config_fname" )
         logging.debug( "config_fname: %s" % config_fname )
     except:
         logging.debug( "configparser: %s" % str( configparser ) )
@@ -1622,8 +1624,8 @@ def filecatalogget():
     zip_filename = request.args.get( "zip" )
     logging.debug( "zip_filename: %s" % zip_filename )
 
-    configuration = Configuration()
-    tmp_dir = configuration.config[ 'tmppath' ]
+    configparser = get_configparser()
+    tmp_dir = configparser.get( 'config', 'tmppath' )
     top_download_dir = os.path.join( tmp_dir, "download" )
     zip_pathname = os.path.join( top_download_dir, zip_filename )
     logging.debug( "zip_pathname: %s" % zip_pathname )
@@ -1639,7 +1641,12 @@ def filecatalogget():
 @app.route( "/vocab" )
 def vocab():
     logging.debug( "/vocab" )
-    url = "https://datasets.socialhistory.org/api/access/datafile/586?&key=6f07ea5d-be76-444a-8a20-0ee2f02fda21&show_entity_ids=true&q=authorName:*"
+    
+    configparser   = get_configparser()
+    dataverse_root = configparser.get( 'config', "dataverse_root" )
+    ristatkey      = configparser.get( 'config', "ristatkey" )
+    
+    url = "%s/api/access/datafile/586?&key=%s&show_entity_ids=true&q=authorName:*" % ( dataverse_root, ristatkey )
     g = rdfconvertor( url )
     showformat = 'json'
     if request.args.get( 'format' ):
@@ -1656,8 +1663,8 @@ def vocab():
 @app.route( "/aggregation", methods = ["POST", "GET" ] )
 def aggregation():
     logging.debug( "/aggregation" )
-
     qinput = simplejson.loads( request.data )
+    logging.debug( qinput )
     
     language = qinput.get( "language" )
     classification = qinput.get( "classification" )
@@ -1677,8 +1684,8 @@ def aggregation():
     download_key = "%s-%s-%s-%s-%s" % ( language, classification[ 0 ], datatype, base_year, download_key[ 2: ] )
     logging.debug( "download_key: %s" % download_key )
     
-    configuration = Configuration()
-    tmp_dir = configuration.config[ 'tmppath' ]
+    configparser = get_configparser()
+    tmp_dir = configparser.get( 'config', 'tmppath' )
     download_dir = os.path.join( tmp_dir, "download", download_key )
     if not os.path.exists( download_dir ):
         os.makedirs( download_dir )
@@ -1775,15 +1782,15 @@ def indicators():
 
 @app.route( "/download" )
 def download():
-    logging.debug( "/download" )
-    logging.debug( request.args )
+    logging.debug( "/download %s" % request.args )
     
-    configuration = Configuration()
+    configparser = get_configparser()
+    ristatkey = configparser.get( "config", "ristatkey" )
+    dataverse_root = configparser.get( "config", "dataverse_root" )
     
-    if request.args.get( 'id' ):
-        logging.debug( "download() id" )
-        host = "datasets.socialhistory.org"
-        url = "https://%s/api/access/datafile/%s?&key=%s&show_entity_ids=true&q=authorName:*" % (host, request.args.get('id'), configuration.config['ristatkey'])
+    id_ = request.args.get( "id" )
+    if id_:
+        url = "%s/api/access/datafile/%s?&key=%s&show_entity_ids=true&q=authorName:*" % ( dataverse_root, id_, ristatkey )
         f = urllib2.urlopen( url )
         pdfdata = f.read()
         filetype = "application/pdf"
@@ -1800,7 +1807,7 @@ def download():
         zipping = True
         logging.debug( "download() zip: %s" % zipping )
     
-        tmp_dir = configuration.config[ 'tmppath' ]
+        tmp_dir = configparser.get( 'config', 'tmppath' )
         top_download_dir = os.path.join( tmp_dir, "download" )
         logging.debug( "top_download_dir: %s" % top_download_dir )
         cleanup_downloads( top_download_dir )                   # remove too old downloads
@@ -1906,26 +1913,25 @@ def download():
 @app.route( "/documentation" )
 def documentation():
     logging.debug( "/documentation" )
-    #cursor = connect()
     
-    # TODO should be read from config
-    host = "datasets.socialhistory.org"     # with slava pythons
-    #host = "data.socialhistory.org"        # virtualenv python273
-    logging.debug( "host: %s" % host )
+    configparser   = get_configparser()
+    dataverse_root = configparser.get( 'config', "dataverse_root" )
+    api_root       = configparser.get( 'config', "api_root" )
+    ristatkey      = configparser.get( 'config', "ristatkey" )
+    ristatdocs     = configparser.get( 'config', "hdl_documentation" )
     
-    configuration = Configuration()
-    ristatkey = configuration.config[ "ristatkey" ]
+    dataverse_root = "datasets.socialhistory.org"
+    logging.debug( "dataverse_root: %s" % dataverse_root )
     logging.debug( "ristatkey: %s" % ristatkey )
     
-    connection = Connection( host, ristatkey )
+    connection = Connection( dataverse_root, ristatkey )
     dataverse = connection.get_dataverse( 'RISTAT' )
+    
     settings = DataFilter( request.args )
     papers = []
     
-    logging.debug( "request.args:" )
-    logging.debug( request.args )
-    logging.debug( "settings:" )
-    logging.debug( settings )
+    logging.debug( "request.args: %s" % request.args )
+    logging.debug( "settings: %s" % settings )
     
     datatype = ""
     try:
@@ -1943,15 +1949,16 @@ def documentation():
     
     for item in dataverse.get_contents():
         handle = str( item[ 'protocol' ] ) + ':' + str( item[ 'authority' ] ) + "/" + str( item[ 'identifier' ] )
-        if handle == configuration.config[ 'ristatdocs' ]:
+        if handle == ristatdocs:
             datasetid = item[ 'id' ]
-            url = "https://" + str( host ) + "/api/datasets/" + str( datasetid ) + "/?&key=" + str( configuration.config[ 'ristatkey' ] )
+            url = "http://" + dataverse_root + "/api/datasets/" + str( datasetid ) + "/?&key=" + str( ristatkey )
+            logging.debug( "url: %s" % url )
             dataframe = loadjson( url )
             for files in dataframe[ "data" ][ "latestVersion" ][ "files" ]:
                 paperitem = {}
                 paperitem[ 'id' ] = str( files[ 'datafile' ][ 'id' ] )
                 paperitem[ 'name' ] = str( files[ 'datafile' ][ 'name' ] )
-                paperitem[ 'url' ] = "http://data.sandbox.socialhistoryservices.org/service/download?id=%s" % paperitem[ 'id' ]
+                paperitem[ 'url' ] = "%s/service/download?id=%s" % ( api_root, paperitem[ 'id' ] )
                 logging.debug( "paperitem: %s" % paperitem )
                 
                 name = str( files[ 'datafile' ][ 'name' ] )
@@ -2120,24 +2127,6 @@ def maps():
     
     return Response( json_response, mimetype = "application/json; charset=utf-8" )
 
-
-"""
-@app.route('/')                 def test():
-@app.route("/export")           def export():
-@app.route("/topics")           def topics():
-@app.route("/vocab")            def vocab():
-@app.route("/aggregation")      def aggregation():
-@app.route("/download")         def download():
-@app.route("/documentation")    def documentation():
-@app.route("/histclasses")      def histclasses():
-@app.route("/classes")          def classes():
-@app.route("/years")            def years():
-@app.route("/regions")          def regions():
-@app.route("/data")             def data():
-@app.route("/translate")        def translate():
-@app.route("/filter")           def login(settings=''):     # FL filter -> login ?
-@app.route("/maps")             def maps():
-"""
 
 if __name__ == '__main__':
     app.run()
