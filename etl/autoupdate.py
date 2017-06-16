@@ -941,6 +941,7 @@ def topic_counts( configparser ):
 
 
 def load_vocab( vocab_fname, vocab, pos_rus, pos_eng ):
+    # if pos_extar is not None, it is needed to make the keys and/or values unique
     handle_name = "hdl_vocabularies"
     tmp_dir = configparser.get( "config", "tmppath" )
     vocab_dir = os.path.join( tmp_dir, "dataverse", "vocab/csv", handle_name )
@@ -957,14 +958,38 @@ def load_vocab( vocab_fname, vocab, pos_rus, pos_eng ):
             pass        # skip header
         else:
             parts = csv_line.split( '|' )
-            rus = parts[ pos_rus ]
-            eng = parts[ pos_eng ].strip()        # zap '\n' another?
+            rus = parts[ pos_rus ].strip()
+            eng = parts[ pos_eng ].strip()
             
-            if vocab_fname == "ERRHS_Vocabulary_modclasses.csv":
-                logging.debug( "%s -> %s" % ( rus, eng ) )
+            if vocab_fname == "ERRHS_Vocabulary_units.csv":
+                logging.debug( "rus: %s, eng: %s" % ( rus, eng ) )
+                rus_ = rus
+                eng_ = eng
             
-            vocab[ rus ] = eng
-        
+            elif vocab_fname == "ERRHS_Vocabulary_regions.csv":
+                terr = parts[ 0 ].strip()
+                rus_ = str( { "rus" : rus, "terr" : terr } )
+                eng_ = str( { "eng" : eng, "terr" : terr } )
+            
+            elif vocab_fname == "ERRHS_Vocabulary_histclasses.csv":
+                byear = parts[ 2 ].strip()
+                dtype = parts[ 3 ].strip()
+                rus_ = str( { "rus" : rus, "byear" : byear, "dtype" : dtype } )
+                eng_ = str( { "eng" : eng, "byear" : byear, "dtype" : dtype } )
+            
+            elif vocab_fname == "ERRHS_Vocabulary_modclasses.csv":
+                dtype = parts[ 2 ][ 4: ].strip()
+                rus_ = str( { "rus" : rus, "dtype " : dtype  } )
+                eng_ = str( { "eng" : eng, "dtype " : dtype  } )
+            
+            logging.debug( "rus_: %s, eng_: %s" % ( rus_, eng_ ) )
+            
+            try:
+                vocab[ rus_ ] = eng_
+            except:
+                type, value, tb = sys.exc_info()
+                logging.error( "EXCEPTION %s" % value )
+                
         nline += 1
     
     vocab_file.close()
@@ -978,17 +1003,13 @@ def translate_csv( configparser, handle_name ):
     logging.info( "translate_csv()" )
     logging.info( "translating csv documents for handle name %s ..." % handle_name )
     
-    #vocab_regions = bidict()       # duplicate values
-    vocab_regions = dict()
-    vocab_regions = load_vocab( "ERRHS_Vocabulary_regions.csv", vocab_regions, 1, 2 )
-    
     vocab_units = bidict()
     vocab_units = load_vocab( "ERRHS_Vocabulary_units.csv", vocab_units, 0, 1 )
-    #logging.debug( vocab_units[ "человек" ] )
-    #logging.debug( vocab_units.inv[ "persons" ] )
     
-    #vocab_histclasses = bidict()    # duplicate values
-    vocab_histclasses = dict()
+    vocab_regions = bidict()
+    vocab_regions = load_vocab( "ERRHS_Vocabulary_regions.csv", vocab_regions, 1, 2 )
+    
+    vocab_histclasses = bidict()
     vocab_histclasses = load_vocab( "ERRHS_Vocabulary_histclasses.csv", vocab_histclasses, 0, 1 )
     
     vocab_modclasses = bidict()
@@ -1092,20 +1113,20 @@ def format_secs( seconds ):
 
 
 if __name__ == "__main__":
-    DO_DOCUMENTATION = True     # documentation: dataverse  => local_disk
-    DO_VOCABULARY    = True     # vocabulary: dataverse  => mongodb
-    DO_RETRIEVE      = True     # ERRHS data: dataverse  => local_disk, xlsx -> csv
-    DO_POSTGRES      = True     # ERRHS data: local_disk => postgresql, csv -> table
-    DO_MONGODB       = True     # ERRHS data: postgresql => mongodb
-    DO_TRANSLATE     = False     # translate Russian csv files to English variants
+    DO_DOCUMENTATION = False     # documentation: dataverse  => local_disk
+    DO_VOCABULARY    = False     # vocabulary: dataverse  => mongodb
+    DO_RETRIEVE      = False     # ERRHS data: dataverse  => local_disk, xlsx -> csv
+    DO_POSTGRES      = False     # ERRHS data: local_disk => postgresql, csv -> table
+    DO_MONGODB       = False     # ERRHS data: postgresql => mongodb
+    DO_TRANSLATE     = True     # translate Russian csv files to English variants
     
     #dv_format = ""
     dv_format = "original"  # does not work for ter_code (regions) vocab translations
     
     log_file = True
     
-    #log_level = logging.DEBUG
-    log_level = logging.INFO
+    log_level = logging.DEBUG
+    #log_level = logging.INFO
     #log_level = logging.WARNING
     #log_level = logging.ERROR
     #log_level = logging.CRITICAL
@@ -1150,7 +1171,7 @@ if __name__ == "__main__":
         else:
             to_csv = True       # we get .xlsx
         update_vocabularies( configparser, mongo_client, dv_format, copy_local, to_csv )
-    #"""
+    """
     handle_names = [ 
         "hdl_errhs_population",     # ERRHS_1   39 files
         "hdl_errhs_capital",        # 
@@ -1160,8 +1181,8 @@ if __name__ == "__main__":
         "hdl_errhs_services",       # 
         "hdl_errhs_land"            # ERRHS_7   10 files
     ]
-    #"""
-    #handle_names = [ "hdl_errhs_land" ]
+    """
+    handle_names = [ "hdl_errhs_land" ]
     
     if DO_RETRIEVE:
         copy_local  = True
