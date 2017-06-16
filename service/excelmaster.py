@@ -14,16 +14,18 @@ from datetime import date
 from icu import Locale, Collator
 from openpyxl.cell import get_column_letter
 from pymongo import MongoClient
+from sys import exc_info
 
 
 def preprocessor( datafilter ):
     logging.debug( "preprocessor() datafilter: %s" % datafilter )
     
-    dataset = []
+    qinput    = {}
     lex_lands = {}
-    lands   = {}
+    lands     = {}
+    lang      = ""
     base_year = 0
-    lang    = ""
+    dataset   = []
 
     key = datafilter[ "key" ]
     if key:
@@ -183,6 +185,11 @@ def preprocessor( datafilter ):
 def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header, qinput ):
     logging.debug( "aggregate_dataset() key: %s" % key )
     
+    xlsx_pathname = ""
+    if not os.path.isdir( download_dir ):
+        msg = "download destination was removed"
+        return xlsx_pathname, msg
+
     xlsx_pathname = os.path.abspath( os.path.join( download_dir, xlsx_name ) )
     logging.debug( "full_path: %s" % xlsx_pathname )
     
@@ -218,10 +225,19 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
     logging.debug( "qinput: %s, %s" % ( qinput, type( qinput ) ) )
     for k in qinput:
         logging.debug( "key: %s, value: %s" % ( k, qinput[ k ] ) )
-    ter_code_list = qinput.get( "ter_code" )
+    
+    try:
+        ter_code_list = qinput[ "ter_code" ]
+    except:
+        ter_code_list = []
+    
     logging.debug( "ter_code_list: %s, %s" % ( str( ter_code_list ), type( ter_code_list ) ) )
     
-    level_paths = qinput[ "path" ]
+    try:
+        level_paths = qinput[ "path" ]
+    except:
+        level_paths = []
+    
     logging.debug( "# of level paths: %d" % len( level_paths ) )
     for level_path in level_paths:
         logging.debug( "level path: %s" % level_path )
@@ -524,8 +540,13 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         c = ws_cr.cell( row = 9, column = 0 )
         c.value = "Кесслер Хайс и Маркевич Андрей (%d), Электронный архив Российской исторической статистики, XVIII – XXI вв., [Электронный ресурс] : [сайт]. — Режим доступа: http://ristat.org/" % date.today().year
 
-    wb.save( xlsx_pathname )
+    try:
+        wb.save( xlsx_pathname )
+        msg = None
+    except:
+        type_, value, tb = exc_info()
+        msg = "saving xlsx failed: %s" % value
     
-    return xlsx_pathname
+    return xlsx_pathname, msg
 
 # [eof]

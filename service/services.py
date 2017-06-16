@@ -4,7 +4,7 @@
 VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
-FL-14-Jun-2017 
+FL-16-Jun-2017 
 
 def connect():
 def classcollector( keywords ):
@@ -24,12 +24,12 @@ def translateitem( item, eng_data ):
 def load_vocabulary( vocname ):
 def load_data( cursor, year, datatype, region, debug ):
 def rdfconvertor( url ):
-def get_sql_query( name, value ):
+def get_sql_where( name, value ):
 def loadjson( apiurl ):
 def filecat_subtopic( cursor, datatype, base_year ):
 def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
 def aggregation_1year( qinput, download_key ):
-def cleanup_downloads( download_dir ):
+def cleanup_downloads( download_dir, time_limit ):
 
 @app.route( '/' )                                               def test():
 @app.route( "/export" )                                         def export():
@@ -175,6 +175,8 @@ def classcollector( keywords ):
 def strip_path_list( old_path ):
     logging.debug( "strip_path_list()" )
     # temporary fix until Pieter removes [hist]class5&6 from qinput
+    
+    do_subclasses = False
     new_path = []
     logging.debug( "old path: (%s) %s" % ( type( old_path ), str( old_path ) ) )
     for old_entry in old_path:
@@ -183,17 +185,22 @@ def strip_path_list( old_path ):
         for k in old_entry:
             v = old_entry[ k ]
             #logging.debug( "k: %s, v: %s" % ( k, v ) )
+            if k == "subclasses" and v:     # True
+                del new_entry[ k ]
+                do_subclasses = True
+            
             p = k.find( "class" )
             if p != -1:
                 n = k[ p+5: ]
                 #logging.debug( "n: %s" % n )
                 if n in [ "5", "6" ]:
                     del new_entry[ k ]
+            
         logging.debug( "new entry: %s" % new_entry )
         new_path.append( new_entry )
     logging.debug( "new path: (%s) %s" % ( type( new_path ), str( new_path ) ) )
     
-    return new_path
+    return new_path, do_subclasses
 
 
 
@@ -221,7 +228,7 @@ def json_generator( cursor, json_dataname, data, download_key = None ):
         base_year      = qinput.get( "base_year" )
         
         old_path_list = qinput.get( "path" )
-        path_list = strip_path_list( old_path_list )
+        path_list, do_subclasses = strip_path_list( old_path_list )
         
         logging.debug( "classification : %s" % classification )
         logging.debug( "language       : %s" % language )
@@ -969,8 +976,8 @@ def rdfconvertor( url ):
 
 
 
-def get_sql_query( name, value ):
-    logging.debug( "get_sql_query() name: %s, value: %s" % ( name, value ) )
+def get_sql_where( name, value ):
+    logging.debug( "get_sql_where() name: %s, value: %s" % ( name, value ) )
     
     sql_query = ''
     result = re.match( "\[(.+)\]", value )
@@ -986,7 +993,7 @@ def get_sql_query( name, value ):
     else:
         sql_query = "%s = '%s'" % ( name, value )
     
-    logging.debug( "sql_query: %s" % sql_query )
+    logging.debug( "sql_where: %s" % sql_query )
     return sql_query
 
 
@@ -1140,8 +1147,8 @@ def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
 
 
 
-def aggregation_1year( qinput, download_key ):
-    logging.debug( "aggregation_1year() download_key: %s" % download_key )
+def aggregation_1year( qinput, do_subclasses, download_key ):
+    logging.debug( "aggregation_1year() do_subclasses: %s, download_key: %s" % ( do_subclasses, download_key ) )
     logging.debug( "qinput %s" % str( qinput ) )
     
     thisyear = ''
@@ -1164,15 +1171,18 @@ def aggregation_1year( qinput, download_key ):
             else:
                 logging.debug( "key: %s, value: %s" % ( key, value ) )
     except:
-        type, value, tb = exc_info()
-        logging.debug( "failed: %s" % value )
-        logging.debug( "no request.data" )
-        return '{}'
+        type_, value, tb = exc_info()
+        logging.debug( "failed, no request.data: %s" % value )
+        msg = "failed: %s" % value
+        return str( { "msg": "%s" % msg } )
+    
+    classification = qinput[ "classification" ]
+    logging.debug( "classification: %s" % classification )
+    
+    forbidden = [ "classification", "action", "language", "path" ]
     
     eng_data = {}
     cursor = connect()
-    forbidden = [ "classification", "action", "language", "path" ]
-    
     if cursor:
         if qinput.get( 'language' ) == 'en':
             # translate input english term to russian sql terms
@@ -1199,8 +1209,8 @@ def aggregation_1year( qinput, download_key ):
             for item in units:
                 eng_data[ item ] = units[ item ]
     
-    known_fields = {}
     sql = {}
+    known_fields = {}
     sql[ "condition" ] = ''
     sql[ "order_by" ]  = ''
     sql[ "group_by" ]  = ''
@@ -1216,7 +1226,7 @@ def aggregation_1year( qinput, download_key ):
                     value = eng_data[ value ]
                     logging.debug( "eng_data name: %s, value: %s" % ( name, value ) )
                 
-                sql[ 'where' ] += "%s AND " % get_sql_query( name, value )
+                sql[ 'where' ] += "%s AND " % get_sql_where( name, value )
                 sql[ 'condition' ] += "%s, " % name
                 known_fields[ name ] = value
             
@@ -1229,10 +1239,10 @@ def aggregation_1year( qinput, download_key ):
                     
                     for xkey in path:
                         value = path[ xkey ]
-                        
                         # need to retain '.' in classes, but not in summing
                         if value == '.':
                             value = 0
+                        
                         clear_path[ xkey ] = value
                         
                     for xkey in clear_path:
@@ -1270,49 +1280,57 @@ def aggregation_1year( qinput, download_key ):
     logging.debug( "where:     %s" % str( sql[ "where" ]     ) )
     logging.debug( "internal:  %s" % str( sql[ "internal" ]  ) )
 
+    extra_classes = []
+    if do_subclasses:
+        if classification == "historical":
+            extra_classes = [ "histclass5", "histclass6", "histclass7", "histclass8", "histclass9", "histclass10" ]
+        elif classification == "modern":
+            extra_classes = [ "class5", "class6", "class7", "class8", "class9", "class10" ]
+        logging.debug( "extra_classes: %s" % extra_classes )
+
     sql_query  = "SELECT COUNT(*) AS datarecords" 
     sql_query += ", SUM(CAST(value AS DOUBLE PRECISION)) AS total"
     sql_query += ", COUNT(*) AS count"
     sql_query += ", COUNT(*) - COUNT(value) AS data_active"
-    sql_query += ", value_unit, ter_code"
+    #sql_query += ", value_unit, ter_code"      # ter_code from 'where'
+    sql_query += ", value_unit"
+    logging.debug( "sql_query 0: %s" % sql_query )
 
-    classification = qinput[ "classification" ]
-    logging.debug( "classification: %s" % classification )
-
+    if len( extra_classes ) > 0:
+        for field in extra_classes:
+            sql_query += ", %s" % field
+        logging.debug( "sql_query +: %s" % sql_query )
+    
     if sql[ 'where' ]:
         logging.debug( "where: %s" % sql[ "where" ] )
         sql_query += ", %s" % sql[ 'condition' ]
         sql_query  = sql_query[ :-2 ]
-        if classification == "historical":
-            sql_query += ", histclass5, histclass6, histclass7, histclass8, histclass9, histclass10"
-        elif classification == "modern":
-            sql_query += ", class5, class6, class7, class8, class9, class10"
         
         sql_query += " FROM russianrepository WHERE %s" % sql[ 'where' ]
         sql_query  = sql_query[ :-4 ]
-        
-    if sql[ 'internal' ]:
-        logging.debug( "internal: %s" % sql[ "internal" ] )
-        sql_query += " AND (%s) " % sql[ 'internal' ]
     
     sql_query += " AND value <> '.'"            # suppress a 'lone' "optional point", used in the table to flag missing data
     #sql_query += " AND value ~ '^\d+$'"         # regexp (~) to require that value only contains digits
     #sql_query += " AND value ~ '^\d*\.?\d*$'"
     # plus an optional single . for floating point values, and plus an optional leading sign
     sql_query += " AND value ~ '^[-+]?\d*\.?\d*$'"
+    logging.debug( "sql_query +: %s" % sql_query )
     
-    sql[ "group_by" ] = " GROUP BY value_unit, ter_code, "
+    if sql[ 'internal' ]:
+        logging.debug( "internal: %s" % sql[ "internal" ] )
+        sql_query += " AND (%s) " % sql[ 'internal' ]
+        logging.debug( "sql_query +: %s" % sql_query )
+    
+    sql[ "group_by" ] = " GROUP BY value_unit, ter_code"
     
     for field in known_fields:
-        sql[ "group_by" ] += "%s," % field
+        sql[ "group_by" ] += ", %s" % field
+    for field in extra_classes:
+        sql[ "group_by" ] += ", %s" % field
     
-    sql[ "group_by" ] = sql[ "group_by" ][ :-1 ]
     logging.debug( "group_by: %s" % sql[ "group_by" ] )
     sql_query += sql[ "group_by" ]
-    if classification == "historical":
-        sql_query += ", histclass5, histclass6, histclass7, histclass8, histclass9, histclass10"
-    elif classification == "modern":
-        sql_query += ", class5, class6, class7, class8, class9, class10"
+    logging.debug( "sql_query +: %s" % sql_query )
     
     # ordering by the db: applied to the russian contents, so the ordering of 
     # the english translation will not be perfect, but at least grouped. 
@@ -1333,14 +1351,14 @@ def aggregation_1year( qinput, download_key ):
         if sql[ "order_by" ] != " ORDER BY ":
             sql[ "order_by" ] += ", "
         sql[ "order_by" ] += "%s" % iclass
+    
+    for field in extra_classes:
+        sql[ "order_by" ] += ", %s" % field
+    
     logging.debug( "order_by: %s" % sql[ "order_by" ] )
     sql_query += " %s" % sql[ "order_by" ]
-    if classification == "historical":
-        sql_query += ", histclass5, histclass6, histclass7, histclass8, histclass9, histclass10"
-    elif classification == "modern":
-        sql_query += ", class5, class6, class7, class8, class9, class10"
     
-    logging.debug( "sql_query: %s" % sql_query )
+    logging.debug( "sql_query complete: %s" % sql_query )
 
     if sql_query:
         cursor.execute( sql_query )
@@ -1550,12 +1568,7 @@ def filecatalogdata():
     if not os.path.exists( top_download_dir ):
         os.makedirs( top_download_dir )
     else:
-        seconds_per_day = 60 * 60 * 24
-        time_limit = seconds_per_day        # 1 day
-        
-        #configparser.get( "config", "time_limit" )
         logging.debug( "time_limit: %d" % time_limit )
-        
         cleanup_downloads( top_download_dir, time_limit )   # remove too old downloads
     
     random_key = str( "%05.8f" % random.random() )          # used as base name for zip download
@@ -1663,8 +1676,14 @@ def vocab():
 @app.route( "/aggregation", methods = ["POST", "GET" ] )
 def aggregation():
     logging.debug( "/aggregation" )
-    qinput = simplejson.loads( request.data )
-    logging.debug( qinput )
+    logging.debug( request.data )
+    try:
+        qinput = simplejson.loads( request.data )
+        logging.debug( qinput )
+    except:
+        type_, value, tb = exc_info()
+        msg = "failed: %s" % value
+        return str( { "msg": "%s" % msg } )
     
     language = qinput.get( "language" )
     classification = qinput.get( "classification" )
@@ -1673,8 +1692,8 @@ def aggregation():
     
     # strip [hist]class5 & 6 from path (no longer needed)
     old_path = qinput.get( "path" )
-    new_path = strip_path_list( old_path )
-    qinput[ "path" ] = new_path     # replace
+    new_path, do_subclasses = strip_path_list( old_path )
+    qinput[ "path" ] = new_path                 # replace
     
     download_key = str( "%05.8f" % random.random() )  # used as base name for zip download
     # put some additional info in the key
@@ -1692,8 +1711,7 @@ def aggregation():
     
     if classification == "historical":
         # historical has base_year in qinput
-        #json_data = aggregation_1year( qinput, download_key )
-        json_list = aggregation_1year( qinput, download_key )
+        json_list = aggregation_1year( qinput, do_subclasses, download_key )
         json_string = json_cache( json_list, language, "data", download_key, qinput )
         logging.debug( "aggregated json_string: \n%s" % json_string )
         
@@ -1709,9 +1727,7 @@ def aggregation():
         for base_year in base_years:
             logging.debug( "base_year: %s" % base_year )
             qinput[ "base_year" ] = base_year   # add base_year to qinput
-            #json_data = aggregation_1year( qinput, download_key )
-            #json_datas = merge( json_datas, json_data )
-            json_list1 = aggregation_1year( qinput, download_key )
+            json_list1 = aggregation_1year( qinput, do_subclasses, download_key )
             logging.debug( "json_list1: \n%s" % str( json_list1 ) )
             json_list.extend( json_list1 )
             
@@ -1807,10 +1823,11 @@ def download():
         zipping = True
         logging.debug( "download() zip: %s" % zipping )
     
-        tmp_dir = configparser.get( 'config', 'tmppath' )
+        tmp_dir    = configparser.get( 'config', 'tmppath' )
+        time_limit = configparser.get( "config", "time_limit" )
         top_download_dir = os.path.join( tmp_dir, "download" )
         logging.debug( "top_download_dir: %s" % top_download_dir )
-        cleanup_downloads( top_download_dir )                   # remove too old downloads
+        cleanup_downloads( top_download_dir, time_limit )       # remove too old downloads
         download_dir = os.path.join( top_download_dir, key )    # current download dir
     
         logging.debug( "download() key: %s" % key )
@@ -1820,9 +1837,13 @@ def download():
         ( lex_lands, vocab_regs_terms, sheet_header, qinput ) = preprocessor( datafilter )
         
         xlsx_name = "%s.xlsx" % key
-        filename = aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header, qinput )
-        logging.debug( "filename: %s" % filename )
-        with open( filename, 'rb' ) as f:
+        pathname, msg = aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header, qinput )
+        if os.path.isfile( pathname ):
+            logging.debug( "pathname: %s" % pathname )
+        else:
+            return str( { "msg": "%s" % msg } )
+        
+        with open( pathname, 'rb' ) as f:
             datacontents = f.read()
         
         if not zipping:
@@ -1833,11 +1854,11 @@ def download():
             """
             https://unix.stackexchange.com/questions/14705/the-zip-formats-external-file-attribute
             The high 16 bits of the external file attributes seem to be used for OS-specific permissions. The Unix values are the same as on traditional unix implementations. Other OSes use other values. Information about the formats used in a variety of different OSes can be found in the Info-ZIP source code (download or e.g in debian apt-get source [zip or unzip]) - relevant files are zipinfo.c in unzip, and the platform-specific files in zip.
-
+            
             These are conventionally defined in octal (base 8); this is represented in C and python by prefixing the number with a 0.
-
+            
             These values can all be found in <sys/stat.h> - link to 4.4BSD version. These are not in the POSIX standard (which defines test macros instead); but originate from AT&T Unix and BSD. (in GNU libc / Linux, the values themselves are defined as __S_IFDIR etc in bits/stat.h, though the kernel header might be easier to read - the values are all the same pretty much everywhere.)
-
+            
             #define S_IFIFO  0010000  /* named pipe (fifo) */
             #define S_IFCHR  0020000  /* character special */
             #define S_IFDIR  0040000  /* directory */
@@ -1845,9 +1866,9 @@ def download():
             #define S_IFREG  0100000  /* regular */
             #define S_IFLNK  0120000  /* symbolic link */
             #define S_IFSOCK 0140000  /* socket */
-
+            
             And of course, the other 12 bits are for the permissions and setuid/setgid/sticky bits, the same as for chmod:
-
+            
             #define S_ISUID 0004000 /* set user id on execution */
             #define S_ISGID 0002000 /* set group id on execution */
             #define S_ISTXT 0001000 /* sticky bit */
@@ -1864,11 +1885,11 @@ def download():
             #define S_IWOTH 0000002 /* W for other */
             #define S_IXOTH 0000001 /* X for other */
             #define S_ISVTX 0001000 /* save swapped text even after use */
-
+            
             As a historical note, the reason 0100000 is for regular files instead of 0 is that in very early versions of unix, 0 was for 'small' files (these did not use indirect blocks in the filesystem) and the high bit of the mode flag was set for 'large' files which would use indirect blocks. The other two types using this bit were added in later unix-derived OSes, after the filesystem had changed.
-
+            
             So, to wrap up, the overall layout of the extended attributes field for Unix is
-
+            
             TTTTsstrwxrwxrwx0000000000ADVSHR
             ^^^^____________________________ file type as explained above
                 ^^^_________________________ setuid, setgid, sticky
@@ -1906,7 +1927,7 @@ def download():
             dataset = json.dumps( item, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
             return Response( dataset, mimetype = "application/json; charset=utf-8" )
     else:
-        return "Argument 'key' not found"
+        return str( { "msg" : "Argument 'key' not found" } )
 
 
 
