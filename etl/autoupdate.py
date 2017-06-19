@@ -59,6 +59,7 @@ import StringIO
 
 from bidict import bidict
 from pymongo import MongoClient
+
 from time import ctime, time
 from vocab import vocabulary, classupdate
 
@@ -111,7 +112,7 @@ def empty_dir( dst_dir ):
                 try:
                     os.unlink( file_path )
                 except:
-                    type, value, tb = sys.exc_info()
+                    type_, value, tb = sys.exc_info()
                     logging.error( "%s" % value )
         
         if sdirs is not None:
@@ -126,7 +127,7 @@ def empty_dir( dst_dir ):
                 try:
                     shutil.rmtree( dir_path )
                 except:
-                    type, value, tb = sys.exc_info()
+                    type_, value, tb = sys.exc_info()
                     logging.error( "%s" % value )
         
         mtime = os.path.getmtime( root )
@@ -135,7 +136,7 @@ def empty_dir( dst_dir ):
         try:
             shutil.rmtree( root )
         except:
-            type, value, tb = sys.exc_info()
+            type_, value, tb = sys.exc_info()
             logging.error( "%s" % value )
 
 
@@ -963,32 +964,47 @@ def load_vocab( vocab_fname, vocab, pos_rus, pos_eng ):
             
             if vocab_fname == "ERRHS_Vocabulary_units.csv":
                 logging.debug( "rus: %s, eng: %s" % ( rus, eng ) )
-                rus_ = rus
-                eng_ = eng
+                rus_d = { "rus" : rus } 
+                eng_d = { "eng" : eng }
             
             elif vocab_fname == "ERRHS_Vocabulary_regions.csv":
                 terr = parts[ 0 ].strip()
-                rus_ = str( { "rus" : rus, "terr" : terr } )
-                eng_ = str( { "eng" : eng, "terr" : terr } )
+                rus_d = { "rus" : rus, "terr" : terr }
+                eng_d = { "eng" : eng, "terr" : terr }
             
             elif vocab_fname == "ERRHS_Vocabulary_histclasses.csv":
                 byear = parts[ 2 ].strip()
                 dtype = parts[ 3 ].strip()
-                rus_ = str( { "rus" : rus, "byear" : byear, "dtype" : dtype } )
-                eng_ = str( { "eng" : eng, "byear" : byear, "dtype" : dtype } )
+                rus_d = { "rus" : rus, "byear" : byear, "dtype" : dtype }
+                eng_d = { "eng" : eng, "byear" : byear, "dtype" : dtype }
             
             elif vocab_fname == "ERRHS_Vocabulary_modclasses.csv":
                 dtype = parts[ 2 ][ 4: ].strip()
-                rus_ = str( { "rus" : rus, "dtype " : dtype  } )
-                eng_ = str( { "eng" : eng, "dtype " : dtype  } )
+                rus_d = { "rus" : rus, "dtype " : dtype  }
+                eng_d = { "eng" : eng, "dtype " : dtype  }
+            else:
+                continue
             
-            logging.debug( "rus_: %s, eng_: %s" % ( rus_, eng_ ) )
+            logging.debug( "rus: %s, eng: %s" % ( rus_d[ "rus" ], eng_d[ "eng" ] ) )
+            
+            rus_s = json.dumps( rus_d )
+            eng_s = json.dumps( eng_d )
+            
+            """
+            # test
+            rus_d = json.loads( rus_s )
+            eng_d = json.loads( eng_s )
+            logging.debug( "%s rus_d: %s, %s eng_d: %s" % ( type( rus_d, ), rus_d, type( eng_d ), eng_d ) )
+            logging.debug( "rus: %s, eng: %s" % ( rus_d[ "rus" ], eng_d[ "eng" ] ) )
+            """
             
             try:
-                vocab[ rus_ ] = eng_
+                vocab[ rus_s ] = eng_s
             except:
-                type, value, tb = sys.exc_info()
-                logging.error( "EXCEPTION %s" % value )
+                type_, value, tb = sys.exc_info()
+                msg = "%s: %s %s" % ( type_, vocab_fname, value )
+                logging.error( msg )
+                sys.stderr.write( "%s\n" % msg )
                 
         nline += 1
     
@@ -1017,7 +1033,11 @@ def translate_csv( configparser, handle_name ):
     
     tmp_dir = configparser.get( "config", "tmppath" )
     csv_dir = os.path.join( tmp_dir, "dataverse", "csv", handle_name )
-    logging.info( "csv_dir: %s" % csv_dir )
+    if os.path.exists( csv_dir ):
+        logging.info( "csv_dir: %s" % csv_dir )
+    else:
+        logging.info( "not found, skip: csv_dir: %s" % csv_dir )
+        return
     
     eng_dir = os.path.join( tmp_dir, "dataverse", "csv-en", handle_name )
     logging.info( "eng_dir: %s" % eng_dir )
@@ -1052,12 +1072,15 @@ def translate_csv( configparser, handle_name ):
         file_rus = open( csv_path, "r" )
         file_eng = open( eng_path, "w" )
         
+        not_found = []
         nline = 0
         for csv_line in iter( file_rus ):
-            logging.debug( csv_line )
+            csv_line = csv_line.strip()
+            logging.debug( "csv_line: %s" % csv_line )
             eng_cols = []
             if nline == 0:
                 header = csv_line.split( '|' )
+                logging.debug( header )
                 file_eng.write( csv_line )      # unchanged
             else:
                 rus_cols = csv_line.split( '|' )
@@ -1066,33 +1089,69 @@ def translate_csv( configparser, handle_name ):
                     name = header[ c ]
                     rus_str = rus_cols[ c ]
                     
+                    vocab = None
                     if name in units:
-                        eng_str = vocab_units[ rus_str ]
+                        vocab = vocab_units
+                        rus_d = { "rus" : rus_str }
                     elif name in regions:
-                        eng_str = vocab_regions.get( rus_str )
+                        vocab = vocab_regions
+                        i_terr = header.index( "TER_CODE" )
+                        terr = rus_cols[ i_terr ]
+                        rus_d = { "rus" : rus_str, "terr" : terr }
                     elif name in histclasses:
-                        eng_str = vocab_histclasses.get( rus_str )
+                        i_byear = header.index( "BASE_YEAR" )
+                        i_dtype = header.index( "DATATYPE" )
+                        byear = rus_cols[ i_byear ]
+                        dtype = rus_cols[ i_dtype ]
+                        rus_d = rus_d = { "rus" : rus_str, "byear" : byear, "dtype" : dtype }
+                        vocab = vocab_histclasses
                     elif name in modclasses:
-                        eng_str = vocab_modclasses.get( rus_str )
+                        dtype = rus_cols[ i_dtype ]
+                        rus_d = rus_d = { "rus" : rus_str, "dtype " : dtype  }
+                        vocab = vocab_modclasses
+                    
+                    
+                    if rus_str in [ "", ".", ". " ]:
+                        eng_str = rus_str
+                    elif vocab is not None:
+                        logging.debug( "translate: %s" % rus_str )
+                        rus_key = json.dumps( rus_d )
+                        try:
+                            eng_val = vocab[ rus_key ]
+                            eng_d = json.loads( eng_val )
+                            eng_str = eng_d[ "eng" ]
+                            logging.debug( "translate: %s %s => %s" % ( name, rus_str, eng_str ) )
+                        except:
+                            type_, value, tb = sys.exc_info()
+                            msg = "%s: %s" % ( type_, value )
+                            logging.error( msg )
+                            sys.stderr.write( "%s\n" % msg )
+                            #sys.exit( 1 )
+                            eng_str = rus_str
                     else:
                         eng_str = rus_str
                     
                     if eng_str is None:
-                        logging.debug( "not found: %s" % rus_str )
-                        eng_str = "None"
+                        eng_str = rus_str
+                        msg = "Not found in %s: translation for rus_str: %s" % ( csv_name, rus_str )
+                        if msg not in not_found:
+                            not_found.append( msg )
                     
                     eng_cols.append( eng_str )
                 
                 eng_line = '|'.join( eng_cols )
                 logging.debug( eng_line )
-                file_eng.write( eng_line )
+                file_eng.write( "%s\n" % eng_line )
                 
             nline += 1
         
+        not_found = list( set( not_found ) )
+        for item in not_found:
+            logging.debug( item )
+            sys.stderr.write( "%s\n" % item )
+        
         file_rus.close()
         file_eng.close()
-        
-        break
 
 
 
@@ -1113,6 +1172,14 @@ def format_secs( seconds ):
 
 
 if __name__ == "__main__":
+    """
+    DO_DOCUMENTATION = True     # documentation: dataverse  => local_disk
+    DO_VOCABULARY    = True     # vocabulary: dataverse  => mongodb
+    DO_RETRIEVE      = True     # ERRHS data: dataverse  => local_disk, xlsx -> csv
+    DO_POSTGRES      = True     # ERRHS data: local_disk => postgresql, csv -> table
+    DO_MONGODB       = True     # ERRHS data: postgresql => mongodb
+    DO_TRANSLATE     = False     # translate Russian csv files to English variants
+    """
     DO_DOCUMENTATION = False     # documentation: dataverse  => local_disk
     DO_VOCABULARY    = False     # vocabulary: dataverse  => mongodb
     DO_RETRIEVE      = False     # ERRHS data: dataverse  => local_disk, xlsx -> csv
@@ -1171,7 +1238,7 @@ if __name__ == "__main__":
         else:
             to_csv = True       # we get .xlsx
         update_vocabularies( configparser, mongo_client, dv_format, copy_local, to_csv )
-    """
+    #"""
     handle_names = [ 
         "hdl_errhs_population",     # ERRHS_1   39 files
         "hdl_errhs_capital",        # 
@@ -1181,8 +1248,8 @@ if __name__ == "__main__":
         "hdl_errhs_services",       # 
         "hdl_errhs_land"            # ERRHS_7   10 files
     ]
-    """
-    handle_names = [ "hdl_errhs_land" ]
+    #"""
+    #handle_names = [ "hdl_errhs_land" ]
     
     if DO_RETRIEVE:
         copy_local  = True

@@ -4,7 +4,7 @@
 VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
-FL-16-Jun-2017 
+FL-19-Jun-2017 
 
 def connect():
 def classcollector( keywords ):
@@ -1561,7 +1561,7 @@ def filecatalogdata():
         logging.debug( "configparser: %s" % str( configparser ) )
     
     tmp_dir    = configparser.get( "config", "tmppath" )
-    time_limit = configparser.get( "config", "time_limit" )
+    time_limit = int( configparser.get( "config", "time_limit" ) )
     
     top_download_dir = os.path.join( tmp_dir, "download" )
     logging.debug( "top_download_dir: %s" % top_download_dir )
@@ -1598,9 +1598,17 @@ def filecatalogdata():
         
         datatype_maj = int( datatype[ 0 ] )
         handle_name = handle_names[ datatype_maj - 1 ]
-        csv_dir = os.path.join( tmp_dir, "dataverse", "csv", handle_name )
         
-        csv_filename = "ERRHS_%s_data_%s.csv" % ( datatype, base_year )
+        if language == "en":
+            csv_subdir = "csv-en"
+            extra = "-en"
+        else:
+            csv_subdir = "csv"
+            extra = ""
+        csv_dir = os.path.join( tmp_dir, "dataverse", csv_subdir, handle_name )
+        
+        csv_filename = "ERRHS_%s_data_%s%s.csv" % ( datatype, base_year, extra )
+        
         logging.debug( "csv_filename: %s" % csv_filename )
         csv_pathname = os.path.join( csv_dir, csv_filename )
         logging.debug( "csv_pathname: %s" % csv_pathname )
