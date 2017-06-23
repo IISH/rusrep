@@ -15,7 +15,7 @@ FL-03-Mar-2017 Py2/Py3 compatibility: using pandas instead of xlsx2csv to create
 FL-03-Mar-2017 Py2/Py3 compatibility: using future-0.16.0
 FL-27-Mar-2017 Also download documentation files
 FL-17-May-2017 postgresql datasets.topics counts
-FL-14-Jun-2017 latest change
+FL-23-Jun-2017 Translate data files to english
 
 def loadjson( apiurl ):
 def empty_dir( dst_dir ):
@@ -942,6 +942,7 @@ def topic_counts( configparser ):
 
 
 def load_vocab( vocab_fname, vocab, pos_rus, pos_eng ):
+    logging.info( "load_vocab() vocab_fname: %s" % vocab_fname )
     # if pos_extar is not None, it is needed to make the keys and/or values unique
     handle_name = "hdl_vocabularies"
     tmp_dir = configparser.get( "config", "tmppath" )
@@ -962,49 +963,64 @@ def load_vocab( vocab_fname, vocab, pos_rus, pos_eng ):
             rus = parts[ pos_rus ].strip()
             eng = parts[ pos_eng ].strip()
             
-            if vocab_fname == "ERRHS_Vocabulary_units.csv":
-                logging.debug( "rus: %s, eng: %s" % ( rus, eng ) )
-                rus_d = { "rus" : rus } 
-                eng_d = { "eng" : eng }
             
-            elif vocab_fname == "ERRHS_Vocabulary_regions.csv":
+            if vocab_fname == "ERRHS_Vocabulary_regions.csv":
+                # The regions (territorium) vocab is special: 
+                # the original rus terms contain a lot of noise, but the codes 
+                # and eng translations are unique and OK. For both forward and 
+                # inverse lookup the code is the key, and either rus or eng the value. 
                 terr = parts[ 0 ].strip()
-                rus_d = { "rus" : rus, "terr" : terr }
-                eng_d = { "eng" : eng, "terr" : terr }
-            
-            elif vocab_fname == "ERRHS_Vocabulary_histclasses.csv":
-                byear = parts[ 2 ].strip()
-                dtype = parts[ 3 ].strip()
-                rus_d = { "rus" : rus, "byear" : byear, "dtype" : dtype }
-                eng_d = { "eng" : eng, "byear" : byear, "dtype" : dtype }
-            
-            elif vocab_fname == "ERRHS_Vocabulary_modclasses.csv":
-                dtype = parts[ 2 ][ 4: ].strip()
-                rus_d = { "rus" : rus, "dtype " : dtype  }
-                eng_d = { "eng" : eng, "dtype " : dtype  }
+                terr_d = { "terr" : terr }
+                terr_s = json.dumps( terr_d )
+                rus_eng_d = { "rus" : rus, "eng" : eng }
+                logging.debug( "terr: %s, rus_eng: %s %s" % ( terr, rus_eng_d[ "rus" ], rus_eng_d[ "eng" ] ) )
+                rus_eng_s = json.dumps( rus_eng_d )
+                try:
+                    vocab[ terr_s ] = rus_eng_s
+                except:
+                    type_, value, tb = sys.exc_info()
+                    msg = "%s: %s %s" % ( type_, vocab_fname, value )
+                    logging.error( msg )
+                    sys.stderr.write( "%s\n" % msg )
             else:
-                continue
+                if vocab_fname == "ERRHS_Vocabulary_units.csv":
+                    logging.debug( "rus: %s, eng: %s" % ( rus, eng ) )
+                    rus_d = { "rus" : rus } 
+                    eng_d = { "eng" : eng }
+                
+                elif vocab_fname == "ERRHS_Vocabulary_histclasses.csv":
+                    byear = parts[ 2 ].strip()
+                    dtype = parts[ 3 ].strip()
+                    rus_d = { "rus" : rus, "byear" : byear, "dtype" : dtype }
+                    eng_d = { "eng" : eng, "byear" : byear, "dtype" : dtype }
+                
+                elif vocab_fname == "ERRHS_Vocabulary_modclasses.csv":
+                    dtype = parts[ 2 ][ 4: ].strip()
+                    rus_d = { "rus" : rus, "dtype " : dtype  }
+                    eng_d = { "eng" : eng, "dtype " : dtype  }
+                else:
+                    continue
+                
+                logging.debug( "rus: %s, eng: %s" % ( rus_d[ "rus" ], eng_d[ "eng" ] ) )
             
-            logging.debug( "rus: %s, eng: %s" % ( rus_d[ "rus" ], eng_d[ "eng" ] ) )
-            
-            rus_s = json.dumps( rus_d )
-            eng_s = json.dumps( eng_d )
-            
-            """
-            # test
-            rus_d = json.loads( rus_s )
-            eng_d = json.loads( eng_s )
-            logging.debug( "%s rus_d: %s, %s eng_d: %s" % ( type( rus_d, ), rus_d, type( eng_d ), eng_d ) )
-            logging.debug( "rus: %s, eng: %s" % ( rus_d[ "rus" ], eng_d[ "eng" ] ) )
-            """
-            
-            try:
-                vocab[ rus_s ] = eng_s
-            except:
-                type_, value, tb = sys.exc_info()
-                msg = "%s: %s %s" % ( type_, vocab_fname, value )
-                logging.error( msg )
-                sys.stderr.write( "%s\n" % msg )
+                rus_s = json.dumps( rus_d )
+                eng_s = json.dumps( eng_d )
+                
+                """
+                # test
+                rus_d = json.loads( rus_s )
+                eng_d = json.loads( eng_s )
+                logging.debug( "%s rus_d: %s, %s eng_d: %s" % ( type( rus_d, ), rus_d, type( eng_d ), eng_d ) )
+                logging.debug( "rus: %s, eng: %s" % ( rus_d[ "rus" ], eng_d[ "eng" ] ) )
+                """
+                
+                try:
+                    vocab[ rus_s ] = eng_s
+                except:
+                    type_, value, tb = sys.exc_info()
+                    msg = "%s: %s %s" % ( type_, vocab_fname, value )
+                    logging.error( msg )
+                    sys.stderr.write( "%s\n" % msg )
                 
         nline += 1
     
@@ -1022,11 +1038,15 @@ def translate_csv( configparser, handle_name ):
     vocab_units = bidict()
     vocab_units = load_vocab( "ERRHS_Vocabulary_units.csv", vocab_units, 0, 1 )
     
-    vocab_regions = bidict()
+    vocab_regions = dict()      # special, not bidict() !
     vocab_regions = load_vocab( "ERRHS_Vocabulary_regions.csv", vocab_regions, 1, 2 )
     
     vocab_histclasses = bidict()
-    vocab_histclasses = load_vocab( "ERRHS_Vocabulary_histclasses.csv", vocab_histclasses, 0, 1 )
+    vocab_fname = "ERRHS_Vocabulary_histclasses.csv"
+    vocab_histclasses = load_vocab( vocab_fname, vocab_histclasses, 0, 1 )
+    logging.info( "check vocab_fname: %s" % vocab_fname )
+    for key in vocab_histclasses:
+        logging.debug( "key: %s, value: %s" % ( key, vocab_histclasses[ key ] ) )
     
     vocab_modclasses = bidict()
     vocab_modclasses = load_vocab( "ERRHS_Vocabulary_modclasses.csv", vocab_modclasses, 0, 1 )
@@ -1097,37 +1117,56 @@ def translate_csv( configparser, handle_name ):
                         vocab = vocab_regions
                         i_terr = header.index( "TER_CODE" )
                         terr = rus_cols[ i_terr ]
-                        rus_d = { "rus" : rus_str, "terr" : terr }
+                        terr_d = { "terr" : terr }
                     elif name in histclasses:
+                        vocab = vocab_histclasses
                         i_byear = header.index( "BASE_YEAR" )
                         i_dtype = header.index( "DATATYPE" )
                         byear = rus_cols[ i_byear ]
                         dtype = rus_cols[ i_dtype ]
                         rus_d = rus_d = { "rus" : rus_str, "byear" : byear, "dtype" : dtype }
-                        vocab = vocab_histclasses
                     elif name in modclasses:
+                        vocab = vocab_modclasses
                         dtype = rus_cols[ i_dtype ]
                         rus_d = rus_d = { "rus" : rus_str, "dtype " : dtype  }
-                        vocab = vocab_modclasses
-                    
                     
                     if rus_str in [ "", ".", ". " ]:
                         eng_str = rus_str
+                    elif rus_str in [ "test1", "test2", "test3", "test4", "test5", "test6", "test7", "test8", "test9", "test10" ]:
+                        eng_str = rus_str
+                    elif rus_str.isdigit():     # only digits
+                        eng_str = rus_str
                     elif vocab is not None:
-                        logging.debug( "translate: %s" % rus_str )
-                        rus_key = json.dumps( rus_d )
-                        try:
-                            eng_val = vocab[ rus_key ]
-                            eng_d = json.loads( eng_val )
-                            eng_str = eng_d[ "eng" ]
-                            logging.debug( "translate: %s %s => %s" % ( name, rus_str, eng_str ) )
-                        except:
-                            type_, value, tb = sys.exc_info()
-                            msg = "%s: %s" % ( type_, value )
-                            logging.error( msg )
-                            sys.stderr.write( "%s\n" % msg )
-                            #sys.exit( 1 )
-                            eng_str = rus_str
+                        if name in regions:
+                            terr_s = json.dumps( terr_d )
+                            logging.debug( "translate: %s %s, key: %s" % ( name, rus_str, terr_s ) )
+                            try:
+                                rus_eng_val = vocab[ terr_s ]
+                                rus_eng_d = json.loads( rus_eng_val )
+                                eng_str = rus_eng_d[ "eng" ]
+                                logging.debug( "translate: %s %s => %s" % ( name, rus_str, eng_str ) )
+                            except:
+                                type_, value, tb = sys.exc_info()
+                                msg = "%s: %s" % ( type_, value )
+                                logging.error( msg )
+                                sys.stderr.write( "%s\n" % msg )
+                                sys.exit( 1 )
+                                eng_str = rus_str
+                        else:
+                            rus_key = json.dumps( rus_d )
+                            logging.debug( "translate: %s %s, key: %s" % ( name, rus_str, rus_key ) )
+                            try:
+                                eng_val = vocab[ rus_key ]
+                                eng_d = json.loads( eng_val )
+                                eng_str = eng_d[ "eng" ]
+                                logging.debug( "translate: %s %s => %s" % ( name, rus_str, eng_str ) )
+                            except:
+                                type_, value, tb = sys.exc_info()
+                                msg = "%s: %s" % ( type_, value )
+                                logging.error( msg )
+                                sys.stderr.write( "%s\n" % msg )
+                                sys.exit( 1 )
+                                eng_str = rus_str
                     else:
                         eng_str = rus_str
                     
@@ -1172,13 +1211,14 @@ def format_secs( seconds ):
 
 
 if __name__ == "__main__":
-    """
+    #"""
     DO_DOCUMENTATION = True     # documentation: dataverse  => local_disk
     DO_VOCABULARY    = True     # vocabulary: dataverse  => mongodb
     DO_RETRIEVE      = True     # ERRHS data: dataverse  => local_disk, xlsx -> csv
     DO_POSTGRES      = True     # ERRHS data: local_disk => postgresql, csv -> table
     DO_MONGODB       = True     # ERRHS data: postgresql => mongodb
-    DO_TRANSLATE     = False     # translate Russian csv files to English variants
+    DO_TRANSLATE     = True     # translate Russian csv files to English variants
+    #"""
     """
     DO_DOCUMENTATION = False     # documentation: dataverse  => local_disk
     DO_VOCABULARY    = False     # vocabulary: dataverse  => mongodb
@@ -1186,14 +1226,15 @@ if __name__ == "__main__":
     DO_POSTGRES      = False     # ERRHS data: local_disk => postgresql, csv -> table
     DO_MONGODB       = False     # ERRHS data: postgresql => mongodb
     DO_TRANSLATE     = True     # translate Russian csv files to English variants
+    """
     
     #dv_format = ""
     dv_format = "original"  # does not work for ter_code (regions) vocab translations
     
     log_file = True
     
-    log_level = logging.DEBUG
-    #log_level = logging.INFO
+    #log_level = logging.DEBUG
+    log_level = logging.INFO
     #log_level = logging.WARNING
     #log_level = logging.ERROR
     #log_level = logging.CRITICAL
