@@ -4,7 +4,7 @@
 VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
-FL-19-Jun-2017 
+FL-26-Jun-2017 
 
 def connect():
 def classcollector( keywords ):
@@ -30,6 +30,7 @@ def filecat_subtopic( cursor, datatype, base_year ):
 def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
 def aggregation_1year( qinput, download_key ):
 def cleanup_downloads( download_dir, time_limit ):
+def format_secs( seconds ):
 
 @app.route( '/' )                                               def test():
 @app.route( "/export" )                                         def export():
@@ -88,10 +89,11 @@ from io import BytesIO
 from flask import Flask, jsonify, Response, request, send_from_directory, send_file
 from jsonmerge import merge
 from pymongo import MongoClient
+from rdflib import Graph, Literal, term
 from socket import gethostname
 from StringIO import StringIO
 from sys import exc_info
-from rdflib import Graph, Literal, term
+from time import ctime, time
 
 from dataverse import Connection
 from excelmaster import aggregate_dataset, preprocessor
@@ -1428,6 +1430,24 @@ def cleanup_downloads( download_dir, time_limit ):
         
     logging.debug( "# of downloads deleted: %d" % ndeleted )
 
+
+
+def format_secs( seconds ):
+    nmin, nsec  = divmod( seconds, 60 )
+    nhour, nmin = divmod( nmin, 60 )
+
+    if nhour > 0:
+        str_elapsed = "%d:%02d:%02d (hh:mm:ss)" % ( nhour, nmin, nsec )
+    else:
+        if nmin > 0:
+            str_elapsed = "%02d:%02d (mm:ss)" % ( nmin, nsec )
+        else:
+            str_elapsed = "%d (sec)" % nsec
+
+    return str_elapsed
+
+
+
 # ==============================================================================
 app = Flask( __name__ )
 #app.config[ "DEBUG" ] = True
@@ -1685,6 +1705,10 @@ def vocab():
 def aggregation():
     logging.debug( "/aggregation" )
     logging.debug( request.data )
+    
+    time0 = time()      # seconds since the epoch
+    logging.debug( "start: %s" % datetime.datetime.now() )
+    
     try:
         qinput = simplejson.loads( request.data )
         logging.debug( qinput )
@@ -1717,6 +1741,8 @@ def aggregation():
     if not os.path.exists( download_dir ):
         os.makedirs( download_dir )
     
+    json_string = str( "{}" )
+    
     if classification == "historical":
         # historical has base_year in qinput
         json_list = aggregation_1year( qinput, do_subclasses, download_key )
@@ -1724,8 +1750,6 @@ def aggregation():
         logging.debug( "aggregated json_string: \n%s" % json_string )
         
         collect_docs( qinput, download_dir, download_key )  # collect doc files in download dir
-        
-        return Response( json_string, mimetype = "application/json; charset=utf-8" )
     
     elif classification == "modern":
         #json_datas = {}
@@ -1743,10 +1767,12 @@ def aggregation():
         logging.debug( "aggregated json_string: \n%s" % json_string )
         
         collect_docs( qinput, download_dir, download_key )  # collect doc files in download dir
-        
-        return Response( json_string, mimetype = "application/json; charset=utf-8" )
     
-    return str( '{}' )
+    logging.debug( "stop: %s" % datetime.datetime.now() )
+    str_elapsed = format_secs( time() - time0 )
+    logging.debug( "aggregation took %s" % str_elapsed )
+    
+    return Response( json_string, mimetype = "application/json; charset=utf-8" )
 
 
 

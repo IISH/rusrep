@@ -15,7 +15,7 @@ FL-03-Mar-2017 Py2/Py3 compatibility: using pandas instead of xlsx2csv to create
 FL-03-Mar-2017 Py2/Py3 compatibility: using future-0.16.0
 FL-27-Mar-2017 Also download documentation files
 FL-17-May-2017 postgresql datasets.topics counts
-FL-23-Jun-2017 Translate data files to english
+FL-26-Jun-2017 Translate data files to english
 
 def loadjson( apiurl ):
 def empty_dir( dst_dir ):
@@ -784,8 +784,10 @@ def filter_csv( csv_dir, in_filename ):
                 except:
                     logging.info( "%d: in: %s" % ( nline, line ) )
                     logging.info( "%d out: %s" % ( nline, "|".join( fields ) ) )
-                    print( "EXIT" )
-                    sys.exit( 0 )
+                    type_, value, tb = sys.exc_info()
+                    msg = "%s: %s" % ( type_, value )
+                    logging.error( msg )
+                    sys.stderr.write( "%s\n" % msg )
         except ValueError:
             pass
         
@@ -1077,6 +1079,9 @@ def translate_csv( configparser, handle_name ):
     dir_list = os.listdir( csv_dir )
     dir_list.sort()
     for csv_name in dir_list:
+        nexceptions = 0
+        exceptions = []
+        
         #logging.info( csv_name )
         csv_path = os.path.join( csv_dir, csv_name )
         if not os.path.isfile( csv_path ):
@@ -1132,8 +1137,8 @@ def translate_csv( configparser, handle_name ):
                     
                     if rus_str in [ "", ".", ". " ]:
                         eng_str = rus_str
-                    elif rus_str in [ "test1", "test2", "test3", "test4", "test5", "test6", "test7", "test8", "test9", "test10" ]:
-                        eng_str = rus_str
+                    #elif rus_str in [ "test1", "test2", "test3", "test4", "test5", "test6", "test7", "test8", "test9", "test10" ]:
+                    #    eng_str = rus_str
                     elif rus_str.isdigit():     # only digits
                         eng_str = rus_str
                     elif vocab is not None:
@@ -1146,12 +1151,12 @@ def translate_csv( configparser, handle_name ):
                                 eng_str = rus_eng_d[ "eng" ]
                                 logging.debug( "translate: %s %s => %s" % ( name, rus_str, eng_str ) )
                             except:
+                                eng_str = rus_str
+                                nexceptions += 1
                                 type_, value, tb = sys.exc_info()
                                 msg = "%s: %s" % ( type_, value )
                                 logging.error( msg )
                                 sys.stderr.write( "%s\n" % msg )
-                                sys.exit( 1 )
-                                eng_str = rus_str
                         else:
                             rus_key = json.dumps( rus_d )
                             logging.debug( "translate: %s %s, key: %s" % ( name, rus_str, rus_key ) )
@@ -1161,12 +1166,14 @@ def translate_csv( configparser, handle_name ):
                                 eng_str = eng_d[ "eng" ]
                                 logging.debug( "translate: %s %s => %s" % ( name, rus_str, eng_str ) )
                             except:
-                                type_, value, tb = sys.exc_info()
-                                msg = "%s: %s" % ( type_, value )
-                                logging.error( msg )
-                                sys.stderr.write( "%s\n" % msg )
-                                sys.exit( 1 )
                                 eng_str = rus_str
+                                nexceptions += 1
+                                type_, value, tb = sys.exc_info()
+                                msg = "%s: (%s) %s" % ( type_, rus_d[ "rus" ], value )
+                                if msg not in exceptions:        # only disply new exceptions
+                                    logging.error( msg )
+                                    sys.stderr.write( "%s\n" % msg )
+                                    exceptions.append( msg )
                     else:
                         eng_str = rus_str
                     
@@ -1183,6 +1190,9 @@ def translate_csv( configparser, handle_name ):
                 file_eng.write( "%s\n" % eng_line )
                 
             nline += 1
+        
+        if nexceptions != 0:
+            logging.error( "translate_csv: number of exceptions: %d" % nexceptions )
         
         not_found = list( set( not_found ) )
         for item in not_found:
