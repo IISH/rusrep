@@ -93,7 +93,7 @@ from rdflib import Graph, Literal, term
 from socket import gethostname
 from StringIO import StringIO
 from sys import exc_info
-from time import ctime, time
+from time import ctime, time, localtime
 
 from dataverse import Connection
 from excelmaster import aggregate_dataset, preprocessor
@@ -350,6 +350,9 @@ def json_cache( json_list, language, json_dataname, download_key, qinput = {} ):
     
     json_string = json.dumps( json_hash, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
     
+    time0 = time()      # seconds since the epoch
+    logging.debug( "start: %s" % datetime.datetime.now() )
+    
     try:
         this_data = json_hash
         del this_data[ 'url' ]
@@ -363,8 +366,14 @@ def json_cache( json_list, language, json_dataname, download_key, qinput = {} ):
         dbcache = clientcache.get_database( 'datacache' )
         result = dbcache.data.insert( this_data )
     except:
-        logging.error( "caching failed" )
-
+        logging.error( "caching with key %s failed:" % download_key )
+        type_, value, tb = sys.exc_info()
+        logging.error( "%s" % value )
+    
+    logging.debug( "stop: %s" % datetime.datetime.now() )
+    str_elapsed = format_secs( time() - time0 )
+    logging.info( "caching took %s" % str_elapsed )
+    
     return json_string
 
 
@@ -1363,7 +1372,13 @@ def aggregation_1year( qinput, do_subclasses, download_key ):
     logging.debug( "sql_query complete: %s" % sql_query )
 
     if sql_query:
+        time0 = time()      # seconds since the epoch
+        logging.debug( "query execute start: %s" % datetime.datetime.now() )
         cursor.execute( sql_query )
+        logging.debug( "query execute stop: %s" % datetime.datetime.now() )
+        str_elapsed = format_secs( time() - time0 )
+        logging.info( "sql_query execute took %s" % str_elapsed )
+        
         sql_names = [ desc[ 0 ] for desc in cursor.description ]
         logging.debug( "%d sql_names:" % len( sql_names ) )
         logging.debug( sql_names )
@@ -1770,7 +1785,7 @@ def aggregation():
     
     logging.debug( "stop: %s" % datetime.datetime.now() )
     str_elapsed = format_secs( time() - time0 )
-    logging.debug( "aggregation took %s" % str_elapsed )
+    logging.info( "aggregation took %s" % str_elapsed )
     
     return Response( json_string, mimetype = "application/json; charset=utf-8" )
 
@@ -1937,7 +1952,7 @@ def download():
                 for root, sdirs, files in os.walk( download_dir ):
                     for fname in files:
                         info = zipfile.ZipInfo( fname )
-                        info.date_time = time.localtime( time.time() )[ :6 ]
+                        info.date_time = localtime( time() )[ :6 ]
                         info.compress_type = zipfile.ZIP_DEFLATED
                         # Notes from the web and zipfile sources:
                         # external_attr is 32 in size, with the unix permissions in the
