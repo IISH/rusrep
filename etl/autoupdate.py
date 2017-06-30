@@ -15,7 +15,7 @@ FL-03-Mar-2017 Py2/Py3 compatibility: using pandas instead of xlsx2csv to create
 FL-03-Mar-2017 Py2/Py3 compatibility: using future-0.16.0
 FL-27-Mar-2017 Also download documentation files
 FL-17-May-2017 postgresql datasets.topics counts
-FL-26-Jun-2017 Translate data files to english
+FL-30-Jun-2017 Translate data files to english
 
 def loadjson( apiurl ):
 def empty_dir( dst_dir ):
@@ -577,6 +577,9 @@ def filter_csv( csv_dir, in_filename ):
     global pkey
     logging.debug( "filter_csv()" )
     
+    # Notice: the applied filtering is reflected in the returned out_file; 
+    # the input csv file is _unchanged_.
+    
     # dataverse column names
     dv_column_names = [
         "id", 
@@ -648,6 +651,10 @@ def filter_csv( csv_dir, in_filename ):
     nskipped = 0
     comment_length_max = 0
     
+    nstripped = 0                       # count all stripped fields
+    stripped_fields  = set()            # collect only unique fields
+    affected_headers = set()            # corresponding headers
+    
     for line in csv_file:
         nline += 1
         #logging.info( "line %d: %s" % ( nline, line ) )
@@ -707,6 +714,26 @@ def filter_csv( csv_dir, in_filename ):
                 msg = "data: %s" % line
                 logging.warning( msg ); print( msg )
                 continue
+            
+            # strip leading and trailing white space, 
+            # but only for the fields that are used in translations
+            units       = [ "VALUE_UNIT" ]
+            histclasses = [ "HISTCLASS1", "HISTCLASS2", "HISTCLASS3", "HISTCLASS4", "HISTCLASS5",  "HISTCLASS6", "HISTCLASS7", "HISTCLASS8", "HISTCLASS9", "HISTCLASS10", ]
+            modclasses  = [ "CLASS1", "CLASS2", "CLASS3", "CLASS4", "CLASS5",  "CLASS6", "CLASS7", "CLASS8", "CLASS9", "CLASS10", ]
+            translate_list = units + histclasses + modclasses
+            
+            for i in range( nfields ):
+                csv_header_name = csv_header_names[ i ]
+                if csv_header_name in translate_list:
+                    in_field = fields[ i ]
+                    field_stripped = in_field.strip()
+                    if in_field != field_stripped:
+                        nstripped += 1
+                        affected_headers.add( csv_header_name )
+                        stripped_fields.add( in_field )
+                        fields[ i ] = field_stripped
+                        #msg = "stripped: |%s| -> |%s|" % ( field_in, fields[ i ] )
+                        #logging.warning( msg ); print( msg )
             
             nzaphc = 0
             for i in reversed( range( nfields ) ):      # histclass fields
@@ -844,6 +871,12 @@ def filter_csv( csv_dir, in_filename ):
     
     if nskipped != 0:
         logging.info( "empty lines (|-only) skipped: %d" % nskipped )
+    
+    if nstripped != 0:
+        logging.info( "%d fields stripped, of which unique: %d" % ( nstripped, len( stripped_fields ) ) )
+        logging.info( "affected_headers: %s" % affected_headers )
+        for field in stripped_fields:
+            logging.info( "leading/trailing whitespace: |%s|" % field )
     
     #return out_pathname
     return out_file
@@ -1221,22 +1254,22 @@ def format_secs( seconds ):
 
 
 if __name__ == "__main__":
-    #"""
+    """
     DO_DOCUMENTATION = True     # documentation: dataverse  => local_disk
     DO_VOCABULARY    = True     # vocabulary: dataverse  => mongodb
     DO_RETRIEVE      = True     # ERRHS data: dataverse  => local_disk, xlsx -> csv
     DO_POSTGRES      = True     # ERRHS data: local_disk => postgresql, csv -> table
     DO_MONGODB       = True     # ERRHS data: postgresql => mongodb
     DO_TRANSLATE     = True     # translate Russian csv files to English variants
-    #"""
     """
+    #"""
     DO_DOCUMENTATION = False     # documentation: dataverse  => local_disk
     DO_VOCABULARY    = False     # vocabulary: dataverse  => mongodb
     DO_RETRIEVE      = False     # ERRHS data: dataverse  => local_disk, xlsx -> csv
     DO_POSTGRES      = False     # ERRHS data: local_disk => postgresql, csv -> table
     DO_MONGODB       = False     # ERRHS data: postgresql => mongodb
     DO_TRANSLATE     = True     # translate Russian csv files to English variants
-    """
+    #"""
     
     #dv_format = ""
     dv_format = "original"  # does not work for ter_code (regions) vocab translations
@@ -1277,7 +1310,7 @@ if __name__ == "__main__":
         clear_mongo( mongo_client )
     
     if DO_DOCUMENTATION:
-        copy_local  = True      # for ziped downloads
+        copy_local  = True      # for zipped downloads
         update_documentation( configparser, copy_local )
     
     if DO_VOCABULARY:
