@@ -15,7 +15,7 @@ FL-03-Mar-2017 Py2/Py3 compatibility: using pandas instead of xlsx2csv to create
 FL-03-Mar-2017 Py2/Py3 compatibility: using future-0.16.0
 FL-27-Mar-2017 Also download documentation files
 FL-17-May-2017 postgresql datasets.topics counts
-FL-30-Jun-2017 Translate data files to english
+FL-03-Jul-2017 Translate data files to english
 
 def loadjson( apiurl ):
 def empty_dir( dst_dir ):
@@ -1130,7 +1130,7 @@ def translate_csv( configparser, handle_name ):
         file_rus = open( csv_path, "r" )
         file_eng = open( eng_path, "w" )
         
-        not_found = []
+        not_found = set()
         nline = 0
         for csv_line in iter( file_rus ):
             csv_line = csv_line.strip()
@@ -1148,22 +1148,27 @@ def translate_csv( configparser, handle_name ):
                     rus_str = rus_cols[ c ]
                     
                     vocab = None
+                    vocab_name = None
                     if name in units:
                         vocab = vocab_units
+                        vocab_name = "vocab_units"
                         rus_d = { "rus" : rus_str }
                     elif name in regions:
                         vocab = vocab_regions
+                        vocab_name = "vocab_regions"
                         i_terr = header.index( "TER_CODE" )
                         terr = rus_cols[ i_terr ]
                         terr_d = { "terr" : terr }
                     elif name in histclasses:
                         vocab = vocab_histclasses
+                        vocab_name = "histclasses"
                         i_byear = header.index( "BASE_YEAR" )
                         i_dtype = header.index( "DATATYPE" )
                         byear = rus_cols[ i_byear ]
                         dtype = rus_cols[ i_dtype ]
                         rus_d = rus_d = { "rus" : rus_str, "byear" : byear, "dtype" : dtype }
                     elif name in modclasses:
+                        vocab_name = "modclasses"
                         vocab = vocab_modclasses
                         dtype = rus_cols[ i_dtype ]
                         rus_d = rus_d = { "rus" : rus_str, "dtype " : dtype  }
@@ -1177,7 +1182,7 @@ def translate_csv( configparser, handle_name ):
                     elif vocab is not None:
                         if name in regions:
                             terr_s = json.dumps( terr_d )
-                            logging.debug( "translate: %s %s, key: %s" % ( name, rus_str, terr_s ) )
+                            logging.debug( "translate: vocab_name: %s, %s %s, key: %s" % ( vocab_name, name, rus_str, terr_s ) )
                             try:
                                 rus_eng_val = vocab[ terr_s ]
                                 rus_eng_d = json.loads( rus_eng_val )
@@ -1192,7 +1197,7 @@ def translate_csv( configparser, handle_name ):
                                 sys.stderr.write( "%s\n" % msg )
                         else:
                             rus_key = json.dumps( rus_d )
-                            logging.debug( "translate: %s %s, key: %s" % ( name, rus_str, rus_key ) )
+                            logging.debug( "translate: vocab_name: %s, %s %s, key: %s" % ( vocab_name, name, rus_str, rus_key ) )
                             try:
                                 eng_val = vocab[ rus_key ]
                                 eng_d = json.loads( eng_val )
@@ -1213,8 +1218,8 @@ def translate_csv( configparser, handle_name ):
                     if eng_str is None:
                         eng_str = rus_str
                         msg = "Not found in %s: translation for rus_str: %s" % ( csv_name, rus_str )
-                        if msg not in not_found:
-                            not_found.append( msg )
+                        #if msg not in not_found:
+                        not_found.add( msg )
                     
                     eng_cols.append( eng_str )
                 
@@ -1226,11 +1231,13 @@ def translate_csv( configparser, handle_name ):
         
         if nexceptions != 0:
             logging.error( "translate_csv: number of exceptions: %d" % nexceptions )
+        if len( not_found ) > 0:
+            logging.error( "translate_csv: unique not_found strings: %d" % len( not_found ) )
         
-        not_found = list( set( not_found ) )
+        #not_found = list( set( not_found ) )
         for item in not_found:
-            logging.debug( item )
-            sys.stderr.write( "%s\n" % item )
+            logging.info( item )
+            sys.stderr.write( "not found: %s\n" % item )
         
         file_rus.close()
         file_eng.close()
@@ -1254,22 +1261,22 @@ def format_secs( seconds ):
 
 
 if __name__ == "__main__":
-    """
+    #"""
     DO_DOCUMENTATION = True     # documentation: dataverse  => local_disk
     DO_VOCABULARY    = True     # vocabulary: dataverse  => mongodb
     DO_RETRIEVE      = True     # ERRHS data: dataverse  => local_disk, xlsx -> csv
     DO_POSTGRES      = True     # ERRHS data: local_disk => postgresql, csv -> table
     DO_MONGODB       = True     # ERRHS data: postgresql => mongodb
     DO_TRANSLATE     = True     # translate Russian csv files to English variants
-    """
     #"""
+    """
     DO_DOCUMENTATION = False     # documentation: dataverse  => local_disk
     DO_VOCABULARY    = False     # vocabulary: dataverse  => mongodb
     DO_RETRIEVE      = False     # ERRHS data: dataverse  => local_disk, xlsx -> csv
     DO_POSTGRES      = False     # ERRHS data: local_disk => postgresql, csv -> table
     DO_MONGODB       = False     # ERRHS data: postgresql => mongodb
     DO_TRANSLATE     = True     # translate Russian csv files to English variants
-    #"""
+    """
     
     #dv_format = ""
     dv_format = "original"  # does not work for ter_code (regions) vocab translations
