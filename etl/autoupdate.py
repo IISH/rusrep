@@ -16,6 +16,7 @@ FL-03-Mar-2017 Py2/Py3 compatibility: using future-0.16.0
 FL-27-Mar-2017 Also download documentation files
 FL-17-May-2017 postgresql datasets.topics counts
 FL-03-Jul-2017 Translate data files to english
+FL-05-Jul-2017 Does sys.stderr.write() kill cron job?
 
 def loadjson( apiurl ):
 def empty_dir( dst_dir ):
@@ -74,6 +75,8 @@ from dataverse import Connection
 
 from service.configutils import DataFilter
 
+Nexcept = 0
+
 # column comment_source of postgresql table russianrepository of db ristat
 COMMENT_LENGTH_MAX_DB = 4096
 # primary key for russianrepository table
@@ -112,6 +115,7 @@ def empty_dir( dst_dir ):
                 try:
                     os.unlink( file_path )
                 except:
+                    Nexcept += 1
                     type_, value, tb = sys.exc_info()
                     logging.error( "%s" % value )
         
@@ -127,6 +131,7 @@ def empty_dir( dst_dir ):
                 try:
                     shutil.rmtree( dir_path )
                 except:
+                    Nexcept += 1
                     type_, value, tb = sys.exc_info()
                     logging.error( "%s" % value )
         
@@ -136,6 +141,7 @@ def empty_dir( dst_dir ):
         try:
             shutil.rmtree( root )
         except:
+            Nexcept += 1
             type_, value, tb = sys.exc_info()
             logging.error( "%s" % value )
 
@@ -276,6 +282,9 @@ def documents_by_handle( configparser, handle_name, dst_dir, dv_format = "", cop
                         if 'lang' not in settings.datafilter:
                             papers.append( paperitem )
                 except:
+                    Nexcept += 1
+                    type_, value, tb = sys.exc_info()
+                    logging.error( "%s" % value )
                     if 'lang' not in settings.datafilter:
                         papers.append( paperitem )
     
@@ -809,12 +818,13 @@ def filter_csv( csv_dir, in_filename ):
                 try:
                     fields[ base_year_idx ] = "0"
                 except:
+                    Nexcept += 1
                     logging.info( "%d: in: %s" % ( nline, line ) )
                     logging.info( "%d out: %s" % ( nline, "|".join( fields ) ) )
                     type_, value, tb = sys.exc_info()
                     msg = "%s: %s" % ( type_, value )
                     logging.error( msg )
-                    sys.stderr.write( "%s\n" % msg )
+                    #sys.stderr.write( "%s\n" % msg )
         except ValueError:
             pass
         
@@ -1013,10 +1023,11 @@ def load_vocab( vocab_fname, vocab, pos_rus, pos_eng ):
                 try:
                     vocab[ terr_s ] = rus_eng_s
                 except:
+                    Nexcept += 1
                     type_, value, tb = sys.exc_info()
                     msg = "%s: %s %s" % ( type_, vocab_fname, value )
                     logging.error( msg )
-                    sys.stderr.write( "%s\n" % msg )
+                    #sys.stderr.write( "%s\n" % msg )
             else:
                 if vocab_fname == "ERRHS_Vocabulary_units.csv":
                     logging.debug( "rus: %s, eng: %s" % ( rus, eng ) )
@@ -1052,10 +1063,11 @@ def load_vocab( vocab_fname, vocab, pos_rus, pos_eng ):
                 try:
                     vocab[ rus_s ] = eng_s
                 except:
+                    Nexcept += 1
                     type_, value, tb = sys.exc_info()
                     msg = "%s: %s %s" % ( type_, vocab_fname, value )
                     logging.error( msg )
-                    sys.stderr.write( "%s\n" % msg )
+                    #sys.stderr.write( "%s\n" % msg )
                 
         nline += 1
     
@@ -1066,6 +1078,7 @@ def load_vocab( vocab_fname, vocab, pos_rus, pos_eng ):
 
 
 def translate_csv( configparser, handle_name ):
+    global Nexcept
     logging.info( "" )
     logging.info( "translate_csv()" )
     logging.info( "translating csv documents for handle name %s ..." % handle_name )
@@ -1189,12 +1202,13 @@ def translate_csv( configparser, handle_name ):
                                 eng_str = rus_eng_d[ "eng" ]
                                 logging.debug( "translate: %s %s => %s" % ( name, rus_str, eng_str ) )
                             except:
+                                Nexcept += 1
                                 eng_str = rus_str
                                 nexceptions += 1
                                 type_, value, tb = sys.exc_info()
                                 msg = "%s: %s" % ( type_, value )
                                 logging.error( msg )
-                                sys.stderr.write( "%s\n" % msg )
+                                #sys.stderr.write( "%s\n" % msg )
                         else:
                             rus_key = json.dumps( rus_d )
                             logging.debug( "translate: vocab_name: %s, %s %s, key: %s" % ( vocab_name, name, rus_str, rus_key ) )
@@ -1204,13 +1218,14 @@ def translate_csv( configparser, handle_name ):
                                 eng_str = eng_d[ "eng" ]
                                 logging.debug( "translate: %s %s => %s" % ( name, rus_str, eng_str ) )
                             except:
+                                Nexcept += 1
                                 eng_str = rus_str
                                 nexceptions += 1
                                 type_, value, tb = sys.exc_info()
                                 msg = "%s: (%s) %s" % ( type_, rus_d[ "rus" ], value )
                                 if msg not in exceptions:        # only disply new exceptions
                                     logging.error( msg )
-                                    sys.stderr.write( "%s\n" % msg )
+                                    #sys.stderr.write( "%s\n" % msg )
                                     exceptions.append( msg )
                     else:
                         eng_str = rus_str
@@ -1236,8 +1251,9 @@ def translate_csv( configparser, handle_name ):
         
         #not_found = list( set( not_found ) )
         for item in not_found:
-            logging.info( item )
-            sys.stderr.write( "not found: %s\n" % item )
+            msg = "not found: %s" % item
+            logging.info( msg )
+            #sys.stderr.write( "%s\n" % msg )
         
         file_rus.close()
         file_eng.close()
@@ -1368,6 +1384,8 @@ if __name__ == "__main__":
     if DO_TRANSLATE:
         for handle_name in handle_names:
             translate_csv( configparser, handle_name )
+    
+    logging.info( "number of exceptions: %d" % Nexcept )
     
     logging.info( "stop: %s" % datetime.datetime.now() )
     str_elapsed = format_secs( time() - time0 )
