@@ -16,7 +16,7 @@ FL-03-Mar-2017 Py2/Py3 compatibility: using future-0.16.0
 FL-27-Mar-2017 Also download documentation files
 FL-17-May-2017 postgresql datasets.topics counts
 FL-03-Jul-2017 Translate data files to english
-FL-05-Jul-2017 Does sys.stderr.write() kill cron job?
+FL-07-Jul-2017 sys.stderr.write() cannot write to cron.log as pde user
 
 def loadjson( apiurl ):
 def empty_dir( dst_dir ):
