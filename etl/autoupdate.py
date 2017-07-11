@@ -16,7 +16,8 @@ FL-03-Mar-2017 Py2/Py3 compatibility: using future-0.16.0
 FL-27-Mar-2017 Also download documentation files
 FL-17-May-2017 postgresql datasets.topics counts
 FL-03-Jul-2017 Translate data files to english
-FL-07-Jul-2017 sys.stderr.write() cannot write to cron.log as pde user
+FL-07-Jul-2017 sys.stderr.write() cannot write to cron.log as normal user
+FL-11-Jul-2017 pandas: do not parse numbers, but keep strings as they are
 
 def loadjson( apiurl ):
 def empty_dir( dst_dir ):
@@ -159,15 +160,13 @@ def documents_by_handle( configparser, handle_name, dst_dir, dv_format = "", cop
     
     connection = Connection( host, ristat_key )
     dataverse  = connection.get_dataverse( 'RISTAT' )
-    
     logging.debug( "title: %s" % dataverse.title )
     #datasets = dataverse.get_datasets()
     
     settings = DataFilter( '' )
     papers = []
     ids = {}
-    
-    kwargs_xlsx2csv = { 'delimiter' : '|', 'lineterminator' : '\n' }
+    kwargs_xlsx2csv = { "delimiter" : '|', "lineterminator" : '\n' }
     
     sep = str(u'|').encode('utf-8')
     kwargs_pandas   = { 'sep' : sep, 'line_terminator' : '\n' }
@@ -257,7 +256,7 @@ def documents_by_handle( configparser, handle_name, dst_dir, dv_format = "", cop
                         logging.debug( "csv_path:  %s" % csv_path )
                         
                         #Xlsx2csv( filepath, **kwargs_xlsx2csv ).convert( csv_path )
-                        data_xls = pd.read_excel( filepath, index_col = False )
+                        data_xls = pd.read_excel( filepath, index_col = False,  dtype = str )
                         data_xls.to_csv( csv_path, encoding = 'utf-8', index = False, **kwargs_pandas )
                         
                         if remove_xlsx and ext == ".xlsx":
@@ -692,17 +691,21 @@ def filter_csv( csv_dir, in_filename ):
             skip_file = False
             if len( dv_column_names ) > len( csv_header_names ):
                 msg = "skipping bad file %s" % in_filename
-                logging.warning( msg ); print( msg )
+                logging.warning( msg )
+                #print( msg )
                 msg = "wrong header structure: \n%s" % line_header
-                logging.warning( msg ); print( msg )
+                logging.warning( msg )
+                #print( msg )
                 skip_file = True
                 break
             for i in range( ncolumns_dv ):
                 if dv_column_names[ i ] != csv_header_names[ i ]:
                     msg = "skipping bad file %s" % in_filename
-                    logging.warning( msg ); print( msg )
+                    logging.warning( msg )
+                    #print( msg )
                     msg = "wrong header structure: \n%s" % line_header
-                    logging.warning( msg ); print( msg )
+                    logging.warning( msg )
+                    #print( msg )
                     skip_file = True
                     break
             if skip_file:
@@ -715,13 +718,17 @@ def filter_csv( csv_dir, in_filename ):
             nfields = len( fields )
             if nfields != nfields_header:
                 msg = "skipping bad data line # %d" % nline
-                logging.warning( msg ); print( msg )
+                logging.warning( msg )
+                #print( msg )
                 msg = "# of data fields (%d) does not match # of header fields (%d)" % ( nfields, nfields_header )
-                logging.warning( msg ); print( msg )
+                logging.warning( msg )
+                #print( msg )
                 msg = "header: %s" % line_header
-                logging.warning( msg ); print( msg )
+                logging.warning( msg )
+                #print( msg )
                 msg = "data: %s" % line
-                logging.warning( msg ); print( msg )
+                logging.warning( msg )
+                #print( msg )
                 continue
             
             # strip leading and trailing white space, 
@@ -782,16 +789,20 @@ def filter_csv( csv_dir, in_filename ):
             if comment_length > COMMENT_LENGTH_MAX_DB:
                 fields[ comment_pos ] = ""      # because it is unicode we cannot just chop it
                 msg = "too long comment in line:"
-                logging.warning( msg );  print( msg )
-                logging.warning( line ); print( line )
+                logging.warning( msg )
+                #print( msg )
+                logging.warning( line )
+                #print( line )
             
             # check missing datatype
             datatype_pos = csv_header_names.index( "datatype" )
             datatype = fields[ datatype_pos ]
             if len( datatype ) == 0 or datatype == '.':
                 msg = "missing datatype in line:"
-                logging.warning( msg );  print( msg )
-                logging.warning( line ); print( line )
+                logging.warning( msg )
+                #print( msg )
+                logging.warning( line )
+                #print( line )
             else:   # chop spurious decimals of stupid spreadsheets
                 fields[ datatype_pos ] = "%4.2f" % float( datatype )
             
@@ -1277,22 +1288,12 @@ def format_secs( seconds ):
 
 
 if __name__ == "__main__":
-    #"""
     DO_DOCUMENTATION = True     # documentation: dataverse  => local_disk
     DO_VOCABULARY    = True     # vocabulary: dataverse  => mongodb
     DO_RETRIEVE      = True     # ERRHS data: dataverse  => local_disk, xlsx -> csv
     DO_POSTGRES      = True     # ERRHS data: local_disk => postgresql, csv -> table
     DO_MONGODB       = True     # ERRHS data: postgresql => mongodb
     DO_TRANSLATE     = True     # translate Russian csv files to English variants
-    #"""
-    """
-    DO_DOCUMENTATION = False     # documentation: dataverse  => local_disk
-    DO_VOCABULARY    = False     # vocabulary: dataverse  => mongodb
-    DO_RETRIEVE      = False     # ERRHS data: dataverse  => local_disk, xlsx -> csv
-    DO_POSTGRES      = False     # ERRHS data: local_disk => postgresql, csv -> table
-    DO_MONGODB       = False     # ERRHS data: postgresql => mongodb
-    DO_TRANSLATE     = True     # translate Russian csv files to English variants
-    """
     
     #dv_format = ""
     dv_format = "original"  # does not work for ter_code (regions) vocab translations
