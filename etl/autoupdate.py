@@ -167,7 +167,12 @@ def documents_by_handle( configparser, handle_name, dst_dir, dv_format = "", cop
     settings = DataFilter( '' )
     papers = []
     ids = {}
-    kwargs_xlsx2csv = { "delimiter" : '|', "lineterminator" : '\n' }
+    kwargs_xlsx2csv = { 
+        "delimiter" : '|', 
+        "lineterminator" : '\n'
+        #,"float_format" : "%.2f"
+        #,"quoting" : "csv.QUOTE_NONNUMERIC"
+    }
     
     sep = str(u'|').encode('utf-8')
     kwargs_pandas   = { 'sep' : sep, 'line_terminator' : '\n' }
