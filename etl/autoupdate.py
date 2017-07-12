@@ -18,6 +18,7 @@ FL-17-May-2017 postgresql datasets.topics counts
 FL-03-Jul-2017 Translate data files to english
 FL-07-Jul-2017 sys.stderr.write() cannot write to cron.log as normal user
 FL-11-Jul-2017 pandas: do not parse numbers, but keep strings as they are
+FL-12-Jul-2017  latest change
 
 def loadjson( apiurl ):
 def empty_dir( dst_dir ):
@@ -1386,7 +1387,7 @@ if __name__ == "__main__":
         for handle_name in handle_names:
             translate_csv( configparser, handle_name )
     
-    logging.info( "number of exceptions: %d" % Nexcept )
+    logging.info( "total number of exceptions: %d" % Nexcept )
     
     logging.info( "stop: %s" % datetime.datetime.now() )
     str_elapsed = format_secs( time() - time0 )
