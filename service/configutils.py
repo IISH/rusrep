@@ -43,7 +43,7 @@ from flask import Flask, request, redirect
 class Configuration:
     def __init__( self ):
         RUSSIANREPO_CONFIG_PATH = os.environ[ "RUSSIANREPO_CONFIG_PATH" ]
-        print( "RUSSIANREPO_CONFIG_PATH: %s" % RUSSIANREPO_CONFIG_PATH )
+        #print( "RUSSIANREPO_CONFIG_PATH: %s" % RUSSIANREPO_CONFIG_PATH )
     
         config_path = RUSSIANREPO_CONFIG_PATH
         if not os.path.isfile( config_path ):

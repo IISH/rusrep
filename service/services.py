@@ -4,7 +4,7 @@
 VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
-FL-26-Jun-2017 
+FL-18-Jul-2017 
 
 def connect():
 def classcollector( keywords ):
@@ -479,15 +479,14 @@ def translated_vocabulary( vocab_filter, classification = None ):
     db = client.get_database( dbname )
     
     if classification == "modern":
-        del vocab_filter[ "YEAR" ]
+        del vocab_filter[ "YEAR" ]  # single "modern" classification for all years
     
     if vocab_filter:
         vocab = db.data.find( vocab_filter )
     else:
         vocab = db.data.find()
     
-    data     = {}
-    histdata = {}
+    data = {}
     for item in vocab:
         if 'RUS' in item:
             try:
@@ -507,7 +506,12 @@ def translated_vocabulary( vocab_filter, classification = None ):
                 
                 logging.debug( "EN: %s RUS: %s" % ( item[ 'EN' ], item[ 'RUS' ] ) )
             except:
-                skip = 1
+                logging.debug( "except!" )
+    d = 0
+    for key in data:
+        d += 1
+        logging.debug( "%d: key: %s, value: %s" % ( d, key, data[ key ] ) )
+    logging.debug( "translated_vocabulary: return %d items" % len( data ) )
     
     return data
 
@@ -825,6 +829,9 @@ def load_vocabulary( vocname ):
     logging.debug( "load_vocabulary() vocname: %s" % vocname )
     logging.debug( "request.args: %s" % str( request.args ) )
     
+    # Notice the distinction between different vocname values: sometimes it 
+    # is a full vocabulary basename, sometimes historical or modern string. 
+    
     client = MongoClient()
     dbname = 'vocabulary'
     db = client.get_database( dbname )
@@ -838,7 +845,7 @@ def load_vocabulary( vocname ):
         else:
             newfilter[ 'vocabulary' ] = 'ERRHS_Vocabulary_modclasses'
         logging.debug( "newfilter: %s" % newfilter )
-
+    
     if request.args.get( 'language' ) == 'en':
         thisyear = ''
         vocab_filter = {}
@@ -850,22 +857,32 @@ def load_vocabulary( vocname ):
                 datatype = request.args.get( "datatype" )
                 if datatype:
                     vocab_filter[ "DATATYPE" ] = datatype
-                
+        
         eng_data = translated_vocabulary( vocab_filter )
-        units    = translated_vocabulary( { "vocabulary": "ERRHS_Vocabulary_units" } )
+        logging.debug( "translated_vocabulary eng_data items: %d" % len( eng_data ) )
+        #logging.debug( "eng_data: %s" % eng_data )
+        
+        units = translated_vocabulary( { "vocabulary": "ERRHS_Vocabulary_units" } )
+        logging.debug( "translated_vocabulary units items: %d" % len( units ) )
+        #logging.debug( "units: %s" % units )
+        
         for item in units:
             eng_data[ item ] = units[ item ]
-
+            #logging.debug( "%s => %s" % ( item, units[ item ] ) )
+    
     params = { "vocabulary": vocname }
     for name in request.args:
         if name not in forbidden:
-            params[ name ] = request.args.get( name )
-
+                params[ name ] = request.args[ name ]
+    logging.debug( "params: %s" % params )
+    
     if vocname:
         vocab = db.data.find( params )
+        #logging.debug( "vocab_filter: %s" % vocab_filter )
+        #vocab = db.data.find( vocab_filter )
     else:
         vocab = db.data.find()
-
+    
     data = []
     uid = 0
     logging.debug( "processing %d items in vocab %s" % ( vocab.count(), vocname ) )
@@ -2085,8 +2102,8 @@ def histclasses():
     logging.debug( "/histclasses" )
     data = load_vocabulary( 'historical' )
     logging.debug( "data: %s" % str( data ) )
-    logging.debug( "histclasses() before return Response" )
     
+    logging.debug( "/histclasses return Response" )
     return Response( json.dumps( data ), mimetype = "application/json; charset=utf-8" )
 
 
@@ -2096,8 +2113,8 @@ def classes():
     logging.debug( "/classes" )
     data = load_vocabulary( "modern" )
     logging.debug( "data: %s" % str( data ) )
-    logging.debug( "classes() before return Response" )
     
+    logging.debug( "/classes return Response" )
     return Response( json.dumps( data ), mimetype = "application/json; charset=utf-8" )
 
 
@@ -2113,6 +2130,7 @@ def years():
     data = load_years( cursor, datatype )
     
     #json_data = json.dumps( data )     # GUI expects list ?
+    logging.debug( "/years return Response" )
     return Response( data, mimetype = "application/json; charset=utf-8" )
 
 
@@ -2123,6 +2141,7 @@ def regions():
     cursor = connect()
     data = load_vocabulary( "ERRHS_Vocabulary_regions" )
     
+    logging.debug( "/regions return Response" )
     return Response( json.dumps( data ), mimetype = "application/json; charset=utf-8" )
 
 
