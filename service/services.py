@@ -4,15 +4,15 @@
 VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
-FL-18-Jul-2017 
+FL-05-Aug-2017 cleanup function load_vocabulary()
 
 def connect():
 def classcollector( keywords ):
 def json_generator( cursor, json_dataname, data, download_key = None ):
 def json_cache( json_list, language, json_dataname, download_key, qinput = {} ):
 def collect_docs( qinput, download_dir, download_key ):
-def translated_vocabulary( vocab_filter, classification = None ):
-def translatedclasses( cursor, classinfo ):
+def translate_vocabulary( vocab_filter, classification = None ):
+def translate_classes( cursor, classinfo ):
 def load_years( cursor, datatype ):
 def sqlfilter( sql ):
 def sqlconstructor( sql ):
@@ -471,8 +471,8 @@ def collect_docs( qinput, download_dir, download_key ):
 
 
 
-def translated_vocabulary( vocab_filter, classification = None ):
-    logging.debug( "translated_vocabulary()" )
+def translate_vocabulary( vocab_filter, classification = None ):
+    logging.debug( "translate_vocabulary()" )
     logging.debug( "vocab_filter: %s" % str( vocab_filter ) )
     
     client = MongoClient()
@@ -512,14 +512,14 @@ def translated_vocabulary( vocab_filter, classification = None ):
     for key in data:
         d += 1
         logging.debug( "%d: key: %s, value: %s" % ( d, key, data[ key ] ) )
-    logging.debug( "translated_vocabulary: return %d items" % len( data ) )
+    logging.debug( "translate_vocabulary: return %d items" % len( data ) )
     
     return data
 
 
 
-def translatedclasses( cursor, classinfo ):
-    logging.debug( "translatedclasses()" )
+def translate_classes( cursor, classinfo ):
+    logging.debug( "translate_classes()" )
     dictdata = {}
     sql = "select * from datasets.classmaps"; # where class_rus in ";
     sqlclass = ''
@@ -808,7 +808,8 @@ def zap_empty_classes( item ):
 
 
 def translate_item( item, eng_data ):
-    logging.debug( "translate_item() %s -> %s" % ( item, eng_data ) )
+    logging.debug( "translate_item()" )
+    #logging.debug( "translate_item() %s \n->\n %s" % ( item, eng_data ) )
     #logging.debug( item )
     #logging.debug( eng_data )
     
@@ -817,51 +818,57 @@ def translate_item( item, eng_data ):
         for name in item:
             value = item[ name ].encode( "UTF-8" )
             if value in eng_data:
+                logging.debug( "translate_item() %s -> %s" % ( value, eng_data[ value ] ) )
                 value = eng_data[ value ]
             newitem[ name ] = value
         item = newitem
-    
     return item
 
 
 
 def load_vocabulary( vocab_type ):
     logging.debug( "load_vocabulary() vocab_type: %s" % vocab_type )
-    
     logging.debug( "request.args: %s" % str( request.args ) )
     
+    language = request.args.get( "language" )
+    datatype = request.args.get( "datatype" )
+    
+    basisyear = request.args.get( "basisyear" )
+    base_year = request.args.get( "base_year" )
+    
     vocab_filter = {}
+    if vocab_type == "ERRHS_Vocabulary_regions":
+        vocab_type = "regions"
     if vocab_type == "regions":
         vocab_name = "ERRHS_Vocabulary_regions"
-        basisyear = request.args.get( "basisyear" )
         if basisyear:
             vocab_filter[ "basisyear" ] = basisyear
     
     elif vocab_type == "historical":
         vocab_name = "ERRHS_Vocabulary_histclasses"
-        datatype = request.args.get( "datatype" )
         if datatype:
             vocab_filter[ "DATATYPE" ] = datatype
-        base_year = request.args.get( "base_year" )
         if base_year:
             vocab_filter[ "YEAR" ] = base_year
     
     elif vocab_type == "modern":
         vocab_name = "ERRHS_Vocabulary_modclasses"
-        datatype = request.args.get( "datatype" )
         if datatype:
             vocab_filter[ "DATATYPE" ] = "MOD_" + datatype
     
+    logging.debug( "vocab_filter: %s" % vocab_filter )
     
     eng_data = {}
-    language = request.args.get( "language" )
-    if "language" == "en":
-        eng_data = translated_vocabulary( vocab_filter )
-        logging.debug( "translated_vocabulary eng_data items: %d" % len( eng_data ) )
+    if language == "en":
+        new_filter = {}
+        new_filter[ 'YEAR' ] = base_year    # vocab_filter also contains DATATYPE
+        logging.debug( "translate_vocabulary with filter: %s" % new_filter )
+        eng_data = translate_vocabulary( new_filter )
+        logging.debug( "translate_vocabulary eng_data items: %d" % len( eng_data ) )
         #logging.debug( "eng_data: %s" % eng_data )
         
-        units = translated_vocabulary( { "vocabulary": "ERRHS_Vocabulary_units" } )
-        logging.debug( "translated_vocabulary units items: %d" % len( units ) )
+        units = translate_vocabulary( { "vocabulary": "ERRHS_Vocabulary_units" } )
+        logging.debug( "translate_vocabulary units items: %d" % len( units ) )
         #logging.debug( "units: %s" % units )
         
         for item in units:
@@ -894,12 +901,12 @@ def load_vocabulary( vocab_type ):
                 if datatype:
                     vocab_filter[ "DATATYPE" ] = datatype
         
-        eng_data = translated_vocabulary( vocab_filter )
-        logging.debug( "translated_vocabulary eng_data items: %d" % len( eng_data ) )
+        eng_data = translate_vocabulary( vocab_filter )
+        logging.debug( "translate_vocabulary eng_data items: %d" % len( eng_data ) )
         #logging.debug( "eng_data: %s" % eng_data )
         
-        units = translated_vocabulary( { "vocabulary": "ERRHS_Vocabulary_units" } )
-        logging.debug( "translated_vocabulary units items: %d" % len( units ) )
+        units = translate_vocabulary( { "vocabulary": "ERRHS_Vocabulary_units" } )
+        logging.debug( "translate_vocabulary units items: %d" % len( units ) )
         #logging.debug( "units: %s" % units )
         
         for item in units:
@@ -919,15 +926,23 @@ def load_vocabulary( vocab_type ):
     db_name = "vocabulary"
     db = client.get_database( db_name )
     
-    vocab_filter[ "vocabulary" ] = vocab_name
-    logging.debug( "vocab_filter: %s" % vocab_filter )
-    vocab = db.data.find( vocab_filter )
+    params = {}
+    if vocab_type == "regions":
+        params[ "vocabulary" ] = vocab_name
+        params[ "basisyear" ]  = basisyear
+    else:
+        params[ "vocabulary" ] = vocab_type
+        params[ "base_year" ]  = base_year
+        params[ "datatype" ]   = datatype
+    
+    logging.debug( "params: %s" % params )
+    vocab = db.data.find( params )
     
     data = []
     uid = 0
     logging.debug( "processing %d items in vocab %s" % ( vocab.count(), vocab_type ) )
     for item in vocab:
-        del item[ "basisyear" ]
+        #del item[ "basisyear" ]
         del item[ "_id" ]
         del item[ "vocabulary" ]
         regions = {}
@@ -985,10 +1000,119 @@ def load_vocabulary( vocab_type ):
     else:
         json_hash[ "data" ] = data
         json_data = json.dumps( json_hash, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
+        logging.debug( "load_vocabulary() return %s json_data" % vocab_type )
+        logging.debug( json_data )
         return json_data
 
+    logging.debug( "load_vocabulary() return %s json_hash" % vocab_type )
+    logging.debug( json_hash )
     return json_hash
 
+
+"""
+def load_vocabulary_old(vocname):
+    logging.debug("load_vocabulary()")
+    client = MongoClient()
+    dbname = 'vocabulary'
+    db = client.get_database(dbname)
+    newfilter = {}
+    engdata = {}
+    if request.args.get('classification'):
+        vocname = request.args.get('classification')
+        if vocname == 'historical':
+            newfilter['vocabulary'] = 'ERRHS_Vocabulary_histclasses'
+        else:
+            newfilter['vocabulary'] = 'ERRHS_Vocabulary_modclasses'
+
+    if request.args.get('language') == 'en':
+        thisyear = ''
+        if request.args.get('base_year'):
+            if vocname == 'historical':
+                thisyear = request.args.get('base_year')
+                newfilter['YEAR'] = thisyear 
+        logging.debug( "translate_vocabulary with filter: %s" % newfilter )
+        #engdata = translatedvocabulary(newfilter)
+        engdata = translate_vocabulary(newfilter)
+        #units = translatedvocabulary({"vocabulary": "ERRHS_Vocabulary_units"})
+        units = translate_vocabulary({"vocabulary": "ERRHS_Vocabulary_units"})
+        logging.debug( "translate_vocabulary units items: %d" % len( units ) )
+        for item in units:
+            engdata[item] = units[item]
+
+    params = {"vocabulary": vocname}
+    for name in request.args:
+        if name not in forbidden:
+            params[name] = request.args.get(name)
+
+    if vocname:
+        logging.debug( "params: %s" % params )
+        vocab = db.data.find(params)
+    else:
+        vocab = db.data.find()
+
+    data = []
+    uid = 0
+    for item in vocab:
+        del item['_id']
+        del item['vocabulary']
+        regions = {}
+        if vocname == "ERRHS_Vocabulary_regions":
+            uid+=1
+            regions['region_name'] = item['RUS']
+            regions['region_name_eng'] = item['EN']
+            regions['region_code'] = item['ID']
+            regions['region_id'] = uid
+            regions['region_ord'] = 189702
+            regions['description'] = regions['region_name']
+            regions['active'] = 1
+            item = regions
+            data.append(item)
+        elif vocname == 'modern':
+            if engdata:
+                #item = translateitem(item, engdata)     # old
+                item = translate_item(item, engdata)     # new
+            data.append(item)
+        elif vocname == 'historical':
+            if engdata:
+                #item = translateitem(item, engdata)     # old
+                item = translate_item(item, engdata)     # new
+            data.append(item)
+        else:
+            # Translate first
+            newitem = {}
+            if engdata:
+                for name in item:
+                    value = item[name]
+                    if value in engdata: 
+                        value = engdata[value]
+                    newitem[name] = value
+                item = newitem
+            
+            (path, output) = classcollector(item)
+            if path:
+                output['path'] = path
+                data.append(output)
+            else:
+                data.append(item)
+
+    logging.debug( "%d items in %s data" % ( len( data ), vocname ) )
+    for item in data:
+        logging.debug( item )
+
+    jsonhash = {}
+    if vocname == "ERRHS_Vocabulary_regions":
+        jsonhash['regions'] = data
+    elif vocname == 'modern':
+        jsonhash = data
+    elif vocname == 'historical':
+        jsonhash = data
+    else:
+        jsonhash['data'] = data
+        jsondata = json.dumps(jsonhash, encoding="utf8", ensure_ascii=False, sort_keys=True, indent=4)
+        return jsondata
+
+    return jsonhash
+"""
 
 
 def load_data( cursor, year, datatype, region, debug ):
@@ -1272,10 +1396,10 @@ def aggregation_1year( qinput, do_subclasses, download_key ):
                 elif classification == "modern":
                     vocab_filter[ "DATATYPE" ] = "MOD_" + datatype
             
-            eng_data = translated_vocabulary( vocab_filter )
-            units = translated_vocabulary( { "vocabulary": "ERRHS_Vocabulary_units" } )
+            eng_data = translate_vocabulary( vocab_filter )
+            units = translate_vocabulary( { "vocabulary": "ERRHS_Vocabulary_units" } )
             
-            logging.debug( "translated_vocabulary returned %d items" % len( units ) )
+            logging.debug( "translate_vocabulary returned %d items" % len( units ) )
             logging.debug( "vocab_filter: %s" % str( vocab_filter ) )
             logging.debug( "eng_data: %s" % str( eng_data ) )
             logging.debug( "units: %s" % str( units ) )
@@ -2168,7 +2292,6 @@ def classes():
 def regions():
     logging.debug( "/regions" )
     logging.debug( "regions() request.args: %s" % str( request.args ) )
-    #cursor = connect()
     data = load_vocabulary( "regions" )
     
     logging.debug( "/regions return Response" )
