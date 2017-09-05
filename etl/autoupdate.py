@@ -18,7 +18,7 @@ FL-17-May-2017 postgresql datasets.topics counts
 FL-03-Jul-2017 Translate data files to english
 FL-07-Jul-2017 sys.stderr.write() cannot write to cron.log as normal user
 FL-11-Jul-2017 pandas: do not parse numbers, but keep strings as they are
-FL-12-Jul-2017  latest change
+FL-24-Jul-2017  latest change
 
 def loadjson( apiurl ):
 def empty_dir( dst_dir ):
@@ -650,7 +650,7 @@ def filter_csv( csv_dir, in_filename ):
     logging.debug( "# of dv_columns: %d" % ncolumns_dv )
     
     in_pathname = os.path.abspath( os.path.join( csv_dir, in_filename ) )
-    csv_file = open( in_pathname, 'r')
+    csv_file = open( in_pathname, 'r' )
     
     """
     root, ext = os.path.splitext( in_filename )
