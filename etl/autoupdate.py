@@ -18,23 +18,27 @@ FL-17-May-2017 postgresql datasets.topics counts
 FL-03-Jul-2017 Translate data files to english
 FL-07-Jul-2017 sys.stderr.write() cannot write to cron.log as normal user
 FL-11-Jul-2017 pandas: do not parse numbers, but keep strings as they are
-FL-24-Jul-2017  latest change
+FL-11-Aug-2017 Py2/Py3 cleanup
 
-def loadjson( apiurl ):
+ToDo:
+ - replace urllib by requests
+ - also use bidict in service/services.py
+
+def load_json( apiurl ):
 def empty_dir( dst_dir ):
-def documents_by_handle( configparser, handle_name, dst_dir, dv_format = "", copy_local = False, to_csv = False, remove_xlsx = True ):
-def update_documentation( configparser, copy_local, remove_xlsx = False ):
-def update_vocabularies( configparser, mongo_client, dv_format, copy_local = False, to_csv = False, remove_xlsx = False):
-def retrieve_handle_docs( configparser, handle_name, dv_format = "", copy_local = False, to_csv = False, remove_xlsx = False ):
-def row_count( configparser ):
-def clear_postgres( configparser ):
-def store_handle_docs( configparser, handle_name ):
+def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", copy_local = False, to_csv = False, remove_xlsx = True ):
+def update_documentation( config_parser, copy_local, remove_xlsx = False ):
+def update_vocabularies( config_parser, mongo_client, dv_format, copy_local = False, to_csv = False, remove_xlsx = False):
+def retrieve_handle_docs( config_parser, handle_name, dv_format = "", copy_local = False, to_csv = False, remove_xlsx = False ):
+def row_count( config_parser ):
+def clear_postgres( config_parser ):
+def store_handle_docs( config_parser, handle_name ):
 def test_csv_file( path_name ):
 def filter_csv( csv_dir, in_filename ):
-def update_handle_docs( configparser, mongo_client ):
+def update_handle_docs( config_parser, mongo_client ):
 def clear_mongo( mongo_client ):
-def topic_counts( configparser ):
-def translate_csv( configparser, handle_name ):
+def topic_counts( config_parser ):
+def translate_csv( config_parser, handle_name ):
 def format_secs( seconds ):
 """
 
@@ -43,7 +47,9 @@ from __future__ import ( absolute_import, division, print_function, unicode_lite
 from builtins import ( ascii, bytes, chr, dict, filter, hex, input, int, list, map, 
     next, object, oct, open, pow, range, round, super, str, zip )
 
-import ConfigParser
+from six.moves import configparser, StringIO, urllib
+
+import codecs
 import datetime
 import getpass
 import json
@@ -51,21 +57,14 @@ import logging
 import os
 import pandas as pd
 import psycopg2
-import psycopg2.extras
 import re
+import requests
 import sys
-import urllib
-import urllib2
 import shutil
-import simplejson
-import StringIO
 
 from bidict import bidict
 from pymongo import MongoClient
-
 from time import ctime, time
-from vocab import vocabulary, classupdate
-
 
 sys.path.insert( 0, os.path.abspath( os.path.join(os.path.dirname( "__file__" ), './' ) ) )
 sys.path.insert( 0, os.path.abspath( os.path.join(os.path.dirname( "__file__" ), '../' ) ) )
@@ -75,6 +74,7 @@ sys.path.insert( 0, os.path.abspath( os.path.join(os.path.dirname( "__file__" ),
 
 from dataverse import Connection
 
+from vocab import vocabulary, classupdate
 from service.configutils import DataFilter
 
 Nexcept = 0
@@ -85,13 +85,16 @@ COMMENT_LENGTH_MAX_DB = 4096
 pkey = None
 
 
-def loadjson( url ):
-    logging.debug( "loadjson() %s" % url )
+def load_json( url ):
+    logging.debug( "load_json() %s" % url )
 
-    req = urllib2.Request( url )
-    opener = urllib2.build_opener()
-    f = opener.open( req )
-    dataframe = simplejson.load( f )
+    #req = urllib2.Request( url )
+    #opener = urllib2.build_opener()
+    #f = opener.open( req )
+    #dataframe = json.load( f )
+    wp = urllib.request.urlopen( url )
+    pw = wp.read()
+    dataframe = json.loads( pw )
     return dataframe
 
 
@@ -149,18 +152,18 @@ def empty_dir( dst_dir ):
 
 
 
-def documents_by_handle( configparser, handle_name, dst_dir, dv_format = "", copy_local = False, to_csv = False, remove_xlsx = True ):
+def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", copy_local = False, to_csv = False, remove_xlsx = True ):
     logging.info( "documents_by_handle() copy_local: %s, to_csv: %s" % ( copy_local, to_csv ) )
     logging.debug( "handle_name: %s" % handle_name )
     logging.info( "dst_dir: %s, dv_format: %s, copy_local: %s, to_csv: %s" % ( dst_dir, dv_format, copy_local, to_csv ) )
     
     host = "datasets.socialhistory.org"
-    ristat_key = configparser.get( "config", "ristatkey" )
+    ristat_key = config_parser.get( "config", "ristatkey" )
     logging.debug( "host: %s" % host )
-    logging.debug( "ristat_key: %s" % ristat_key )
+    #logging.debug( "ristat_key: %s" % ristat_key )
     
-    connection = Connection( host, ristat_key )
-    dataverse  = connection.get_dataverse( 'RISTAT' )
+    dv_connection = Connection( host, ristat_key )
+    dataverse  = dv_connection.get_dataverse( 'RISTAT' )
     logging.debug( "title: %s" % dataverse.title )
     #datasets = dataverse.get_datasets()
     
@@ -177,7 +180,7 @@ def documents_by_handle( configparser, handle_name, dst_dir, dv_format = "", cop
     sep = str(u'|').encode('utf-8')
     kwargs_pandas   = { 'sep' : sep, 'line_terminator' : '\n' }
     
-    tmp_dir = configparser.get( "config", "tmppath" )
+    tmp_dir = config_parser.get( "config", "tmppath" )
     if copy_local:
         download_dir = os.path.join( tmp_dir, "dataverse", dst_dir, handle_name )
         logging.info( "downloading dataverse files to: %s" % download_dir )
@@ -197,7 +200,7 @@ def documents_by_handle( configparser, handle_name, dst_dir, dv_format = "", cop
         # item dict keys: protocol, authority, persistentUrl, identifier, type, id
         handle = str( item[ 'protocol' ] ) + ':' + str( item[ 'authority' ] ) + "/" + str( item[ 'identifier' ] )
         logging.debug( "handle: %s" % handle )
-        clio_handle = configparser.get( "config", handle_name )
+        clio_handle = config_parser.get( "config", handle_name )
         logging.debug( "clio_handle: %s" % clio_handle )
         
         if handle == clio_handle:
@@ -207,7 +210,7 @@ def documents_by_handle( configparser, handle_name, dst_dir, dv_format = "", cop
             #url += "/?&key=" + str( ristat_key )
             url += "?key=" + str( ristat_key )
             
-            dataframe = loadjson( url )
+            dataframe = load_json( url )
             
             files = dataframe[ 'data' ][ 'latestVersion' ][ 'files' ]
             logging.info( "number of files: %d" % len( files ) )
@@ -245,9 +248,14 @@ def documents_by_handle( configparser, handle_name, dst_dir, dv_format = "", cop
                     logging.debug( "filepath: %s" % filepath )
                     
                     # read dataverse document from url, write contents to filepath
-                    filein = urllib.urlopen( url )
+                    #filein = urllib.urlopen( url )
+                    filein = urllib.request.urlopen( url )
                     fileout = open( filepath, 'wb' )
                     fileout.write( filein.read() )
+                    #resp_in = requests.get( url )
+                    #fileout = codecs.open( filepath, 'wb', encoding = "utf-8" )
+                    #fileout.write( resp_in.text )
+                    
                     fileout.flush()
                     os.fsync( fileout )
                     fileout.close()
@@ -262,7 +270,13 @@ def documents_by_handle( configparser, handle_name, dst_dir, dv_format = "", cop
                         logging.debug( "csv_path:  %s" % csv_path )
                         
                         #Xlsx2csv( filepath, **kwargs_xlsx2csv ).convert( csv_path )
-                        data_xls = pd.read_excel( filepath, index_col = False,  dtype = str )
+                        
+                        # pandas doc: dtype : Type name or dict of column -> type, default None
+                        # Data type for data or columns. E.g. {‘a’: np.float64, ‘b’: np.int32} 
+                        # Use str or object to preserve and not interpret dtype. If converters are specified, 
+                        # they will be applied INSTEAD of dtype conversion.
+                        #data_xls = pd.read_excel( filepath, index_col = False,  dtype = str )      # ValueError: Unable to convert column Term_RUS to type <type 'str'>
+                        data_xls = pd.read_excel( filepath, index_col = False,  dtype = object )
                         data_xls.to_csv( csv_path, encoding = 'utf-8', index = False, **kwargs_pandas )
                         
                         if remove_xlsx and ext == ".xlsx":
@@ -297,14 +311,14 @@ def documents_by_handle( configparser, handle_name, dst_dir, dv_format = "", cop
 
 
 
-def update_documentation( configparser, copy_local, remove_xlsx = False ):
+def update_documentation( config_parser, copy_local, remove_xlsx = False ):
     logging.info( "%s update_documentation()" % __file__ )
 
     handle_name = "hdl_documentation"
     logging.info( "retrieving documents from dataverse for handle name %s ..." % handle_name )
     dst_dir = "doc"
     dv_format = ""
-    ( docs, ids ) = documents_by_handle( configparser, handle_name, dst_dir, dv_format, copy_local, remove_xlsx )
+    ( docs, ids ) = documents_by_handle( config_parser, handle_name, dst_dir, dv_format, copy_local, remove_xlsx )
     ndoc =  len( docs )
     logging.info( "%d documents retrieved from dataverse" % ndoc )
     if ndoc == 0:
@@ -313,7 +327,7 @@ def update_documentation( configparser, copy_local, remove_xlsx = False ):
 
 
 
-def update_vocabularies( configparser, mongo_client, dv_format, copy_local = False, to_csv = False, remove_xlsx = False):
+def update_vocabularies( config_parser, mongo_client, dv_format, copy_local = False, to_csv = False, remove_xlsx = False):
     logging.info( "%s update_vocabularies()" % __file__ )
     """
     update_vocabularies():
@@ -333,7 +347,7 @@ def update_vocabularies( configparser, mongo_client, dv_format, copy_local = Fal
         dst_dir   = "vocab/tab"
         ascii_dir = dst_dir
     
-    ( docs, ids ) = documents_by_handle( configparser, handle_name, dst_dir, dv_format, copy_local, to_csv, remove_xlsx )
+    ( docs, ids ) = documents_by_handle( config_parser, handle_name, dst_dir, dv_format, copy_local, to_csv, remove_xlsx )
     ndoc =  len( docs )
     logging.info( "%d documents retrieved from dataverse" % ndoc )
     if ndoc == 0:
@@ -349,9 +363,9 @@ def update_vocabularies( configparser, mongo_client, dv_format, copy_local = Fal
         logging.debug( doc )
     
     # parameters to retrieve the vocabulary files
-    host   = configparser.get( "config", "dataverse_root" )
-    apikey = configparser.get( "config", "ristatkey" )
-    dbname = configparser.get( "config", "vocabulary" )
+    host   = config_parser.get( "config", "dataverse_root" )
+    apikey = config_parser.get( "config", "ristatkey" )
+    dbname = config_parser.get( "config", "vocabulary" )
     logging.debug( "host:   %s" % host )
     logging.debug( "apikey: %s" % apikey )
     logging.debug( "dbname: %s" % dbname )
@@ -362,7 +376,7 @@ def update_vocabularies( configparser, mongo_client, dv_format, copy_local = Fal
     # with ".csv" extension vocabulary() retrieves them locally, 
     # and --together with some filtering-- 
     # appends them to a bigvocabulary
-    tmp_dir = configparser.get( "config", "tmppath" )
+    tmp_dir = config_parser.get( "config", "tmppath" )
     abs_ascii_dir = os.path.join( tmp_dir, "dataverse", ascii_dir, handle_name )
     bigvocabulary = vocabulary( host, apikey, ids, abs_ascii_dir )    # type: <class 'pandas.core.frame.DataFrame'>
     #print bigvocabulary.to_json( orient = 'records' )
@@ -391,20 +405,20 @@ def update_vocabularies( configparser, mongo_client, dv_format, copy_local = Fal
         if 'basisyear' in item:
             item[ 'basisyear' ] = re.sub( r'\.0', '', str( item[ 'basisyear' ] ) )
     
-    dbname_vocab = configparser.get( "config", "vocabulary" )
+    dbname_vocab = config_parser.get( "config", "vocabulary" )
     db_vocab = mongo_client.get_database( dbname_vocab )
     logging.info( "inserting vocabulary in mongodb '%s'" % dbname_vocab )
     result = db_vocab.data.insert( vocab_json )
 
 
 
-def retrieve_handle_docs( configparser, handle_name, dv_format = "", copy_local = False, to_csv = False, remove_xlsx = False ):
+def retrieve_handle_docs( config_parser, handle_name, dv_format = "", copy_local = False, to_csv = False, remove_xlsx = False ):
     logging.info( "" )
     logging.info( "retrieve_handle_docs() copy_local: %s" % copy_local )
 
     logging.info( "retrieving documents from dataverse for handle name %s ..." % handle_name )
     dst_dir = "xlsx"
-    ( docs, ids ) = documents_by_handle( configparser, handle_name, dst_dir, dv_format, copy_local, to_csv, remove_xlsx )
+    ( docs, ids ) = documents_by_handle( config_parser, handle_name, dst_dir, dv_format, copy_local, to_csv, remove_xlsx )
     ndoc =  len( docs )
     if ndoc == 0:
         logging.info( "no documents retrieved." )
@@ -422,7 +436,7 @@ def retrieve_handle_docs( configparser, handle_name, dv_format = "", copy_local 
 
 
 
-def row_count( configparser ):
+def row_count( config_parser ):
     logging.debug( "row_count()" )
 
     configpath = RUSSIANREPO_CONFIG_PATH
@@ -434,20 +448,19 @@ def row_count( configparser ):
     
     logging.debug( "using configparser: %s" % configpath )
 
-    configparser = ConfigParser.RawConfigParser()
-    configparser.read( configpath )
+    config_parser.read( configpath )
     
-    host     = configparser.get( 'config', 'dbhost' )
-    dbname   = configparser.get( 'config', 'dbname' )
-    dbtable  = configparser.get( 'config', 'dbtable' )
-    user     = configparser.get( 'config', 'dblogin' )
-    password = configparser.get( 'config', 'dbpassword' )
+    host     = config_parser.get( 'config', 'dbhost' )
+    dbname   = config_parser.get( 'config', 'dbname' )
+    dbtable  = config_parser.get( 'config', 'dbtable' )
+    user     = config_parser.get( 'config', 'dblogin' )
+    password = config_parser.get( 'config', 'dbpassword' )
     
     connection_string = "host = '%s' dbname = '%s' user = '%s' password = '%s'" % ( host, dbname, user, password )
     logging.debug( "connection_string: %s" % connection_string )
-    connection = psycopg2.connect( connection_string )
+    pg_connection = psycopg2.connect( connection_string )
     
-    cursor = connection.cursor()
+    cursor = pg_connection.cursor()
     sql = "SELECT COUNT(*) FROM %s;" % dbtable
     logging.info( sql )
     cursor.execute( sql )
@@ -455,13 +468,13 @@ def row_count( configparser ):
     count = data[0][0]
     logging.info( "row count: %d" % count )
     
-    connection.commit()
+    pg_connection.commit()
     cursor.close()
-    connection.close()
+    pg_connection.close()
 
 
 
-def clear_postgres( configparser ):
+def clear_postgres( config_parser ):
     logging.info( "clear_postgres()" )
 
     configpath = RUSSIANREPO_CONFIG_PATH
@@ -473,36 +486,35 @@ def clear_postgres( configparser ):
     
     logging.info( "using configparser: %s" % configpath )
 
-    configparser = ConfigParser.RawConfigParser()
-    configparser.read( configpath )
+    config_parser.read( configpath )
     
-    host     = configparser.get( 'config', 'dbhost' )
-    dbname   = configparser.get( 'config', 'dbname' )
-    dbtable  = configparser.get( 'config', 'dbtable' )
-    user     = configparser.get( 'config', 'dblogin' )
-    password = configparser.get( 'config', 'dbpassword' )
+    host     = config_parser.get( 'config', 'dbhost' )
+    dbname   = config_parser.get( 'config', 'dbname' )
+    dbtable  = config_parser.get( 'config', 'dbtable' )
+    user     = config_parser.get( 'config', 'dblogin' )
+    password = config_parser.get( 'config', 'dbpassword' )
     
     connection_string = "host = '%s' dbname = '%s' user = '%s' password = '%s'" % ( host, dbname, user, password )
     logging.info( "connection_string: %s" % connection_string )
 
-    connection = psycopg2.connect( connection_string )
-    cursor = connection.cursor()
+    pg_connection = psycopg2.connect( connection_string )
+    cursor = pg_connection.cursor()
 
     sql = "TRUNCATE TABLE %s;" % dbtable
     logging.info( sql )
     cursor.execute( sql )
     
-    connection.commit()
+    pg_connection.commit()
     cursor.close()
-    connection.close()
+    pg_connection.close()
 
 
 
-def store_handle_docs( configparser, handle_name ):
+def store_handle_docs( config_parser, handle_name ):
     logging.info( "" )
     logging.info( "store_handle_docs() %s" % handle_name )
     
-    tmp_dir = configparser.get( "config", "tmppath" )
+    tmp_dir = config_parser.get( "config", "tmppath" )
     csv_dir  = os.path.join( tmp_dir, "dataverse", "csv", handle_name )
     dir_list = []
     if os.path.isdir( csv_dir ):
@@ -519,20 +531,19 @@ def store_handle_docs( configparser, handle_name ):
     
     logging.info( "using configparser: %s" % configpath )
 
-    configparser = ConfigParser.RawConfigParser()
-    configparser.read( configpath )
+    config_parser.read( configpath )
     
-    host     = configparser.get( 'config', 'dbhost' )
-    dbname   = configparser.get( 'config', 'dbname' )
-    dbtable  = configparser.get( 'config', 'dbtable' )
-    user     = configparser.get( 'config', 'dblogin' )
-    password = configparser.get( 'config', 'dbpassword' )
+    host     = config_parser.get( 'config', 'dbhost' )
+    dbname   = config_parser.get( 'config', 'dbname' )
+    dbtable  = config_parser.get( 'config', 'dbtable' )
+    user     = config_parser.get( 'config', 'dblogin' )
+    password = config_parser.get( 'config', 'dbpassword' )
     
     connection_string = "host = '%s' dbname = '%s' user = '%s' password = '%s'" % ( host, dbname, user, password )
     logging.info( "connection_string: %s" % connection_string )
 
-    connection = psycopg2.connect( connection_string )
-    cursor = connection.cursor()
+    pg_connection = psycopg2.connect( connection_string )
+    cursor = pg_connection.cursor()
 
     for filename in dir_list:
         root, ext = os.path.splitext( filename )
@@ -543,7 +554,7 @@ def store_handle_docs( configparser, handle_name ):
             #test_csv_file( pathname )
             
             #out_pathname = write_psv_file( csv_dir, filename )
-            #psv_file = open( out_pathname, 'r' )
+            #psv_file = codecs.open( out_pathname, 'r', encoding = "utf-8" )
             #cursor.copy_from( psv_file, dbtable, sep ='|' )
             
             stringio_file = filter_csv( csv_dir, filename )
@@ -554,8 +565,8 @@ def store_handle_docs( configparser, handle_name ):
             #csvfile.close()
             
             # debug strange record duplications
-            connection.commit()
-            row_count( configparser )
+            pg_connection.commit()
+            row_count( config_parser )
             
         else:
             logging.info( "skip: %s" % filename )
@@ -566,14 +577,15 @@ def store_handle_docs( configparser, handle_name ):
     ndoc = len( dir_list )
     logging.info( "%d documents for handle %s stored in table %s" % ( ndoc, handle_name, dbtable ) )
     
-    connection.commit()
+    pg_connection.commit()
     cursor.close()
-    connection.close()
+    pg_connection.close()
 
 
 
 def test_csv_file( path_name ):
     csv_file = open( path_name, 'r' )
+    #csv_file = codecs.open( path_name, 'r', encoding = 'utf-8' )
     nlines = 0
     
     for line in csv_file:
@@ -651,15 +663,16 @@ def filter_csv( csv_dir, in_filename ):
     
     in_pathname = os.path.abspath( os.path.join( csv_dir, in_filename ) )
     csv_file = open( in_pathname, 'r' )
+    #csv_file = codecs.open( in_pathname, 'r', encoding = 'utf-8' )
     
     """
     root, ext = os.path.splitext( in_filename )
     out_pathname = os.path.abspath( os.path.join( csv_dir, root + ".psv" ) )
     print( out_pathname )
-    out_file = open( out_pathname, 'w' )
+    out_file = codecs.open( out_pathname, 'w', encoding = 'utf-8' )
     """
     
-    out_file = StringIO.StringIO()      # in-memory file
+    out_file = StringIO()               # in-memory file
     
     nline = 0
     nskipped = 0
@@ -910,7 +923,7 @@ def filter_csv( csv_dir, in_filename ):
 
 
 
-def update_handle_docs( configparser, mongo_client ):
+def update_handle_docs( config_parser, mongo_client ):
     logging.info( "" )
     logging.info( "update_handle_docs()" )
     
@@ -919,7 +932,7 @@ def update_handle_docs( configparser, mongo_client ):
     # classupdate() uses postgresql access parameters from cpath contents
     classdata = classupdate( configpath )   # fetching historic and modern class data from postgresql table 
     
-    dbname = configparser.get( "config", "vocabulary" )
+    dbname = config_parser.get( "config", "vocabulary" )
     logging.info( "inserting historic and modern class data in mongodb '%s'" % dbname )
     
     db = mongo_client.get_database( dbname )
@@ -930,7 +943,7 @@ def update_handle_docs( configparser, mongo_client ):
 def clear_mongo( mongo_client ):
     logging.info( "clear_mongo()" )
     
-    dbname_vocab = configparser.get( "config", "vocabulary" )
+    dbname_vocab = config_parser.get( "config", "vocabulary" )
     db_vocab = mongo_client.get_database( dbname_vocab )
     logging.info( "delete all documents from collection 'data' in mongodb db '%s'" % dbname_vocab )
     # drop the documents from collection 'data'; same as: db.drop_collection( coll_name )
@@ -942,7 +955,7 @@ def clear_mongo( mongo_client ):
 
 
 
-def topic_counts( configparser ):
+def topic_counts( config_parser ):
     logging.info( "topic_counts()" )
     
     configpath = RUSSIANREPO_CONFIG_PATH
@@ -954,19 +967,18 @@ def topic_counts( configparser ):
     
     logging.info( "using configparser: %s" % configpath )
 
-    configparser = ConfigParser.RawConfigParser()
-    configparser.read( configpath )
+    config_parser.read( configpath )
     
-    host     = configparser.get( 'config', 'dbhost' )
-    dbname   = configparser.get( 'config', 'dbname' )
-    user     = configparser.get( 'config', 'dblogin' )
-    password = configparser.get( 'config', 'dbpassword' )
+    host     = config_parser.get( 'config', 'dbhost' )
+    dbname   = config_parser.get( 'config', 'dbname' )
+    user     = config_parser.get( 'config', 'dblogin' )
+    password = config_parser.get( 'config', 'dbpassword' )
     
     connection_string = "host = '%s' dbname = '%s' user = '%s' password = '%s'" % ( host, dbname, user, password )
     logging.info( "connection_string: %s" % connection_string )
 
-    connection = psycopg2.connect( connection_string )
-    cursor = connection.cursor( cursor_factory = psycopg2.extras.NamedTupleCursor )
+    pg_connection = psycopg2.connect( connection_string )
+    cursor = pg_connection.cursor( cursor_factory = psycopg2.extras.NamedTupleCursor )
 
     sql_topics  = "SELECT datatype, topic_name FROM datasets.topics"
     sql_topics += " ORDER BY datatype"
@@ -997,22 +1009,23 @@ def topic_counts( configparser ):
             #print( "skip main topic :", datatype, topic_name )
             pass
     
-    connection.commit()
+    pg_connection.commit()
     cursor.close()
-    connection.close()
+    pg_connection.close()
 
 
 
-def load_vocab( vocab_fname, vocab, pos_rus, pos_eng ):
+def load_vocab( config_parser, vocab_fname, vocab, pos_rus, pos_eng ):
     logging.info( "load_vocab() vocab_fname: %s" % vocab_fname )
     # if pos_extar is not None, it is needed to make the keys and/or values unique
     handle_name = "hdl_vocabularies"
-    tmp_dir = configparser.get( "config", "tmppath" )
+    tmp_dir = config_parser.get( "config", "tmppath" )
     vocab_dir = os.path.join( tmp_dir, "dataverse", "vocab/csv", handle_name )
     logging.info( "vocab_dir: %s" % vocab_dir )
     vocab_path = os.path.join( vocab_dir, vocab_fname )
     logging.info( "vocab_path: %s" % vocab_path )
     vocab_file = open( vocab_path, "r" )
+    #vocab_file = codecs.open( vocab_path, "r", encoding = 'utf-8' )
     
     nline = 0
     for csv_line in iter( vocab_file ):
@@ -1094,29 +1107,29 @@ def load_vocab( vocab_fname, vocab, pos_rus, pos_eng ):
 
 
 
-def translate_csv( configparser, handle_name ):
+def translate_csv( config_parser, handle_name ):
     global Nexcept
     logging.info( "" )
     logging.info( "translate_csv()" )
     logging.info( "translating csv documents for handle name %s ..." % handle_name )
     
     vocab_units = bidict()
-    vocab_units = load_vocab( "ERRHS_Vocabulary_units.csv", vocab_units, 0, 1 )
+    vocab_units = load_vocab( config_parser, "ERRHS_Vocabulary_units.csv", vocab_units, 0, 1 )
     
     vocab_regions = dict()      # special, not bidict() !
-    vocab_regions = load_vocab( "ERRHS_Vocabulary_regions.csv", vocab_regions, 1, 2 )
+    vocab_regions = load_vocab( config_parser, "ERRHS_Vocabulary_regions.csv", vocab_regions, 1, 2 )
     
     vocab_histclasses = bidict()
     vocab_fname = "ERRHS_Vocabulary_histclasses.csv"
-    vocab_histclasses = load_vocab( vocab_fname, vocab_histclasses, 0, 1 )
+    vocab_histclasses = load_vocab( config_parser, vocab_fname, vocab_histclasses, 0, 1 )
     logging.info( "check vocab_fname: %s" % vocab_fname )
     for key in vocab_histclasses:
         logging.debug( "key: %s, value: %s" % ( key, vocab_histclasses[ key ] ) )
     
     vocab_modclasses = bidict()
-    vocab_modclasses = load_vocab( "ERRHS_Vocabulary_modclasses.csv", vocab_modclasses, 0, 1 )
+    vocab_modclasses = load_vocab( config_parser, "ERRHS_Vocabulary_modclasses.csv", vocab_modclasses, 0, 1 )
     
-    tmp_dir = configparser.get( "config", "tmppath" )
+    tmp_dir = config_parser.get( "config", "tmppath" )
     csv_dir = os.path.join( tmp_dir, "dataverse", "csv", handle_name )
     if os.path.exists( csv_dir ):
         logging.info( "csv_dir: %s" % csv_dir )
@@ -1159,6 +1172,8 @@ def translate_csv( configparser, handle_name ):
         
         file_rus = open( csv_path, "r" )
         file_eng = open( eng_path, "w" )
+        #file_rus = codecs.open( csv_path, "r", encoding = 'utf-8' )
+        #file_eng = codecs.open( eng_path, "w", encoding = 'utf-8' )
         
         not_found = set()
         nline = 0
@@ -1327,23 +1342,26 @@ if __name__ == "__main__":
     
     python_vertuple = sys.version_info
     python_version = str( python_vertuple[ 0 ] ) + '.' + str( python_vertuple[ 1 ] ) + '.' + str( python_vertuple[ 2 ] )
-    logging.info( "Python version: %s" % python_version  )
+    logging.info( "Python version: %s" % python_version )
     
     RUSSIANREPO_CONFIG_PATH = os.environ[ "RUSSIANREPO_CONFIG_PATH" ]
     logging.info( "RUSSIANREPO_CONFIG_PATH: %s" % RUSSIANREPO_CONFIG_PATH )
     
-    configparser = ConfigParser.RawConfigParser()
-    configparser.read( RUSSIANREPO_CONFIG_PATH )
+    config_parser = configparser.RawConfigParser()
+    config_parser.read( RUSSIANREPO_CONFIG_PATH )
     mongo_client  = MongoClient()
     
     if DO_VOCABULARY or DO_MONGODB:
+        logging.debug( "-1- DO_VOCABULARY or DO_MONGODB" )
         clear_mongo( mongo_client )
     
     if DO_DOCUMENTATION:
+        logging.debug( "-2- DO_DOCUMENTATION" )
         copy_local  = True      # for zipped downloads
-        update_documentation( configparser, copy_local )
+        update_documentation( config_parser, copy_local )
     
     if DO_VOCABULARY:
+        logging.debug( "-3- DO_VOCABULARY" )
         # Downloaded vocabulary documents are not used to update the vocabularies, 
         # they are processed on the fly, and put in MongoDB
         copy_local = True      # to inspect
@@ -1351,7 +1369,7 @@ if __name__ == "__main__":
             to_csv = False      # we get .tab
         else:
             to_csv = True       # we get .xlsx
-        update_vocabularies( configparser, mongo_client, dv_format, copy_local, to_csv )
+        update_vocabularies( config_parser, mongo_client, dv_format, copy_local, to_csv )
     #"""
     handle_names = [ 
         "hdl_errhs_population",     # ERRHS_1   39 files
@@ -1366,31 +1384,35 @@ if __name__ == "__main__":
     #handle_names = [ "hdl_errhs_land" ]
     
     if DO_RETRIEVE:
+        logging.debug( "-4- DO_RETRIEVE" )
         copy_local  = True
         to_csv      = True
         remove_xlsx = False
         for handle_name in handle_names:
-            retrieve_handle_docs( configparser, handle_name, dv_format, copy_local, to_csv, remove_xlsx ) # dataverse  => local_disk
+            retrieve_handle_docs( config_parser, handle_name, dv_format, copy_local, to_csv, remove_xlsx ) # dataverse  => local_disk
     
     if DO_POSTGRES:
+        logging.debug( "-5- DO_POSTGRES" )
         logging.StreamHandler().flush()
-        row_count( configparser )
-        clear_postgres( configparser )
-        row_count( configparser )
+        row_count( config_parser )
+        clear_postgres( config_parser )
+        row_count( config_parser )
         for handle_name in handle_names:
-            store_handle_docs( configparser, handle_name )         # local_disk => postgresql
+            store_handle_docs( config_parser, handle_name )         # local_disk => postgresql
             logging.StreamHandler().flush()
-            row_count( configparser )
+            row_count( config_parser )
     
         # done on-the-fly in services/topic_counts()
-        #topic_counts( configparser )                               # postgresql datasets.topics counts
+        #topic_counts( config_parser )                               # postgresql datasets.topics counts
     
     if DO_MONGODB:
-        update_handle_docs( configparser, mongo_client )           # postgresql => mongodb
+        logging.debug( "-6- DO_MONGODB" )
+        update_handle_docs( config_parser, mongo_client )           # postgresql => mongodb
     
     if DO_TRANSLATE:
+        logging.debug( "-7- DO_TRANSLATE" )
         for handle_name in handle_names:
-            translate_csv( configparser, handle_name )
+            translate_csv( config_parser, handle_name )
     
     logging.info( "total number of exceptions: %d" % Nexcept )
     

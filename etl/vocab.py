@@ -3,25 +3,22 @@
 
 """
 VT-06-Jul-2016 latest change by VT
-FL-05-Apr-2017
+FL-08-Sep-2017
 """
 
-import ConfigParser
+# future-0.16.0 imports for Python 2/3 compatibility
+from __future__ import ( absolute_import, division, print_function, unicode_literals )
+from builtins import ( ascii, bytes, chr, dict, filter, hex, input, int, list, map, 
+    next, object, oct, open, pow, range, round, super, str, zip )
+
+from six.moves import configparser, StringIO
+
 import logging
 import os
 import pandas as pd
 import psycopg2
-import psycopg2.extras
 import re
 import urllib
-
-from StringIO import StringIO
-
-#import numpy as np
-#import collections
-#import getopt
-#import pprint
-#import vocab
 
 
 def vocabulary( host, apikey, ids, abs_ascii_dir ):
@@ -83,7 +80,8 @@ def vocabulary( host, apikey, ids, abs_ascii_dir ):
 
 def classupdate( cpath ):
     logging.info( "%s classupdate()" % __file__ )
-    cparser = ConfigParser.RawConfigParser()
+    #cparser = ConfigParser.RawConfigParser()
+    cparser = configparser.RawConfigParser()
     cparser.read( cpath )
     
     host     = cparser.get( 'config', 'dbhost' )
@@ -119,7 +117,11 @@ def classupdate( cpath ):
                 value = valuestr[ i ]
                 #logging.debug( "name: %s, value: %s" % ( name, value ) )
                 if value:
-                     classes[ name ] = str( value )
+                    try:
+                        classes[ name ] = str( value )
+                    except:
+                        #print( __file__, "historic", value )
+                        classes[ name ] = value
 
             flagvalue  = 0
             firstclass = 0
@@ -166,7 +168,11 @@ def classupdate( cpath ):
                 name  = sqlnames[ i ]
                 value = valuestr[ i ]
                 if value:
-                    classes[ name ] = str( value )
+                    try:
+                        classes[ name ] = str( value )
+                    except:
+                        #print( __file__, "modern", value )
+                        classes[ name ] = value
 
             flagvalue  = 0
             firstclass = 0
