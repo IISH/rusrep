@@ -861,7 +861,8 @@ def load_vocabulary( vocab_type ):
     eng_data = {}
     if language == "en":
         new_filter = {}
-        new_filter[ 'YEAR' ] = base_year    # vocab_filter also contains DATATYPE
+        if base_year:
+            new_filter[ 'YEAR' ] = base_year    # vocab_filter also contains DATATYPE
         logging.debug( "translate_vocabulary with filter: %s" % new_filter )
         eng_data = translate_vocabulary( new_filter )
         logging.debug( "translate_vocabulary eng_data items: %d" % len( eng_data ) )
@@ -929,11 +930,13 @@ def load_vocabulary( vocab_type ):
     params = {}
     if vocab_type == "regions":
         params[ "vocabulary" ] = vocab_name
-        params[ "basisyear" ]  = basisyear
+        if basisyear:
+            params[ "basisyear" ] = basisyear
     else:
         params[ "vocabulary" ] = vocab_type
-        params[ "base_year" ]  = base_year
-        params[ "datatype" ]   = datatype
+        if base_year:
+            params[ "base_year" ] = base_year
+        params[ "datatype" ] = datatype
     
     logging.debug( "params: %s" % params )
     vocab = db.data.find( params )
