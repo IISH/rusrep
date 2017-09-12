@@ -1,0 +1,25 @@
+# FL-11-Sep-2017
+
+# WARNING: python dataverse-client py.test fails with Python3
+
+# pip requirements file for RusRep with a Python-3.6.2
+# setuptools, pip, and venv are already present in the (virtual) python3.6
+# install the packages below from a terminal; 
+# newer versions may work; we used the versions below:
+ 
+# $ pip install -r requirements_py3.6.txt
+
+future == 0.16.0
+six == 1.10.0
+ldap == 1.0.2           # also fetched ldap3-2.3 pyasn1-0.3.3
+Flask == 0.12.2         # also fetched Jinja2-2.9.6 MarkupSafe-1.0 Werkzeug-0.12.2 click-6.7 itsdangerous-0.24
+psycopg2 == 2.7.3.1
+pymongo == 3.5.1
+pandas == 0.20.3        # also fetched numpy-1.13.1 python-dateutil-2.6.1 pytz-2017.2 six-1.10.0
+bidict == 0.13.1
+
+# dataverse-client-python not yet in PyPI, fetch dataverse-0.1.2 from github
+git+https://github.com/IQSS/dataverse-client-python.git#egg=dataverse
+# also fetched bleach-2.0.0 certifi-2017.7.27.1 chardet-3.0.4 html5lib-0.999999999 idna-2.6 lxml-3.8.0 requests-2.18.4 urllib3-1.22 webencodings-0.5.1
+
+# [eof]
