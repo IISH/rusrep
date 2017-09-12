@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # VT-07-Jul-2016 Latest change by VT
-# FL-09-Jun-2017 Latest change
+# FL-12-Sep-2017 Latest change
 
 import json
 import logging
@@ -64,6 +64,7 @@ def preprocessor( datafilter ):
             
             logging.debug( "# of items in rowitem: %d" % len( rowitem[ 'data' ] ) )
             for item in rowitem[ 'data' ]:
+                
                 dataitem = item
                 if 'path' in item:
                     classes = item[ 'path' ]
@@ -265,17 +266,11 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         for region in vocab_regions:
             logging.debug( "region: %s" % str( region ) )
             ter_code_list.append( region[ "ID" ] )
-        
-    byear_counts = {
-        "1795" : 0,
-        "1858" : 0,
-        "1897" : 0,
-        "1959" : 0,
-        "2002" : 0
-    }
+    
+    # initialise base_year counts
+    byear_counts = { "1795" : 0, "1858" : 0, "1897" : 0, "1959" : 0, "2002" : 0 }
     
     skip_list = [ "count" ]
-    #skip_list = [ "count", "datatype" ]
     
     # loop over the data sheets, and select the correct year data
     for sheet_idx in range( nsheets ):
@@ -298,6 +293,7 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         regions_filter[ 'basisyear' ] = str( base_year )
         vocab_regions = db_vocabulary.data.find( regions_filter )
         
+        # get region names from ter_codes
         regions = {}
         #ter_codes = vocab_regs_terms[ "ter_codes" ]     # from sql result
         ter_codes = ter_code_list                       # from qinput or all (modern)
@@ -314,7 +310,7 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         logging.debug( "regions: %s" % str( regions ) )
         vocab_regs_terms[ "regions" ] = regions
         
-        logging.debug( "keys in vocab_regs_terms:" )
+        logging.debug( "%d keys in vocab_regs_terms:" % len( vocab_regs_terms ) )
         for key in vocab_regs_terms:
             logging.debug( "key: %s" % key )
         
@@ -364,33 +360,37 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
             chain = json.loads( itemchain )
             logging.debug( "chain: %s" %  str( chain ) )
             
-            j = 0
+            j = 0           # column
             # sheet_header
-            if i == 9:
+            if i == 9:      # row
                 logging.debug( "# of names in header_chain: %d" % len( header_chain ) )
                 logging.debug( "names in header_chain: %s" % str( header_chain ) )
                 i_name = 0
                 for name in sorted( header_chain ):
                     if name in skip_list:           # not in download
+                        logging.debug( "skip name: %s" % name )
                         continue
                     
+                    logging.debug( "use name: %s" % name )
                     column_name = name
                     if column_name in vocab_regs_terms[ "terms" ]:
                         column_name = vocab_regs_terms[ "terms" ][ column_name ]
-
+                    
                     # prevent that [hist]class10 ends between 1 & 2
                     p = name.find( "class" )
                     if p != -1:
                         n = name[ p+5: ]
-                        #logging.debug( "p: %d, n: %s" % ( p, n ) )
+                        logging.debug( "p: %d, n: %s" % ( p, n ) )
                         j = int( n ) + 1
                     else:
                         j = i_name
+                        i_name += 1
                     logging.debug( "column %d: %s" % ( j, column_name ) )
                     
                     c = ws.cell( row = i, column = j )
                     c.value = column_name
-                    i_name += 1
+                    logging.debug( "column %d: %s" % ( j, c.value ) )
+                    #i_name += 1
                 
                 j = max_cols
                 logging.debug( "# of ter_names in sorted_regions: %d" % len( sorted_regions ) )
@@ -401,7 +401,6 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                     if ter_code in vocab_regs_terms[ "regions" ]:
                         ter_name = vocab_regs_terms[ "regions" ][ ter_code ]
                     c.value = ter_name
-                    logging.debug( "column %d: %s" % ( j, ter_name ) )
                     j += 1
                 i += 1
             
@@ -415,7 +414,7 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                 base_year_chain = 0
             
             if base_year != base_year_chain:
-                logging.debug( "skip: %s, base_year %d not equal to base_year_chain" % ( base_year, base_year_chain ) )
+                logging.debug( "skip: base_year %d not equal to base_year_chain %d" % ( base_year, base_year_chain ) )
                 continue
             else:
                 byear_counts[ str( base_year ) ] = 1 + byear_counts[ str( base_year ) ]
@@ -424,6 +423,7 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
             logging.debug( "ter_data: %s: " % str( ter_data ) )
             nclasses = 0
             for name in sorted( chain ):
+                logging.debug( "name: %s: " % name )
                 if name == "base_year":
                     j = 0
                 elif name == "datatype":
@@ -462,12 +462,14 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                 if value == '.':
                     value = ''
                 c.value = value
+                logging.debug( "row: %d, column: %d, name: %s, value: %s" % ( i, j, name, value ) )
             
-            # Sorting
+            # display region names sorted alphabetically
             j = max_cols
-            for ter_name in sorted_regions:
+            num_regions = len( sorted_regions )
+            for idx, ter_name in enumerate( sorted_regions ):
                 ter_code = regions[ ter_name ]
-                logging.debug( "ter_name: %s, ter_code: %s: " % ( ter_name, ter_code ) )
+                logging.debug( "%d-of-%d ter_name: %s, ter_code: %s: " % ( idx+1, num_regions, ter_name, ter_code ) )
                 if ter_code in ter_data:
                     ter_value = ter_data[ ter_code ]
                     ter_value = re.sub( r'\.0', '', str( ter_value ) )
