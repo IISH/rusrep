@@ -18,7 +18,7 @@ FL-17-May-2017 postgresql datasets.topics counts
 FL-03-Jul-2017 Translate data files to english
 FL-07-Jul-2017 sys.stderr.write() cannot write to cron.log as normal user
 FL-11-Jul-2017 pandas: do not parse numbers, but keep strings as they are
-FL-11-Aug-2017 Py2/Py3 cleanup
+FL-13-Aug-2017 Py2/Py3 cleanup
 
 ToDo:
  - replace urllib by requests
@@ -88,10 +88,6 @@ pkey = None
 def load_json( url ):
     logging.debug( "load_json() %s" % url )
 
-    #req = urllib2.Request( url )
-    #opener = urllib2.build_opener()
-    #f = opener.open( req )
-    #dataframe = json.load( f )
     wp = urllib.request.urlopen( url )
     pw = wp.read()
     dataframe = json.loads( pw )
@@ -248,7 +244,6 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", co
                     logging.debug( "filepath: %s" % filepath )
                     
                     # read dataverse document from url, write contents to filepath
-                    #filein = urllib.urlopen( url )
                     filein = urllib.request.urlopen( url )
                     fileout = open( filepath, 'wb' )
                     fileout.write( filein.read() )
@@ -1352,16 +1347,16 @@ if __name__ == "__main__":
     mongo_client  = MongoClient()
     
     if DO_VOCABULARY or DO_MONGODB:
-        logging.debug( "-1- DO_VOCABULARY or DO_MONGODB" )
+        logging.info( "-1- DO_VOCABULARY or DO_MONGODB" )
         clear_mongo( mongo_client )
     
     if DO_DOCUMENTATION:
-        logging.debug( "-2- DO_DOCUMENTATION" )
+        logging.info( "-2- DO_DOCUMENTATION" )
         copy_local  = True      # for zipped downloads
         update_documentation( config_parser, copy_local )
     
     if DO_VOCABULARY:
-        logging.debug( "-3- DO_VOCABULARY" )
+        logging.info( "-3- DO_VOCABULARY" )
         # Downloaded vocabulary documents are not used to update the vocabularies, 
         # they are processed on the fly, and put in MongoDB
         copy_local = True      # to inspect
@@ -1384,7 +1379,7 @@ if __name__ == "__main__":
     #handle_names = [ "hdl_errhs_land" ]
     
     if DO_RETRIEVE:
-        logging.debug( "-4- DO_RETRIEVE" )
+        logging.info( "-4- DO_RETRIEVE" )
         copy_local  = True
         to_csv      = True
         remove_xlsx = False
@@ -1392,7 +1387,7 @@ if __name__ == "__main__":
             retrieve_handle_docs( config_parser, handle_name, dv_format, copy_local, to_csv, remove_xlsx ) # dataverse  => local_disk
     
     if DO_POSTGRES:
-        logging.debug( "-5- DO_POSTGRES" )
+        logging.info( "-5- DO_POSTGRES" )
         logging.StreamHandler().flush()
         row_count( config_parser )
         clear_postgres( config_parser )
@@ -1406,11 +1401,11 @@ if __name__ == "__main__":
         #topic_counts( config_parser )                               # postgresql datasets.topics counts
     
     if DO_MONGODB:
-        logging.debug( "-6- DO_MONGODB" )
+        logging.info( "-6- DO_MONGODB" )
         update_handle_docs( config_parser, mongo_client )           # postgresql => mongodb
     
     if DO_TRANSLATE:
-        logging.debug( "-7- DO_TRANSLATE" )
+        logging.info( "-7- DO_TRANSLATE" )
         for handle_name in handle_names:
             translate_csv( config_parser, handle_name )
     

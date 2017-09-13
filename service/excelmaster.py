@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # VT-07-Jul-2016 Latest change by VT
-# FL-12-Sep-2017 Latest change
+# FL-13-Sep-2017 Latest change
 
 import json
 import logging
@@ -364,9 +364,12 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
             # sheet_header
             if i == 9:      # row
                 logging.debug( "# of names in header_chain: %d" % len( header_chain ) )
-                logging.debug( "names in header_chain: %s" % str( header_chain ) )
+                #logging.debug( "names in header_chain: %s" % str( header_chain ) )
                 i_name = 0
-                for name in sorted( header_chain ):
+                j_in_use = []
+                sorted_chain = sorted( header_chain )
+                logging.debug( "names in sorted_chain: %s" % str( sorted_chain ) )
+                for name in sorted_chain:
                     if name in skip_list:           # not in download
                         logging.debug( "skip name: %s" % name )
                         continue
@@ -376,21 +379,35 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                     if column_name in vocab_regs_terms[ "terms" ]:
                         column_name = vocab_regs_terms[ "terms" ][ column_name ]
                     
-                    # prevent that [hist]class10 ends between 1 & 2
-                    p = name.find( "class" )
-                    if p != -1:
-                        n = name[ p+5: ]
-                        logging.debug( "p: %d, n: %s" % ( p, n ) )
-                        j = int( n ) + 1
-                    else:
-                        j = i_name
+                    if name == "base_year":
+                        j = 0
+                        j_in_use.append( j )
                         i_name += 1
-                    logging.debug( "column %d: %s" % ( j, column_name ) )
+                    elif name == "datatype":
+                        j = 1
+                        j_in_use.append( j )
+                        i_name += 1
+                    elif name in [ "histclass1", "class1" ]:
+                        j = 2
+                        j_in_use.append( j )
+                        i_name += 1
+                    elif name in [ "histclass10", "class10" ]:
+                        j = 11
+                        j_in_use.append( j )
+                    elif name == "value_unit":
+                        j = 12
+                        j_in_use.append( j )
+                    else:
+                        x = i_name
+                        while x in j_in_use:
+                            x += 1
+                        j = x
+                        j_in_use.append( i_name )
+                        i_name += 1
                     
                     c = ws.cell( row = i, column = j )
                     c.value = column_name
                     logging.debug( "column %d: %s" % ( j, c.value ) )
-                    #i_name += 1
                 
                 j = max_cols
                 logging.debug( "# of ter_names in sorted_regions: %d" % len( sorted_regions ) )

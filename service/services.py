@@ -5,7 +5,7 @@ VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
-FL-12-Sep-2017 
+FL-13-Sep-2017 
 
 def get_configparser():
 def connect():
@@ -182,12 +182,13 @@ def strip_path_list( old_path ):
     logging.debug( "strip_path_list()" )
     # temporary fix until Pieter removes [hist]class5&6 from qinput
     
-    do_subclasses = False
+    do_subclasses = False   # becomes True if subclasses were removed from path
     new_path = []
     logging.debug( "old path: (%s) %s" % ( type( old_path ), str( old_path ) ) )
     for old_entry in old_path:
         logging.debug( "old entry: %s" % old_entry )
         new_entry = copy.deepcopy( old_entry )
+        
         for k in old_entry:
             v = old_entry[ k ]
             #logging.debug( "k: %s, v: %s" % ( k, v ) )
@@ -1477,15 +1478,14 @@ def aggregation_1year( qinput, do_subclasses, download_key ):
                         sql[ "internal" ] += ") OR"
     
     sql[ "internal" ] = sql[ "internal" ][ :-3 ]
+    
+    logging.debug( "sql: %s" % str( sql ) )
 
-    logging.debug( "condition: %s" % str( sql[ "condition" ] ) )
-    logging.debug( "order_by:  %s" % str( sql[ "order_by" ]  ) )
-    logging.debug( "group_by:  %s" % str( sql[ "group_by" ]  ) )
-    logging.debug( "where:     %s" % str( sql[ "where" ]     ) )
-    logging.debug( "internal:  %s" % str( sql[ "internal" ]  ) )
-
+    for key in sql:
+        logging.debug( "sql key: %s, sql value: %s" % ( key, str( sql[ key ] ) ) )
+    
     extra_classes = []
-    if do_subclasses:
+    if do_subclasses:   # 3&4 were removed from path; add them all here
         if classification == "historical":
             extra_classes = [ "histclass5", "histclass6", "histclass7", "histclass8", "histclass9", "histclass10" ]
         elif classification == "modern":
@@ -1496,34 +1496,40 @@ def aggregation_1year( qinput, do_subclasses, download_key ):
     sql_query += ", SUM(CAST(value AS DOUBLE PRECISION)) AS total"
     sql_query += ", COUNT(*) AS count"
     sql_query += ", COUNT(*) - COUNT(value) AS data_active"
-    sql_query += ", ter_code"
+    
+    if classification == "modern":  # "ter_code" keyword not in qinput, but we always need it
+        logging.debug( "modern classification: adding ter_code to SELECT" )
+        sql_query += ", ter_code"
+    
     sql_query += ", value_unit"
     logging.debug( "sql_query 0: %s" % sql_query )
 
     if len( extra_classes ) > 0:
         for field in extra_classes:
             sql_query += ", %s" % field
-        logging.debug( "sql_query +: %s" % sql_query )
+        logging.debug( "sql_query 1: %s" % sql_query )
     
     if sql[ "where" ]:
         logging.debug( "where: %s" % sql[ "where" ] )
         sql_query += ", %s" % sql[ "condition" ]
         sql_query  = sql_query[ :-2 ]
+        logging.debug( "sql_query 2: %s" % sql_query )
         
         sql_query += " FROM russianrepository WHERE %s" % sql[ "where" ]
         sql_query  = sql_query[ :-4 ]
+        logging.debug( "sql_query 3: %s" % sql_query )
     
     sql_query += " AND value <> '.'"            # suppress a 'lone' "optional point", used in the table to flag missing data
     #sql_query += " AND value ~ '^\d+$'"         # regexp (~) to require that value only contains digits
     #sql_query += " AND value ~ '^\d*\.?\d*$'"
     # plus an optional single . for floating point values, and plus an optional leading sign
     sql_query += " AND value ~ '^[-+]?\d*\.?\d*$'"
-    logging.debug( "sql_query +: %s" % sql_query )
+    logging.debug( "sql_query 4: %s" % sql_query )
     
     if sql[ "internal" ]:
         logging.debug( "internal: %s" % sql[ "internal" ] )
         sql_query += " AND (%s) " % sql[ "internal" ]
-        logging.debug( "sql_query +: %s" % sql_query )
+        logging.debug( "sql_query 5: %s" % sql_query )
     
     sql[ "group_by" ] = " GROUP BY value_unit, ter_code"
     
@@ -1534,7 +1540,7 @@ def aggregation_1year( qinput, do_subclasses, download_key ):
     
     logging.debug( "group_by: %s" % sql[ "group_by" ] )
     sql_query += sql[ "group_by" ]
-    logging.debug( "sql_query +: %s" % sql_query )
+    logging.debug( "sql_query 6: %s" % sql_query )
     
     # ordering by the db: applied to the russian contents, so the ordering of 
     # the english translation will not be perfect, but at least grouped. 
@@ -1562,7 +1568,7 @@ def aggregation_1year( qinput, do_subclasses, download_key ):
     logging.debug( "order_by: %s" % sql[ "order_by" ] )
     sql_query += " %s" % sql[ "order_by" ]
     
-    logging.debug( "sql_query complete: %s" % sql_query )
+    logging.debug( "sql_query 7 = complete: %s" % sql_query )
 
     if sql_query:
         time0 = time()      # seconds since the epoch
