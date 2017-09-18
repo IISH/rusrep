@@ -5,9 +5,12 @@ VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
+FL-13-Sep-2017 
 
+def get_configparser():
 def connect():
 def classcollector( keywords ):
+def strip_path_list( old_path ):
 def json_generator( cursor, json_dataname, data, download_key = None ):
 def json_cache( json_list, language, json_dataname, download_key, qinput = {} ):
 def collect_docs( qinput, download_dir, download_key ):
@@ -21,14 +24,14 @@ def load_topics():
 def datasetfilter( data, sql_names, classification ):
 def zap_empty_classes( item ):
 def translate_item( item, eng_data ):
-def load_vocabulary( vocname ):
+def load_vocabulary( vocab_type ):
 def load_data( cursor, year, datatype, region, debug ):
-def rdfconvertor( url ):
+def rdf_convertor( url ):
 def get_sql_where( name, value ):
-def loadjson( apiurl ):
+def loadjson( json_dataurl ):
 def filecat_subtopic( cursor, datatype, base_year ):
 def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
-def aggregation_1year( qinput, download_key ):
+def aggregation_1year( qinput, do_subclasses, download_key ):
 def cleanup_downloads( download_dir, time_limit ):
 def format_secs( seconds ):
 
@@ -45,8 +48,8 @@ def format_secs( seconds ):
 @app.route( "/documentation" )                                  def documentation():
 @app.route( "/histclasses" )                                    def histclasses():
 @app.route( "/classes" )                                        def classes():
-@app.route( "/years" )                                          def years():
 @app.route( "/regions" )                                        def regions():
+@app.route( "/years" )                                          def years():
 @app.route( "/translate" )                                      def translate():
 @app.route( "/filter", methods = [ "POST", "GET" ] )            def login( settings = '' ):
 @app.route( "/maps" )                                           def maps():
@@ -179,12 +182,13 @@ def strip_path_list( old_path ):
     logging.debug( "strip_path_list()" )
     # temporary fix until Pieter removes [hist]class5&6 from qinput
     
-    do_subclasses = False
+    do_subclasses = False   # becomes True if subclasses were removed from path
     new_path = []
     logging.debug( "old path: (%s) %s" % ( type( old_path ), str( old_path ) ) )
     for old_entry in old_path:
         logging.debug( "old entry: %s" % old_entry )
         new_entry = copy.deepcopy( old_entry )
+        
         for k in old_entry:
             v = old_entry[ k ]
             #logging.debug( "k: %s, v: %s" % ( k, v ) )
@@ -208,7 +212,7 @@ def strip_path_list( old_path ):
 
 
 def json_generator( cursor, json_dataname, data, download_key = None ):
-    logging.debug( "json_generator() cursor: %s, json_dataname: %s" % ( cursor, json_dataname ) )
+    logging.debug( "json_generator() json_dataname: %s, # of data items: %d" % ( json_dataname, len( data ) ) )
     logging.debug( "data: %s" % data )
     
     classification = "unknown"
@@ -250,9 +254,10 @@ def json_generator( cursor, json_dataname, data, download_key = None ):
     
     json_list = []
     
-    logging.debug( "# values in data: %d" % len( data ) )
-    for value_str in data:
-        logging.debug( "value_str: %s" % str( value_str ) )
+    len_data = len( data )
+    logging.debug( "# values in data: %d" % len_data )
+    for idx, value_str in enumerate( data ):
+        logging.debug( "n: %d-of-%d, value_str: %s" % ( 1+idx, len_data, str( value_str ) ) )
         data_keys   = {}
         extravalues = {}
         for i in range( len( value_str ) ):
@@ -275,7 +280,7 @@ def json_generator( cursor, json_dataname, data, download_key = None ):
                 data_keys[ name ] = value
             else:
                 extravalues[ name ] = value
-
+        
         # If aggregation check data output for "NA" values
         if "total" in data_keys:
             if extravalues[ "data_active" ]:
@@ -1143,15 +1148,15 @@ def load_data( cursor, year, datatype, region, debug ):
 
 
 
-def rdfconvertor( url ):
-    logging.debug( "rdfconvertor()" )
+def rdf_convertor( url ):
+    logging.debug( "rdf_convertor()" )
     
     f = urllib.urlopen( url )
     data = f.read()
     csvio = StringIO( str( data ) )
     dataframe = pd.read_csv( csvio, sep = '\t', dtype = "unicode" )
-    finalsubset = dataframe
-    columns = finalsubset.columns
+    final_subset = dataframe
+    columns = final_subset.columns
     
     configparser = get_configparser()
     rdf_prefix = configparser.get( "config", "rdf_prefix" )
@@ -1160,8 +1165,8 @@ def rdfconvertor( url ):
     rdf = rdf_prefix
     g   = Graph()
 
-    for ids in finalsubset.index:
-        item = finalsubset.ix[ ids ]
+    for ids in final_subset.index:
+        item = final_subset.ix[ ids ]
         uri = term.URIRef( "%s%s" % ( vocab_uri, str( item[ "ID" ] ) ) )
         if uri:
             for col in columns:
@@ -1473,15 +1478,14 @@ def aggregation_1year( qinput, do_subclasses, download_key ):
                         sql[ "internal" ] += ") OR"
     
     sql[ "internal" ] = sql[ "internal" ][ :-3 ]
+    
+    logging.debug( "sql: %s" % str( sql ) )
 
-    logging.debug( "condition: %s" % str( sql[ "condition" ] ) )
-    logging.debug( "order_by:  %s" % str( sql[ "order_by" ]  ) )
-    logging.debug( "group_by:  %s" % str( sql[ "group_by" ]  ) )
-    logging.debug( "where:     %s" % str( sql[ "where" ]     ) )
-    logging.debug( "internal:  %s" % str( sql[ "internal" ]  ) )
-
+    for key in sql:
+        logging.debug( "sql key: %s, sql value: %s" % ( key, str( sql[ key ] ) ) )
+    
     extra_classes = []
-    if do_subclasses:
+    if do_subclasses:   # 3&4 were removed from path; add them all here
         if classification == "historical":
             extra_classes = [ "histclass5", "histclass6", "histclass7", "histclass8", "histclass9", "histclass10" ]
         elif classification == "modern":
@@ -1492,34 +1496,40 @@ def aggregation_1year( qinput, do_subclasses, download_key ):
     sql_query += ", SUM(CAST(value AS DOUBLE PRECISION)) AS total"
     sql_query += ", COUNT(*) AS count"
     sql_query += ", COUNT(*) - COUNT(value) AS data_active"
-    #sql_query += ", value_unit, ter_code"      # ter_code from "where"
+    
+    if classification == "modern":  # "ter_code" keyword not in qinput, but we always need it
+        logging.debug( "modern classification: adding ter_code to SELECT" )
+        sql_query += ", ter_code"
+    
     sql_query += ", value_unit"
     logging.debug( "sql_query 0: %s" % sql_query )
 
     if len( extra_classes ) > 0:
         for field in extra_classes:
             sql_query += ", %s" % field
-        logging.debug( "sql_query +: %s" % sql_query )
+        logging.debug( "sql_query 1: %s" % sql_query )
     
     if sql[ "where" ]:
         logging.debug( "where: %s" % sql[ "where" ] )
         sql_query += ", %s" % sql[ "condition" ]
         sql_query  = sql_query[ :-2 ]
+        logging.debug( "sql_query 2: %s" % sql_query )
         
         sql_query += " FROM russianrepository WHERE %s" % sql[ "where" ]
         sql_query  = sql_query[ :-4 ]
+        logging.debug( "sql_query 3: %s" % sql_query )
     
     sql_query += " AND value <> '.'"            # suppress a 'lone' "optional point", used in the table to flag missing data
     #sql_query += " AND value ~ '^\d+$'"         # regexp (~) to require that value only contains digits
     #sql_query += " AND value ~ '^\d*\.?\d*$'"
     # plus an optional single . for floating point values, and plus an optional leading sign
     sql_query += " AND value ~ '^[-+]?\d*\.?\d*$'"
-    logging.debug( "sql_query +: %s" % sql_query )
+    logging.debug( "sql_query 4: %s" % sql_query )
     
     if sql[ "internal" ]:
         logging.debug( "internal: %s" % sql[ "internal" ] )
         sql_query += " AND (%s) " % sql[ "internal" ]
-        logging.debug( "sql_query +: %s" % sql_query )
+        logging.debug( "sql_query 5: %s" % sql_query )
     
     sql[ "group_by" ] = " GROUP BY value_unit, ter_code"
     
@@ -1530,7 +1540,7 @@ def aggregation_1year( qinput, do_subclasses, download_key ):
     
     logging.debug( "group_by: %s" % sql[ "group_by" ] )
     sql_query += sql[ "group_by" ]
-    logging.debug( "sql_query +: %s" % sql_query )
+    logging.debug( "sql_query 6: %s" % sql_query )
     
     # ordering by the db: applied to the russian contents, so the ordering of 
     # the english translation will not be perfect, but at least grouped. 
@@ -1558,7 +1568,7 @@ def aggregation_1year( qinput, do_subclasses, download_key ):
     logging.debug( "order_by: %s" % sql[ "order_by" ] )
     sql_query += " %s" % sql[ "order_by" ]
     
-    logging.debug( "sql_query complete: %s" % sql_query )
+    logging.debug( "sql_query 7 = complete: %s" % sql_query )
 
     if sql_query:
         time0 = time()      # seconds since the epoch
@@ -1575,9 +1585,10 @@ def aggregation_1year( qinput, do_subclasses, download_key ):
         # retrieve the records from the database
         data = cursor.fetchall()
         logging.debug( "result # of data records: %d" % len( data ) )
-        finaldata = []
-        for item in data:
-            finalitem = []
+        final_data = []
+        for idx, item in enumerate( data ):
+            logging.debug( "%d: %s" % ( idx, item ) )
+            final_item = []
             for i, thisname in enumerate( sql_names ):
                 value = item[ i ]
                 if value == ". ":
@@ -1590,11 +1601,11 @@ def aggregation_1year( qinput, do_subclasses, download_key ):
                     value = value.encode( "UTF-8" )
                     value = eng_data[ value ]
                 if thisname not in forbidden:
-                    finalitem.append( value )
+                    final_item.append( value )
             
-            finaldata.append( finalitem )
+            final_data.append( final_item )
         
-        json_list = json_generator( cursor, "data", finaldata, download_key )
+        json_list = json_generator( cursor, "data", final_data, download_key )
         
         return json_list
 
@@ -1724,8 +1735,8 @@ def filecatalog():
             logging.debug( "subtopic: %s" % subtopic )
             if len( subtopic ) == 9:    # e.g.: 1_01_1795
                 base_year = subtopic[ 5: ]
-                datatype = subtopic[ :4 ]
-                datatype = datatype.replace( '_', '.' )
+                datatype  = subtopic[ :4 ]
+                datatype  = datatype.replace( '_', '.' )
                 logging.debug( "datatype: %s, base_year: %s" % ( datatype, base_year ) )
                 json_list1 = filecat_subtopic( cursor, datatype, base_year )
                 #json_list.append( json_list1 )
@@ -1892,7 +1903,7 @@ def vocab():
     ristatkey      = configparser.get( "config", "ristatkey" )
     
     url = "%s/api/access/datafile/586?&key=%s&show_entity_ids=true&q=authorName:*" % ( dataverse_root, ristatkey )
-    g = rdfconvertor( url )
+    g = rdf_convertor( url )
     showformat = "json"
     if request.args.get( "format" ):
         showformat = request.args.get( "format" )
@@ -1964,7 +1975,7 @@ def aggregation():
             logging.debug( "base_year: %s" % base_year )
             qinput[ "base_year" ] = base_year   # add base_year to qinput
             json_list1 = aggregation_1year( qinput, do_subclasses, download_key )
-            logging.debug( "json_list1: \n%s" % str( json_list1 ) )
+            logging.debug( "json_list1 for %s: \n%s" % ( base_year, str( json_list1 ) ) )
             json_list.extend( json_list1 )
             
         json_string = json_cache( json_list, language, "data", download_key, qinput )
@@ -1999,9 +2010,9 @@ def indicators():
         
         # retrieve the records from the database
         data = cursor.fetchall()
-        finaldata = []
+        final_data = []
         for item in data:
-            finalitem = []
+            final_item = []
             for i, thisname in enumerate( sql_names ):
                 value = item[ i ]
                 if value == ". ":
@@ -2014,12 +2025,12 @@ def indicators():
                     value = value.encode( "UTF-8" )
                     value = eng_data[ value ]
                 if thisname not in forbidden:
-                    finalitem.append( value )
+                    final_item.append( value )
             
-            finaldata.append( finalitem )
-            logging.debug( str( finaldata ) )
+            final_data.append( final_item )
+            logging.debug( str( final_data ) )
             
-        json_list = json_generator( cursor, "data", finaldata )
+        json_list = json_generator( cursor, "data", final_data )
         
         language = request.args.get( "language" )
         download_key = request.args.get( "download_key" )
