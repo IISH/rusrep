@@ -380,7 +380,7 @@ def json_cache( json_list, language, json_dataname, download_key, qinput = {} ):
     str_elapsed = format_secs( time() - time0 )
     logging.info( "caching took %s" % str_elapsed )
     
-    return json_string
+    return json_string, value
 
 
 
@@ -1702,7 +1702,7 @@ def topics():
     download_key = request.args.get( "download_key" )
     
     json_list = load_topics()
-    json_string = json_cache( json_list, language, "data", download_key )
+    json_string, cache_except = json_cache( json_list, language, "data", download_key )
     
     return Response( json_string, mimetype = "application/json; charset=utf-8" )
 
@@ -1741,7 +1741,7 @@ def filecatalog():
                 json_list1 = filecat_subtopic( cursor, datatype, base_year )
                 #json_list.append( json_list1 )
     
-    json_string = json_cache( json_list, language, "data", download_key )
+    json_string, cache_except = json_cache( json_list, language, "data", download_key )
     return Response( json_string, mimetype = "application/json; charset=utf-8" )
 
 
@@ -1961,7 +1961,15 @@ def aggregation():
     if classification == "historical":
         # historical has base_year in qinput
         json_list = aggregation_1year( qinput, do_subclasses, download_key )
-        json_string = json_cache( json_list, language, "data", download_key, qinput )
+        
+        json_string, cache_except = json_cache( json_list, language, "data", download_key, qinput )
+        if cache_except is not None:
+            logging.error( "caching of aggregation data failed" )
+            logging.error( "length of json string: %d" % len( json_string ) )
+            # try to show the error in download sheet
+            #json_list_ = [ { "cache_except" : cache_except } ]
+            #json_string, cache_except = json_cache( json_list_, language, "data", download_key, qinput )
+        
         logging.debug( "aggregated json_string: \n%s" % json_string )
         
         collect_docs( qinput, download_dir, download_key )  # collect doc files in download dir
@@ -1978,7 +1986,10 @@ def aggregation():
             logging.debug( "json_list1 for %s: \n%s" % ( base_year, str( json_list1 ) ) )
             json_list.extend( json_list1 )
             
-        json_string = json_cache( json_list, language, "data", download_key, qinput )
+        json_string, cache_except = json_cache( json_list, language, "data", download_key, qinput )
+        if cache_except is not None:
+            logging.error( "caching of aggregation data failed" )
+            logging.error( "length of json string: %d" % len( json_string ) )
         logging.debug( "aggregated json_string: \n%s" % json_string )
         
         collect_docs( qinput, download_dir, download_key )  # collect doc files in download dir
@@ -2034,7 +2045,7 @@ def indicators():
         
         language = request.args.get( "language" )
         download_key = request.args.get( "download_key" )
-        json_string = json_cache( json_list, language, "data", download_key )
+        json_string, cache_except = json_cache( json_list, language, "data", download_key )
         
         logging.debug( "json_string before return Response:" )
         logging.debug( json_string )
@@ -2346,7 +2357,7 @@ def translate():
         
         language = request.args.get( "language" )
         download_key = request.args.get( "download_key" )
-        json_string = json_cache( json_list, language, "data", download_key )
+        json_string, cache_except = json_cache( json_list, language, "data", download_key )
         
         return Response( json_string, mimetype = "application/json; charset=utf-8" )
 

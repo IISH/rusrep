@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # VT-07-Jul-2016 Latest change by VT
-# FL-13-Sep-2017 Latest change
+# FL-18-Sep-2017 Latest change
 
 import json
 import logging
@@ -44,9 +44,11 @@ def preprocessor( datafilter ):
         
         logging.debug( "db_datacache.data.find with key: %s" % key )
         result = db_datacache.data.find( { "key": key } )
+        #logging.info( "preprocessor() cached result: %s for key: %s" % ( type( result ), key ) )
         
         ter_codes = []      # actually used region codes
-        logging.debug( "# of rowitems: %d" % result.count() )
+        logging.info( "# of rowitems: %d" % result.count() )
+        
         for rowitem in result:
             logging.debug( "rowitem: %s" % str( rowitem ) )
             
@@ -173,6 +175,12 @@ def preprocessor( datafilter ):
             sheet_header.append( { "r" : 5, "c" : 0, "value" : "КЛАССИФИКАЦИЯ:" } )
             sheet_header.append( { "r" : 5, "c" : 1, "value" : classification } )
     
+    if result.count() == 0:
+        # this happens when the data could not be cached in MongoDB because its size exceeded the limit
+        sheet_header.append( { "r" : 7, "c" : 0, "value" : "Zero items received from MongoDB for key:" } )
+        sheet_header.append( { "r" : 7, "c" : 1, "value" : key } )
+        sheet_header.append( { "r" : 8, "c" : 0, "value" : "MongoDB CACHING FAILED?, BSON document SIZE TOO LARGE?" } )
+    
     logging.debug( "preprocessor (%d) dataset: %s"          % ( len( dataset ),          str( dataset ) ) )
     logging.debug( "preprocessor (%d) ter_codes: %s"        % ( len( ter_codes ),        str( ter_codes ) ) )
     logging.debug( "preprocessor (%d) lex_lands: %s"        % ( len( lex_lands ),        str( lex_lands ) ) )
@@ -216,10 +224,10 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
     wb = openpyxl.Workbook( encoding = 'utf-8' )
     
     clientcache = MongoClient()
-    
     db_datacache = clientcache.get_database( 'datacache' )
     logging.debug( "db_datacache.data.find with key: %s" % key )
-    result = db_datacache.data.find( { "key": key } )
+    #result = db_datacache.data.find( { "key": key } )
+    #logging.info( "aggregate_dataset() length of cached dict: %d for key: %s" % ( len( result ), key ) )
     
     db_vocabulary = clientcache.get_database( 'vocabulary' )   # vocabulary
     
