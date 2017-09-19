@@ -5,7 +5,7 @@ VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
-FL-13-Sep-2017 
+FL-19-Sep-2017 
 
 def get_configparser():
 def connect():
@@ -359,6 +359,7 @@ def json_cache( json_list, language, json_dataname, download_key, qinput = {} ):
     time0 = time()      # seconds since the epoch
     logging.debug( "start: %s" % datetime.datetime.now() )
     
+    value = None
     try:
         this_data = json_hash
         del this_data[ "url" ]
