@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # VT-07-Jul-2016 Latest change by VT
-# FL-18-Sep-2017 Latest change
+# FL-20-Sep-2017 Latest change
 
 import json
 import logging
@@ -159,6 +159,8 @@ def preprocessor( datafilter ):
             sheet_header.append( { "r" : 4, "c" : 1, "value" : base_year } )
             sheet_header.append( { "r" : 5, "c" : 0, "value" : "CLASSIFICATION:" } )
             sheet_header.append( { "r" : 5, "c" : 1, "value" : classification } )
+            sheet_header.append( { "r" : 6, "c" : 0, "value" : "NUMBER" } )
+            sheet_header.append( { "r" : 6, "c" : 1, "value" : 0 } )
         else:
             if hist_mod == 'h':
                 classification = "ИСТОРИЧЕСКАЯ"
@@ -174,7 +176,9 @@ def preprocessor( datafilter ):
             sheet_header.append( { "r" : 4, "c" : 1, "value" : base_year } )
             sheet_header.append( { "r" : 5, "c" : 0, "value" : "КЛАССИФИКАЦИЯ:" } )
             sheet_header.append( { "r" : 5, "c" : 1, "value" : classification } )
-    
+            sheet_header.append( { "r" : 6, "c" : 0, "value" : "ЧИСЛО" } )
+            sheet_header.append( { "r" : 6, "c" : 1, "value" : 0 } )
+            
     if result.count() == 0:
         # this happens when the data could not be cached in MongoDB because its size exceeded the limit
         sheet_header.append( { "r" : 7, "c" : 0, "value" : "Zero items received from MongoDB for key:" } )
@@ -251,7 +255,7 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
     for level_path in level_paths:
         logging.debug( "level path: %s" % level_path )
     
-    
+    nrecords = []       # number of data records per sheet
     if hist_mod == 'h':
         nsheets = 1
         base_years = [ base_year ]
@@ -426,9 +430,10 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                         ter_name = vocab_regs_terms[ "regions" ][ ter_code ]
                     c.value = ter_name
                     j += 1
+                
                 i += 1
             
-            # data
+            # data records
             j = 0
             logging.debug( "# of names in chain: %d" % len( chain ) )
             logging.debug( "names in chain: %s" % str( chain ) )
@@ -483,8 +488,12 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                 logging.debug( "row: %d, column: %d, name: %s" % ( i, j, name ) )
                 c = ws.cell( row = i, column = j )
                 value = chain[ name ]
-                if value == '.':
-                    value = ''
+                
+                #if value == '.':
+                #    value = ''
+                if value == '':
+                    value = '.'
+                
                 c.value = value
                 logging.debug( "row: %d, column: %d, name: %s, value: %s" % ( i, j, name, value ) )
             
@@ -506,26 +515,32 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                 j += 1
             
             i += 1
+        
+        nrecords.append( i - 10 )   # number of data records for current sheet
     
     logging.debug( "byear_counts: %s" % str( byear_counts ) )
     
     #logging.debug( "# of lines in sheet_header: %d" % len( sheet_header ) )
     if hist_mod == 'h':
-        for line in sheet_header:
+        for l, line in enumerate( sheet_header ):
             c = ws.cell( row = line[ "r" ], column = line[ "c" ] )
             c.value = line[ "value" ]
-            #logging.debug( "sheet_header r: %d, c: %d, value: %s" % ( line[ "r" ], line[ "c" ], line[ "value" ] ) )
+            if l == 8:                      # update intial 0 with actual value
+                c.value = nrecords[ 0 ]     # number of data records
+            logging.debug( "sheet_header l: %d, r: %d, c: %d, value: %s" % ( l, line[ "r" ], line[ "c" ], line[ "value" ] ) )
     elif hist_mod == 'm':
-        for ws in wb.worksheets:
+        for w, ws in enumerate( wb.worksheets ):
             prev_value = ""
-            for line in sheet_header:
+            for l, line in enumerate( sheet_header ):
                 c = ws.cell( row = line[ "r" ], column = line[ "c" ] )
                 if prev_value in [ "BENCHMARK-YEAR:", "ГОД:" ]:
                     c.value = ws.title
                 else:
                     c.value = line[ "value" ]
+                if l == 8:                      # update intial 0 with actual value
+                    c.value = nrecords[ w ]     # number of data records
                 prev_value = c.value
-                logging.debug( "sheet_header r: %d, c: %d, value: %s" % ( line[ "r" ], line[ "c" ], line[ "value" ] ) )
+                logging.debug( "sheet_header l: %d, r: %d, c: %d, value: %s" % ( l, line[ "r" ], line[ "c" ], line[ "value" ] ) )
     
     # create copyright sheet; extract language id from filename
     comps1 = xlsx_pathname.split( '/' )
