@@ -5,7 +5,7 @@ VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
-FL-13-Sep-2017 
+FL-20-Sep-2017 
 
 def get_configparser():
 def connect():
@@ -359,6 +359,7 @@ def json_cache( json_list, language, json_dataname, download_key, qinput = {} ):
     time0 = time()      # seconds since the epoch
     logging.debug( "start: %s" % datetime.datetime.now() )
     
+    value = None
     try:
         this_data = json_hash
         del this_data[ "url" ]
@@ -380,7 +381,7 @@ def json_cache( json_list, language, json_dataname, download_key, qinput = {} ):
     str_elapsed = format_secs( time() - time0 )
     logging.info( "caching took %s" % str_elapsed )
     
-    return json_string
+    return json_string, value
 
 
 
@@ -1288,7 +1289,6 @@ def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
             #,"line_terminator" : '\n'   # TypeError: parser_f() got an unexpected keyword argument "line_terminator"
         }
         
-        
         df1 = pd.read_csv( csv_pathname, **kwargs_pandas )
         root, ext = os.path.splitext( csv_filename )
         xlsx_filename = root + ".xlsx"
@@ -1344,10 +1344,9 @@ def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
             c = ws_cr.cell( row = 9, column = 0 )
             c.value = "Кесслер Хайс и Маркевич Андрей (%d), Электронный архив Российской исторической статистики, XVIII – XXI вв., [Электронный ресурс] : [сайт]. — Режим доступа: http://ristat.org/" % date.today().year
             """
-
+        
         # Convert the dataframe to an XlsxWriter Excel object.
         df2.to_excel( writer, sheet_name = "Copyrights", encoding = "utf-8", index = False )
-        
         writer.save()
 
 
@@ -1519,6 +1518,7 @@ def aggregation_1year( qinput, do_subclasses, download_key ):
         sql_query  = sql_query[ :-4 ]
         logging.debug( "sql_query 3: %s" % sql_query )
     
+    sql_query += " AND value <> ''"             # suppress empty values
     sql_query += " AND value <> '.'"            # suppress a 'lone' "optional point", used in the table to flag missing data
     #sql_query += " AND value ~ '^\d+$'"         # regexp (~) to require that value only contains digits
     #sql_query += " AND value ~ '^\d*\.?\d*$'"
@@ -1702,7 +1702,7 @@ def topics():
     download_key = request.args.get( "download_key" )
     
     json_list = load_topics()
-    json_string = json_cache( json_list, language, "data", download_key )
+    json_string, cache_except = json_cache( json_list, language, "data", download_key )
     
     return Response( json_string, mimetype = "application/json; charset=utf-8" )
 
@@ -1741,7 +1741,7 @@ def filecatalog():
                 json_list1 = filecat_subtopic( cursor, datatype, base_year )
                 #json_list.append( json_list1 )
     
-    json_string = json_cache( json_list, language, "data", download_key )
+    json_string, cache_except = json_cache( json_list, language, "data", download_key )
     return Response( json_string, mimetype = "application/json; charset=utf-8" )
 
 
@@ -1840,8 +1840,8 @@ def filecatalogdata():
         else:
             csv_subdir = "csv"
             extra = ""
-        csv_dir = os.path.join( tmp_dir, "dataverse", csv_subdir, handle_name )
         
+        csv_dir = os.path.join( tmp_dir, "dataverse", csv_subdir, handle_name )
         csv_filename = "ERRHS_%s_data_%s%s.csv" % ( datatype, base_year, extra )
         
         logging.debug( "csv_filename: %s" % csv_filename )
@@ -1852,10 +1852,12 @@ def filecatalogdata():
         to_xlsx = True
         process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx )
         
-        # copy to download dir
-        shutil.copy2( csv_pathname, download_dir )
-        
-
+        if to_xlsx:
+            logging.debug( "skipped for download: %s" % csv_filename )
+        else:
+            # also copy csv for download
+            shutil.copy2( csv_pathname, download_dir )
+    
     # zip download dir
     zip_filename = "%s.zip" % download_key
     logging.debug( "zip_filename: %s" % zip_filename )
@@ -1961,7 +1963,15 @@ def aggregation():
     if classification == "historical":
         # historical has base_year in qinput
         json_list = aggregation_1year( qinput, do_subclasses, download_key )
-        json_string = json_cache( json_list, language, "data", download_key, qinput )
+        
+        json_string, cache_except = json_cache( json_list, language, "data", download_key, qinput )
+        if cache_except is not None:
+            logging.error( "caching of aggregation data failed" )
+            logging.error( "length of json string: %d" % len( json_string ) )
+            # try to show the error in download sheet
+            #json_list_ = [ { "cache_except" : cache_except } ]
+            #json_string, cache_except = json_cache( json_list_, language, "data", download_key, qinput )
+        
         logging.debug( "aggregated json_string: \n%s" % json_string )
         
         collect_docs( qinput, download_dir, download_key )  # collect doc files in download dir
@@ -1970,7 +1980,7 @@ def aggregation():
         #json_datas = {}
         json_list = []
         base_years = [ "1795", "1858", "1897", "1959", "2002" ]
-        #base_years = [ "1795" ]
+        #base_years = [ "1858" ]
         for base_year in base_years:
             logging.debug( "base_year: %s" % base_year )
             qinput[ "base_year" ] = base_year   # add base_year to qinput
@@ -1978,7 +1988,10 @@ def aggregation():
             logging.debug( "json_list1 for %s: \n%s" % ( base_year, str( json_list1 ) ) )
             json_list.extend( json_list1 )
             
-        json_string = json_cache( json_list, language, "data", download_key, qinput )
+        json_string, cache_except = json_cache( json_list, language, "data", download_key, qinput )
+        if cache_except is not None:
+            logging.error( "caching of aggregation data failed" )
+            logging.error( "length of json string: %d" % len( json_string ) )
         logging.debug( "aggregated json_string: \n%s" % json_string )
         
         collect_docs( qinput, download_dir, download_key )  # collect doc files in download dir
@@ -2034,7 +2047,7 @@ def indicators():
         
         language = request.args.get( "language" )
         download_key = request.args.get( "download_key" )
-        json_string = json_cache( json_list, language, "data", download_key )
+        json_string, cache_except = json_cache( json_list, language, "data", download_key )
         
         logging.debug( "json_string before return Response:" )
         logging.debug( json_string )
@@ -2346,7 +2359,7 @@ def translate():
         
         language = request.args.get( "language" )
         download_key = request.args.get( "download_key" )
-        json_string = json_cache( json_list, language, "data", download_key )
+        json_string, cache_except = json_cache( json_list, language, "data", download_key )
         
         return Response( json_string, mimetype = "application/json; charset=utf-8" )
 
