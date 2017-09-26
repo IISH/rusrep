@@ -1,4 +1,4 @@
-# FL-18-Sep-2017
+# FL-26-Sep-2017
 
 # pip requirements file for RusRep with a Python-2.7.14
 # setuptools, pip, and virtualenv should already be present in the (virtual) python2.7
@@ -15,6 +15,7 @@ psycopg2 == 2.7.3.1
 pymongo == 3.5.1
 pandas == 0.20.3        # also fetched numpy-1.13.1 python-dateutil-2.6.1 pytz-2017.2
 bidict == 0.13.1
+xlrd == 1.1.0
 
 # dataverse-client-python not yet in PyPI, fetch dataverse-0.1.2 from github
 git+https://github.com/IQSS/dataverse-client-python.git#egg=dataverse
