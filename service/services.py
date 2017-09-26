@@ -321,6 +321,7 @@ def json_generator( cursor, json_dataname, data, download_key = None ):
         else:
             logging.debug( "remove entry_path: %s" % entry_path_cpy )
     
+    
     if len( path_list ) != 0:
         # pure '.' dot entries are not returned from db
         logging.debug( "missing path entries: %d" % len( path_list ) )
@@ -335,6 +336,7 @@ def json_generator( cursor, json_dataname, data, download_key = None ):
             new_entry[ "count" ]      = ''
             new_entry[ "ter_code" ]   = ''
             json_list.append( new_entry )
+    
     
     return json_list
 
