@@ -5,7 +5,7 @@ VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
-FL-20-Sep-2017 
+FL-27-Sep-2017 
 
 def get_configparser():
 def connect():
@@ -1677,7 +1677,8 @@ logging.debug( __file__ )
 @app.route( '/' )
 def test():
     logging.debug( "test()" )
-    description = 'Russian Repository API Service v.0.1<br>/service/regions<br>/service/topics<br>/service/data<br>/service/histclasses<br>/service/years<br>/service/maps (reserved)<br>'
+    #description = 'Russian Repository API Service v.0.1<br>/service/regions<br>/service/topics<br>/service/data<br>/service/histclasses<br>/service/years<br>/service/maps (reserved)<br>'
+    description = "Russian Repository API Service v.1.0<br>"
     return description
 
 
