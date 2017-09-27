@@ -28,6 +28,7 @@ Needed software:
     WSGIDaemonProcess <RUSREP_URL> processes=2 threads=15 display-name=%{GROUP}
     WSGIProcessGroup <RUSREP_URL>
     WSGIScriptAlias /service <RUSREP_HOME>/service/wsgi.py
+- create a wsgi.py from wsgi.py.default
 
 - PostgreSQL, use the schema install/ristat.russianrepository-schema.sql
 
