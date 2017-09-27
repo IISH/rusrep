@@ -1,4 +1,0 @@
-Configuration file for Russian Repository with all settings, path and variables
-Please create a copy and fill with your settings before usage:
-
-cp ./russianrep.conf.default ./russianrep.conf

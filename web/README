@@ -1,4 +1,0 @@
-CGI scripts to render pages from Russian Repository backend
-Just copy the contents of cgi-bin folder to apache folder
-
-Note: should work with libraries from Clio Infra backend
