@@ -1,0 +1,62 @@
+FL-18-Jul-2017 Created
+FL-27-Sep-2017 Changed
+
+Python-3.6.2
+
+Used with CentOS-7.4
+?	use the _new_ setuptools
+?	use pip instead of easy_install
+?	use unicode ucs4 instead of ucs2
+
+-1- Python
+		$ tar -zxf Python-3.6.2.tgz
+		$ cd Python-3.6.2
+		$ export PYTHON_LOCAL=~/opt/Python/python-3.6.2
+
+		$ ./configure --prefix=$PYTHON_LOCAL
+		...
+		creating Makefile
+		If you want a release build with all optimizations active (LTO, PGO, etc),
+		please run ./configure --enable-optimizations
+
+		$ make
+		(in case make complains about a missing _lzma module you need to install xz & xz-devel)
+
+		$ make altinstall		# alt: do not [try to] replace /usr/bin/python
+		...
+		Collecting setuptools
+		Collecting pip
+		Installing collected packages: setuptools, pip
+		Successfully installed pip-9.0.1 setuptools-28.8.0
+
+	Use it
+		create a file ~/bin/python362 and use it
+		$ source ~/bin/python362
+
+	Notice
+		the pip and easy_install (from setuptools) are versioned: 
+			$PYTHON_LOCAL/bin/pip3.6
+			$PYTHON_LOCAL/bin/easy_install-3.6
+		of course we do not need to invoke easy_install-3.6 directly. 
+
+
+-2- venv — Create a virtual environment for RusRep somewhere, say in PROJECT
+	The built-in pyvenv is also versioned: $PYTHON_LOCAL/bin/pyvenv-3.6
+
+	Notice
+		the compiled python only has the versioned bin/pip3.6
+		the venv pythons also get the unversioned bin/pip
+
+	Create a virtualenv:
+		$ cd $PROJECT
+		$ source ~/bin/python362
+		$ python -V
+		Python 3.6.2
+		$ python3.6 -m venv python362
+	use it
+		$ source python362/bin/activate
+	notice that your prompt is now prefixed with '(python362)'
+
+-3- Add more packages with pip to the new python362 for your project
+
+[eof]
