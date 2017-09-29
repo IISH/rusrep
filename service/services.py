@@ -1624,7 +1624,7 @@ def aggregation_1year( qinput, do_subclasses, download_key ):
 
 def cleanup_downloads( download_dir, time_limit ):
     # remove too old downloads
-    logging.debug( "cleanup_downloads() download_dir: %s" % download_dir )
+    logging.debug( "cleanup_downloads() time_limit: %d, download_dir: %s" % ( time_limit, download_dir )
     
     dt_now = datetime.datetime.now()
     
@@ -1637,7 +1637,7 @@ def cleanup_downloads( download_dir, time_limit ):
         seconds = (dt_now - dt_file).total_seconds()
         
         if seconds >= time_limit:       # remove
-            logging.debug( "delete: %s" % dir_name )
+            logging.info( "seconds : %d, delete: %s" % ( seconds, dir_name ) )
             ndeleted += 1
             for root, sdirs, files in os.walk( dir_path ):
                 if files is not None:
@@ -1649,7 +1649,7 @@ def cleanup_downloads( download_dir, time_limit ):
                         os.unlink( file_path )  # download file
                 shutil.rmtree( root )           # download dir
         else:                                   # keep
-            #logging.debug( "keep:   %s" % dir_name )
+            logging.info( "seconds : %d, keep:   %s" % ( seconds, dir_name ) )
             pass
         
     logging.debug( "# of downloads deleted: %d" % ndeleted )
