@@ -1624,35 +1624,57 @@ def aggregation_1year( qinput, do_subclasses, download_key ):
 
 def cleanup_downloads( download_dir, time_limit ):
     # remove too old downloads
-    logging.debug( "cleanup_downloads() time_limit: %d, download_dir: %s" % ( time_limit, download_dir )
+    logging.debug( "cleanup_downloads() time_limit: %d, download_dir: %s" % ( time_limit, download_dir ) )
     
     dt_now = datetime.datetime.now()
     
-    ndeleted = 0
-    dir_list = os.listdir( download_dir )
-    for dir_name in dir_list:
-        dir_path = os.path.abspath( os.path.join( download_dir, dir_name ) )
-        mtime = os.path.getmtime( dir_path )
-        dt_file = datetime.datetime.fromtimestamp( mtime )
-        seconds = (dt_now - dt_file).total_seconds()
+    f_deleted = 0
+    d_deleted = 0
+    file_list = os.listdir( download_dir )
+    
+    for file_name in file_list:
+        file_path = os.path.abspath( os.path.join( download_dir, file_name ) )
         
-        if seconds >= time_limit:       # remove
-            logging.info( "seconds : %d, delete: %s" % ( seconds, dir_name ) )
-            ndeleted += 1
-            for root, sdirs, files in os.walk( dir_path ):
-                if files is not None:
-                    files.sort()
-                    for fname in files:
-                        logging.debug( "delete: %s" % fname )
-                        file_path = os.path.join( root, fname )
-                        logging.debug( "file_path: %s" % file_path )
-                        os.unlink( file_path )  # download file
-                shutil.rmtree( root )           # download dir
-        else:                                   # keep
-            logging.info( "seconds : %d, keep:   %s" % ( seconds, dir_name ) )
-            pass
-        
-    logging.debug( "# of downloads deleted: %d" % ndeleted )
+        if os.path.isdir( file_path ):
+            dir_name = file_name
+            dir_path = file_path
+            mtime = os.path.getmtime( dir_path )
+            dt_file = datetime.datetime.fromtimestamp( mtime )
+            seconds = (dt_now - dt_file).total_seconds()
+            
+            if seconds >= time_limit:       # remove
+                logging.debug( "seconds : %d, delete: %s" % ( seconds, dir_name ) )
+                d_deleted += 1
+                for root, sdirs, files in os.walk( dir_path ):
+                    if files is not None:
+                        files.sort()
+                        for fname in files:
+                            logging.debug( "delete: %s" % fname )
+                            file_path = os.path.join( root, fname )
+                            logging.debug( "file_path: %s" % file_path )
+                            os.unlink( file_path )  # download file
+                    shutil.rmtree( root )           # download dir
+            else:                                   # keep
+                logging.debug( "seconds : %d, keep:   %s" % ( seconds, dir_name ) )
+                pass
+        else:
+            mtime = os.path.getmtime( file_path )
+            dt_file = datetime.datetime.fromtimestamp( mtime )
+            seconds = (dt_now - dt_file).total_seconds()
+            
+            if seconds >= time_limit:       # remove
+                logging.debug( "seconds : %d, delete: %s" % ( seconds, file_name ) )
+                f_deleted += 1
+                logging.debug( "delete: %s" % file_name )
+                os.unlink( file_path )  # download file
+            else:                                   # keep
+                logging.debug( "seconds : %d, keep:   %s" % ( seconds, ile_name ) )
+                pass
+    
+    if f_deleted > 0:
+        logging.info( "# of files deleted: %d" % f_deleted )
+    if d_deleted > 0:
+        logging.info( "# of download dirs deleted: %d" % d_deleted )
 
 
 
@@ -2096,7 +2118,7 @@ def download():
         logging.debug( "download() zip: %s" % zipping )
     
         tmp_dir    = configparser.get( "config", "tmppath" )
-        time_limit = configparser.get( "config", "time_limit" )
+        time_limit = int( configparser.get( "config", "time_limit" ) )
         top_download_dir = os.path.join( tmp_dir, "download" )
         logging.debug( "top_download_dir: %s" % top_download_dir )
         cleanup_downloads( top_download_dir, time_limit )       # remove too old downloads
