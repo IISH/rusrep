@@ -31,7 +31,9 @@ def get_sql_where( name, value ):
 def loadjson( json_dataurl ):
 def filecat_subtopic( cursor, datatype, base_year ):
 def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
-def aggregation_1year( qinput, do_subclasses, download_key ):
+#def aggregation_1year( qinput, do_subclasses, download_key ):
+def aggregate_1year( qinput, do_subclasses, download_key ):
+def execute_1year( sql_query )
 def cleanup_downloads( download_dir, time_limit ):
 def format_secs( seconds ):
 
@@ -1358,8 +1360,8 @@ def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
 
 
 
-def aggregation_1year( qinput, do_subclasses, download_key ):
-    logging.debug( "aggregation_1year() do_subclasses: %s, download_key: %s" % ( do_subclasses, download_key ) )
+def aggregate_1year( qinput, count_dots, do_subclasses ):
+    logging.debug( "aggregate_1year() count_dots: %s, do_subclasses: %s" % ( count_dots, do_subclasses ) )
     logging.debug( "qinput %s" % str( qinput ) )
     
     thisyear = ''
@@ -1395,32 +1397,30 @@ def aggregation_1year( qinput, do_subclasses, download_key ):
     forbidden = [ "classification", "action", "language", "path" ]
     
     eng_data = {}
-    cursor = connect()
-    if cursor:
-        if qinput.get( "language" ) == "en":
-            # translate input english term to russian sql terms
-            vocab_filter = {}
-            classification = qinput.get( "classification" )
-            base_year = qinput.get( "base_year" )
-            if base_year and classification == "historical":
-                vocab_filter[ "YEAR" ] = base_year
-            
-            datatype = qinput.get( "datatype" )
-            if datatype:
-                if classification == "historical":
-                    vocab_filter[ "DATATYPE" ] = datatype
-                elif classification == "modern":
-                    vocab_filter[ "DATATYPE" ] = "MOD_" + datatype
-            
-            eng_data = translate_vocabulary( vocab_filter )
-            units = translate_vocabulary( { "vocabulary": "ERRHS_Vocabulary_units" } )
-            
-            logging.debug( "translate_vocabulary returned %d items" % len( units ) )
-            logging.debug( "vocab_filter: %s" % str( vocab_filter ) )
-            logging.debug( "eng_data: %s" % str( eng_data ) )
-            logging.debug( "units: %s" % str( units ) )
-            for item in units:
-                eng_data[ item ] = units[ item ]
+    if qinput.get( "language" ) == "en":
+        # translate input english term to russian sql terms
+        vocab_filter = {}
+        classification = qinput.get( "classification" )
+        base_year = qinput.get( "base_year" )
+        if base_year and classification == "historical":
+            vocab_filter[ "YEAR" ] = base_year
+        
+        datatype = qinput.get( "datatype" )
+        if datatype:
+            if classification == "historical":
+                vocab_filter[ "DATATYPE" ] = datatype
+            elif classification == "modern":
+                vocab_filter[ "DATATYPE" ] = "MOD_" + datatype
+        
+        eng_data = translate_vocabulary( vocab_filter )
+        units = translate_vocabulary( { "vocabulary": "ERRHS_Vocabulary_units" } )
+        
+        logging.debug( "translate_vocabulary returned %d items" % len( units ) )
+        logging.debug( "vocab_filter: %s" % str( vocab_filter ) )
+        logging.debug( "eng_data: %s" % str( eng_data ) )
+        logging.debug( "units: %s" % str( units ) )
+        for item in units:
+            eng_data[ item ] = units[ item ]
     
     sql = {}
     known_fields = {}
@@ -1499,9 +1499,14 @@ def aggregation_1year( qinput, do_subclasses, download_key ):
         elif classification == "modern":
             extra_classes = [ "class5", "class6", "class7", "class8", "class9", "class10" ]
         logging.debug( "extra_classes: %s" % extra_classes )
-
-    sql_query  = "SELECT COUNT(*) AS datarecords" 
-    sql_query += ", SUM(CAST(value AS DOUBLE PRECISION)) AS total"
+    
+    if count_dots:
+        sql_query  = "SELECT COUNT(*) AS datarecords"
+        sql_query += ", COUNT(*) AS total"
+    else:
+        sql_query  = "SELECT COUNT(*) AS datarecords" 
+        sql_query += ", SUM(CAST(value AS DOUBLE PRECISION)) AS total"
+    
     sql_query += ", COUNT(*) AS count"
     sql_query += ", COUNT(*) - COUNT(value) AS data_active"
     
@@ -1527,12 +1532,14 @@ def aggregation_1year( qinput, do_subclasses, download_key ):
         sql_query  = sql_query[ :-4 ]
         logging.debug( "sql_query 3: %s" % sql_query )
     
-    sql_query += " AND value <> ''"             # suppress empty values
-    sql_query += " AND value <> '.'"            # suppress a 'lone' "optional point", used in the table to flag missing data
-    #sql_query += " AND value ~ '^\d+$'"         # regexp (~) to require that value only contains digits
-    #sql_query += " AND value ~ '^\d*\.?\d*$'"
-    # plus an optional single . for floating point values, and plus an optional leading sign
-    sql_query += " AND value ~ '^[-+]?\d*\.?\d*$'"
+    if count_dots:
+        sql_query += " AND value = '.'"            # only dots
+    else:
+        sql_query += " AND value <> ''"             # suppress empty values
+        sql_query += " AND value <> '.'"            # suppress a 'lone' "optional point", used in the table to flag missing data
+        # plus an optional single . for floating point values, and plus an optional leading sign
+        sql_query += " AND value ~ '^[-+]?\d*\.?\d*$'"
+    
     logging.debug( "sql_query 4: %s" % sql_query )
     
     if sql[ "internal" ]:
@@ -1579,9 +1586,16 @@ def aggregation_1year( qinput, do_subclasses, download_key ):
     
     logging.debug( "sql_query 7 = complete: %s" % sql_query )
 
+    return sql_query, eng_data
+
+
+
+def execute_1year( sql_query, eng_data, download_key ):
+    logging.debug( "execute_1year()" )
     if sql_query:
         time0 = time()      # seconds since the epoch
         logging.debug( "query execute start: %s" % datetime.datetime.now() )
+        cursor = connect()
         cursor.execute( sql_query )
         logging.debug( "query execute stop: %s" % datetime.datetime.now() )
         str_elapsed = format_secs( time() - time0 )
@@ -1605,7 +1619,6 @@ def aggregation_1year( qinput, do_subclasses, download_key ):
                     # ". " marks a trailing dot in histclass or class: skip
                     pass
                 
-            #for value in item:
                 if value in eng_data:
                     value = value.encode( "UTF-8" )
                     value = eng_data[ value ]
@@ -1990,12 +2003,14 @@ def aggregation():
     if not os.path.exists( download_dir ):
         os.makedirs( download_dir )
     
+    count_dots = False       # value = '.'
+    
     json_string = str( "{}" )
     
     if classification == "historical":
         # historical has base_year in qinput
-        json_list = aggregation_1year( qinput, do_subclasses, download_key )
-        
+        sql_query, eng_data = aggregate_1year( qinput, count_dots, do_subclasses )
+        json_list = execute_1year( sql_query, eng_data, download_key )
         json_string, cache_except = json_cache( json_list, language, "data", download_key, qinput )
         if cache_except is not None:
             logging.error( "caching of aggregation data failed" )
@@ -2016,7 +2031,8 @@ def aggregation():
         for base_year in base_years:
             logging.debug( "base_year: %s" % base_year )
             qinput[ "base_year" ] = base_year   # add base_year to qinput
-            json_list1 = aggregation_1year( qinput, do_subclasses, download_key )
+            sql_query1, eng_data1 = aggregate_1year( qinput, count_dots, do_subclasses )
+            json_list1 = execute_1year( sql_query1, eng_data1, download_key )
             logging.debug( "json_list1 for %s: \n%s" % ( base_year, str( json_list1 ) ) )
             json_list.extend( json_list1 )
             

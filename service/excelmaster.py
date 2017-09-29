@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # VT-07-Jul-2016 Latest change by VT
-# FL-26-Sep-2017 Latest change
+# FL-29-Sep-2017 Latest change
 
 import json
 import logging
@@ -12,6 +12,7 @@ import re
 
 from datetime import date
 from icu import Locale, Collator
+import pandas as pd
 from pymongo import MongoClient
 from sys import exc_info
 
