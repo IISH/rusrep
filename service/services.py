@@ -5,7 +5,7 @@ VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
-FL-27-Sep-2017 
+FL-29-Sep-2017 
 
 def get_configparser():
 def connect():
@@ -107,6 +107,7 @@ from configutils import DataFilter
 sys.path.insert( 0, os.path.abspath( os.path.join( os.path.dirname( "__file__" ), "./" ) ) )
 
 forbidden = [ "classification", "action", "language", "path" ]
+vocab_debug = False
 
 
 def get_configparser():
@@ -513,13 +514,17 @@ def translate_vocabulary( vocab_filter, classification = None ):
                 data[ item[ "RUS" ] ] = item[ "EN" ]
                 data[ item[ "EN" ] ]  = item[ "RUS" ] 
                 
-                logging.debug( "EN: %s RUS: %s" % ( item[ "EN" ], item[ "RUS" ] ) )
+                if vocab_debug:
+                    logging.debug( "EN: %s RUS: %s" % ( item[ "EN" ], item[ "RUS" ] ) )
             except:
-                logging.debug( "except!" )
+                type_, value, tb = exc_info()
+                logging.error( "translate_vocabulary failed: %s" % value )
+    
     d = 0
     for key in data:
         d += 1
-        logging.debug( "%d: key: %s, value: %s" % ( d, key, data[ key ] ) )
+        if vocab_debug:
+            logging.debug( "%d: key: %s, value: %s" % ( d, key, data[ key ] ) )
     logging.debug( "translate_vocabulary: return %d items" % len( data ) )
     
     return data
@@ -787,7 +792,7 @@ def datasetfilter( data, sql_names, classification ):
                 if datarow[ "levels" ] > 0:
                     datafilter.append( datarow )
             except:
-                skip = "yes"
+                pass
 
         if classification:
             #return datafilter
@@ -1363,10 +1368,11 @@ def aggregation_1year( qinput, do_subclasses, download_key ):
         language = qinput.get( "language" )
         
         logging.debug( "number of keys in request.data: %d" % len( qinput ) )
+        k = 0
         for key in qinput:
             value = qinput[ key ]
             if key == "path":
-                logging.debug( "path:" )     # debug: ≥ = u"\u2265"
+                logging.debug( "%d: path:" % k )    # debug: ≥ = u"\u2265"
                 for pdict in value:
                     logging.debug( str( pdict ) )
                     for pkey in pdict:
@@ -1375,10 +1381,11 @@ def aggregation_1year( qinput, do_subclasses, download_key ):
                         if pkey == "classification":
                             classification = pvalue
             else:
-                logging.debug( "key: %s, value: %s" % ( key, value ) )
+                logging.debug( "%d: key: %s, value: %s" % ( k, key, value ) )
+            k += 1
     except:
         type_, value, tb = exc_info()
-        logging.debug( "failed, no request.data: %s" % value )
+        logging.error( "failed, no request.data: %s" % value )
         msg = "failed: %s" % value
         return str( { "msg": "%s" % msg } )
     
