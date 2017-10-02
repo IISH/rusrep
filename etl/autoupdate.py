@@ -7,8 +7,6 @@ This script retrieves RiStat files from Dataverse and updates MongoDB.
 - gets vocabulary data from PostgreSQL and stores it MongoDB
 - transforms binary xlsx spreadsheet files to csv files
 
-Notice: dpe/rusrep/etl contains a xlsx2csv.py copy; 
-better use the curent version from PyPI
 
 VT-07-Jul-2016 latest change by VT
 FL-03-Mar-2017 Py2/Py3 compatibility: using pandas instead of xlsx2csv to create csv files
@@ -19,6 +17,7 @@ FL-03-Jul-2017 Translate data files to english
 FL-07-Jul-2017 sys.stderr.write() cannot write to cron.log as normal user
 FL-11-Jul-2017 pandas: do not parse numbers, but keep strings as they are
 FL-13-Aug-2017 Py2/Py3 cleanup
+FL-02-Sep-2017 latest change
 
 ToDo:
  - replace urllib by requests
