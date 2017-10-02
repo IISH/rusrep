@@ -1,0 +1,42 @@
+#!/bin/bash
+
+# FL-27-Sep-2017 Created
+
+echo "autoupdate.sh" > autoupdate.shout
+echo `date` >> autoupdate.shout
+
+echo "user:" $USER >> autoupdate.shout
+if [[ $(id -u) -eq 0 ]] ; 	# cron job runs as root
+	then  su - <USER> ;		# run the update as user <USER>
+	echo "user:" $USER >> autoupdate.shout
+fi
+
+PY_VER="$(python -V 2>&1)"
+echo "system  python:" $PY_VER >> autoupdate.shout
+# choose your virtual python: 
+export PYTHON_HOME=<VIRTUAL_PYTHON_HOME>
+# activate the virtualenv python
+source $PYTHON_HOME/bin/activate
+PY_VER="$(python -V 2>&1)"
+echo "virtual python:" $PY_VER
+echo "virtual python:" $PY_VER >> autoupdate.shout
+
+export RUSREPO_HOME=<RUSREPO_HOME>
+echo "RUSREPO_HOME:" $RUSREPO_HOME >> autoupdate.shout
+
+CONFIG_DIR=${RUSREPO_HOME}/config
+export RUSSIANREPO_CONFIG_PATH=${CONFIG_DIR}/russianrepo.config
+echo "RUSSIANREPO_CONFIG_PATH:" $RUSSIANREPO_CONFIG_PATH >> autoupdate.shout
+
+cd $RUSREPO_HOME/etl
+python autoupdate.py
+
+if [ $? -eq 0 ]
+then
+    echo "autoupdate.py done" >> autoupdate.shout
+    exit 0
+else
+    echo "error in autoupdate.py" >> autoupdate.shout
+    exit 1
+fi
+

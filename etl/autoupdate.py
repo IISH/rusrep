@@ -1341,6 +1341,10 @@ if __name__ == "__main__":
     
     RUSSIANREPO_CONFIG_PATH = os.environ[ "RUSSIANREPO_CONFIG_PATH" ]
     logging.info( "RUSSIANREPO_CONFIG_PATH: %s" % RUSSIANREPO_CONFIG_PATH )
+    if not os.path.isfile( RUSSIANREPO_CONFIG_PATH ):
+        logging.error( "Required config file does not exist" )
+        logging.error( "EXIT" )
+        sys.exit( 1 )
     
     config_parser = configparser.RawConfigParser()
     config_parser.read( RUSSIANREPO_CONFIG_PATH )
