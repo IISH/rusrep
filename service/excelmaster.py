@@ -22,6 +22,7 @@ except ImportError:
     from openpyxl.utils import get_column_letter    # new
 
 
+
 def preprocessor( datafilter ):
     logging.debug( "preprocessor() datafilter: %s" % datafilter )
     
@@ -593,6 +594,16 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         type_, value, tb = exc_info()
         msg = "saving xlsx failed: %s" % value
     
+    do_pandas( xlsx_pathname )
+    
     return xlsx_pathname, msg
+
+
+
+def do_pandas( xlsx_pathname )
+    logging.debug( "do_pandas() xlsx: %s" % xlsx_pathname )
+    df = pd.read_excel( xlsx_pathname )
+    
+
 
 # [eof]
