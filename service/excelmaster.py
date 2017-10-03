@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # VT-07-Jul-2016 Latest change by VT
-# FL-29-Sep-2017 Latest change
+# FL-03-Oct-2017 Latest change
 
 import json
 import logging
@@ -594,16 +594,41 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         type_, value, tb = exc_info()
         msg = "saving xlsx failed: %s" % value
     
-    do_pandas( xlsx_pathname )
+    # sigh, openpyxl can't sort, let's sort with pandas
+    pandas_sort( xlsx_pathname, nlevels )
     
     return xlsx_pathname, msg
 
 
 
-def do_pandas( xlsx_pathname )
-    logging.debug( "do_pandas() xlsx: %s" % xlsx_pathname )
-    df = pd.read_excel( xlsx_pathname )
+def pandas_sort( xlsx_pathname_in, nlevels ):
+    logging.info( "pandas_sort()" )
     
+    ( xlsx_head, xlsx_tail ) = os.path.split( xlsx_pathname_in )
+    ( xlsx_root, xlsx_ext ) = os.path.splitext( xlsx_tail )
+    xlsx_tail_pd = xlsx_root + "-pd" + xlsx_ext
+    xlsx_pathname_out = os.path.join( xlsx_head, xlsx_tail_pd )
 
+    logging.debug( "xlsx_pathname_in: %s" % xlsx_pathname_in )
+    logging.debug( "xlsx_head: %s" % xlsx_head )
+    logging.debug( "xlsx_tail: %s" % xlsx_tail )
+    logging.debug( "xlsx_root: %s" % xlsx_root )
+    logging.debug( "xlsx_ext: %s" % xlsx_ext )
+    logging.debug( "xlsx_pathname_out: %s" % xlsx_pathname_out )
+
+    nskiprows = 9   # start at table header
+    df = pd.read_excel( xlsx_pathname_in, skiprows = nskiprows )
+    logging.info( type( df ) )
+    
+    # sort dataframe rows by Levels ([hist]classes)
+    sort_levels = []
+    for l in range( nlevels ):
+        l_str = "Level %d" % ( l + 1 )
+        sort_levels.append( l_str )
+    
+    df = df.sort( sort_levels )
+
+    row_index = False   # no row numbers (but it did show the sorting effect)
+    df.to_excel( xlsx_pathname_out, index = row_index )
 
 # [eof]
