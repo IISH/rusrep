@@ -5,7 +5,7 @@ VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
-FL-29-Sep-2017 
+FL-04-Oct-2017 
 
 def get_configparser():
 def connect():
@@ -78,6 +78,9 @@ import datetime
 import json
 import logging
 import os
+
+# matplotlib needs tmp a dir
+os.environ[ "MPLCONFIGDIR" ] = "/tmp"
 import pandas as pd
 import random
 import re
@@ -2251,11 +2254,9 @@ def documentation():
     ristatkey      = configparser.get( "config", "ristatkey" )
     ristatdocs     = configparser.get( "config", "hdl_documentation" )
     
-    dataverse_root = "datasets.socialhistory.org"
-    logging.debug( "dataverse_root: %s" % dataverse_root )
-    logging.debug( "ristatkey: %s" % ristatkey )
-    
-    connection = Connection( dataverse_root, ristatkey )
+    #logging.info( "dataverse_root: %s" % dataverse_root )
+    #logging.info( "ristatkey: %s" % ristatkey )
+    connection = Connection( dataverse_host, ristatkey )
     dataverse = connection.get_dataverse( "RISTAT" )
     
     settings = DataFilter( request.args )

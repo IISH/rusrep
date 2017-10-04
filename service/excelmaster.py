@@ -16,11 +16,11 @@ import pandas as pd
 from pymongo import MongoClient
 from sys import exc_info
 
+from openpyxl.styles import Alignment
 try: 
     from openpyxl.cell import get_column_letter     # old
 except ImportError:
     from openpyxl.utils import get_column_letter    # new
-
 
 
 def preprocessor( datafilter ):
@@ -231,7 +231,9 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
     
     nsheets = 0
     ter_code_list = []
-    wb = openpyxl.Workbook( encoding = 'utf-8' )
+    #wb = openpyxl.Workbook( encoding = "utf-8" )
+    wb = openpyxl.Workbook()
+    
     
     clientcache = MongoClient()
     db_datacache = clientcache.get_database( 'datacache' )
@@ -566,7 +568,9 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
     
     if language == "en":
         c = ws_cr.cell( row = 4, column = 0 )
+        #c.alignment = Alignment( horizontal = "left" ) 
         c.value = "Creative Commons License"
+            
         c = ws_cr.cell( row = 5, column = 0 )
         c.value = "This work is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License."
         c = ws_cr.cell( row = 6, column = 0 )
@@ -616,19 +620,34 @@ def pandas_sort( xlsx_pathname_in, nlevels ):
     logging.debug( "xlsx_ext: %s" % xlsx_ext )
     logging.debug( "xlsx_pathname_out: %s" % xlsx_pathname_out )
 
-    nskiprows = 9   # start at table header
-    df = pd.read_excel( xlsx_pathname_in, skiprows = nskiprows )
-    logging.info( type( df ) )
-    
     # sort dataframe rows by Levels ([hist]classes)
     sort_levels = []
     for l in range( nlevels ):
         l_str = "Level %d" % ( l + 1 )
         sort_levels.append( l_str )
     
-    df = df.sort( sort_levels )
-
-    row_index = False   # no row numbers (but it did show the sorting effect)
-    df.to_excel( xlsx_pathname_out, index = row_index )
+    # Create a Pandas Excel writer using XlsxWriter as the engine.
+    #engine = "openpyxl"
+    engine = "xlsxwriter"
+    writer = pd.ExcelWriter( xlsx_pathname_out, engine = engine )
+    
+    #EF = pd.read_excel( xlsx_pathname_in )  # AttributeError: 'DataFrame' object has no attribute 'sheet_names'
+    EF = pd.ExcelFile( xlsx_pathname_in )
+    
+    for sheet_name in EF.sheet_names:
+        logging.info( "sheet: %s" % sheet_name )
+        
+        # index = False: no row numbers in output (but they did show the sorting effect)
+        if sheet_name == "Copyrights":
+            nskiprows = 0
+            df = EF.parse( sheet_name )
+            df.to_excel( writer, sheet_name = sheet_name, index = True )
+        else:
+            nskiprows = 9   # start at table header
+            df = EF.parse( sheet_name, skiprows = nskiprows )
+            df = df.sort( sort_levels )
+            df.to_excel( writer, sheet_name = sheet_name, index = False )
+        
+    writer.save()
 
 # [eof]
