@@ -2256,7 +2256,7 @@ def documentation():
     
     #logging.info( "dataverse_root: %s" % dataverse_root )
     #logging.info( "ristatkey: %s" % ristatkey )
-    connection = Connection( dataverse_host, ristatkey )
+    connection = Connection( dataverse_root, ristatkey )
     dataverse = connection.get_dataverse( "RISTAT" )
     
     settings = DataFilter( request.args )
