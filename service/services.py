@@ -5,7 +5,7 @@ VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
-FL-04-Oct-2017 
+FL-11-Oct-2017 
 
 def get_configparser():
 def connect():
@@ -1684,7 +1684,7 @@ def cleanup_downloads( download_dir, time_limit ):
                 logging.debug( "delete: %s" % file_name )
                 os.unlink( file_path )  # download file
             else:                                   # keep
-                logging.debug( "seconds : %d, keep:   %s" % ( seconds, ile_name ) )
+                logging.debug( "seconds : %d, keep:   %s" % ( seconds, file_name ) )
                 pass
     
     if f_deleted > 0:
@@ -2058,8 +2058,6 @@ def aggregation():
 @app.route( "/indicators", methods = [ "POST", "GET" ] )
 def indicators():
     logging.debug( "indicators()" )
-    
-    logging.info( "Python version: %s" % sys.version  )
 
     eng_data = {}
     cursor = connect()
@@ -2247,7 +2245,8 @@ def download():
 @app.route( "/documentation" )
 def documentation():
     logging.debug( "/documentation" )
-    
+    logging.debug( "Python version: %s" % sys.version  )
+
     configparser   = get_configparser()
     dataverse_root = configparser.get( "config", "dataverse_root" )
     api_root       = configparser.get( "config", "api_root" )
