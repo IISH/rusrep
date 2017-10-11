@@ -311,6 +311,7 @@ def json_generator( cursor, json_dataname, data, download_key = None ):
         # remove them from entry_path before comparison
         entry_path_cpy = copy.deepcopy( entry_path )
         
+        delete_list = []
         if classification == "historical":
             delete_list = [ "histclass5", "histclass6", "histclass7", "histclass8", "histclass9", "histclass10" ]
         elif classification == "modern":
@@ -2112,20 +2113,29 @@ def download():
     logging.debug( "/download %s" % request.args )
     
     configparser = get_configparser()
-    ristatkey = configparser.get( "config", "ristatkey" )
     dataverse_root = configparser.get( "config", "dataverse_root" )
+    ristatkey = configparser.get( "config", "ristatkey" )
+    
+    logging.debug( "dataverse_root: %s" % dataverse_root )
+    logging.debug( "ristatkey: %s" % ristatkey )
     
     id_ = request.args.get( "id" )
+    logging.debug( "id_: %s" % id_ )
+    
     if id_:
-        url = "%s/api/access/datafile/%s?&key=%s&show_entity_ids=true&q=authorName:*" % ( dataverse_root, id_, ristatkey )
+        url = "https://%s/api/access/datafile/%s?key=%s&show_entity_ids=true&q=authorName:*" % ( dataverse_root, id_, ristatkey )
+        
+        logging.debug( "url: %s" % url )
+        
         f = urllib2.urlopen( url )
-        pdfdata = f.read()
+        data = f.read()
         filetype = "application/pdf"
         
         if request.args.get( "filetype" ) == "excel":
             filetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        
-        return Response( pdfdata, mimetype = filetype )
+		
+        logging.debug( "filetype: %s" % filetype )
+        return Response( data, mimetype = filetype )
     
     key = request.args.get( "key" )
     logging.debug( "key: %s" % key )
