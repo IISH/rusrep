@@ -671,7 +671,7 @@ def sqlconstructor( sql ):
 
 
 
-def topic_counts():
+def topic_counts( schema ):
     logging.info( "topic_counts()" )
 
     configparser = get_configparser()
@@ -687,7 +687,11 @@ def topic_counts():
     connection = psycopg2.connect( connection_string )
     cursor = connection.cursor( cursor_factory = psycopg2.extras.NamedTupleCursor )
 
-    sql_topics  = "SELECT datatype, topic_name FROM datasets.topics"
+    if schema:
+        sql_topics = "SELECT datatype, topic_name FROM %s.topics" % schema
+    else:
+        sql_topics = "SELECT datatype, topic_name FROM topics"
+    
     sql_topics += " ORDER BY datatype"
     logging.info( sql_topics )
     cursor.execute( sql_topics )
@@ -731,9 +735,12 @@ def topic_counts():
 def load_topics():
     logging.debug( "load_topics()" )
     
-    all_cnt_dict = topic_counts()
+    #schema = "datasets"
+    schema = "public"
+    all_cnt_dict = topic_counts( schema )
     
-    sql = "SELECT * FROM datasets.topics"
+    sql = "SELECT * FROM %s.topics" % schema
+    
     sql = sqlfilter( sql ) 
     logging.debug( "sql: %s" % sql )
     
@@ -1750,8 +1757,6 @@ def topics():
     language = request.args.get( "language" )
     download_key = request.args.get( "download_key" )
     
-    # TODO load_topics() loads the topics from the datasets.topics table;
-    # reads topics from topics vocabulary, then delete old {datasets|public}.topics table
     json_list = load_topics()
     json_string, cache_except = json_cache( json_list, language, "data", download_key )
     
