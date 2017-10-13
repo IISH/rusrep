@@ -1750,6 +1750,8 @@ def topics():
     language = request.args.get( "language" )
     download_key = request.args.get( "download_key" )
     
+    # TODO load_topics() loads the topics from the datasets.topics table;
+    # reads topics from topics vocabulary, then delete old {datasets|public}.topics table
     json_list = load_topics()
     json_string, cache_except = json_cache( json_list, language, "data", download_key )
     
