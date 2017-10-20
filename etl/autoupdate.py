@@ -17,7 +17,7 @@ FL-03-Jul-2017 Translate data files to english
 FL-07-Jul-2017 sys.stderr.write() cannot write to cron.log as normal user
 FL-11-Jul-2017 pandas: do not parse numbers, but keep strings as they are
 FL-13-Aug-2017 Py2/Py3 cleanup
-FL-04-Sep-2017 latest change
+FL-20-Oct-2017 latest change
 
 ToDo:
  - replace urllib by requests
@@ -95,6 +95,7 @@ def load_json( url ):
 
 
 def empty_dir( dst_dir ):
+    global Nexcept
     logging.info( "empty_dir() %s" % dst_dir )
     logging.info( "removing previous downloads" )
     
@@ -148,6 +149,7 @@ def empty_dir( dst_dir ):
 
 
 def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", copy_local = False, to_csv = False, remove_xlsx = True ):
+    global Nexcept
     logging.info( "documents_by_handle() copy_local: %s, to_csv: %s" % ( copy_local, to_csv ) )
     logging.debug( "handle_name: %s" % handle_name )
     logging.info( "dst_dir: %s, dv_format: %s, copy_local: %s, to_csv: %s" % ( dst_dir, dv_format, copy_local, to_csv ) )
@@ -597,6 +599,7 @@ def test_csv_file( path_name ):
 
 
 def filter_csv( csv_dir, in_filename ):
+    global Nexcept
     global pkey
     logging.debug( "filter_csv()" )
     
@@ -1013,6 +1016,7 @@ def topic_counts( config_parser ):
 
 
 def load_vocab( config_parser, vocab_fname, vocab, pos_rus, pos_eng ):
+    global Nexcept
     logging.info( "load_vocab() vocab_fname: %s" % vocab_fname )
     # if pos_extar is not None, it is needed to make the keys and/or values unique
     handle_name = "hdl_vocabularies"
