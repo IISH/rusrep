@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # VT-07-Jul-2016 Latest change by VT
-# FL-29-Sep-2017 Latest change
+# FL-11-Oct-2017 Latest change
 
 import json
 import logging
@@ -16,6 +16,7 @@ import pandas as pd
 from pymongo import MongoClient
 from sys import exc_info
 
+from openpyxl.styles import Alignment
 try: 
     from openpyxl.cell import get_column_letter     # old
 except ImportError:
@@ -230,7 +231,21 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
     
     nsheets = 0
     ter_code_list = []
-    wb = openpyxl.Workbook( encoding = 'utf-8' )
+    #wb = openpyxl.Workbook( encoding = "utf-8" )
+    wb = openpyxl.Workbook()
+    
+    escape = False
+    if escape:
+		logging.debug( "openpyxl version: %s" % openpyxl.__version__ )
+		logging.debug( "empty spreadsheet" )
+		ws = wb.active				# grab the active worksheet
+		ws['A1'] = 42				# Data can be assigned directly to cells
+		ws.append([1, 2, 3])		# Rows can also be appended
+		import datetime				# Python types will automatically be converted
+		ws['A2'] = datetime.datetime.now()
+		wb.save( "/home/dpe/tmp/data/download/sample.xlsx" )
+		wb.save( xlsx_pathname )	# Save the file
+		return xlsx_pathname, ""
     
     clientcache = MongoClient()
     db_datacache = clientcache.get_database( 'datacache' )
@@ -418,6 +433,8 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                         logging.debug( "name: %s ???" % name )
                         continue
                     
+                    j = j + 1
+                    logging.info( "i: %d, j: %d" % ( i, j ) )
                     c = ws.cell( row = i, column = j )
                     column_name = name
                     if column_name in vocab_regs_terms[ "terms" ]:
@@ -490,6 +507,7 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                     logging.debug( "name: %s ???" % name )
                     continue
                 
+                j = j + 1
                 logging.debug( "row: %d, column: %d, name: %s" % ( i, j, name ) )
                 c = ws.cell( row = i, column = j )
                 value = chain[ name ]
@@ -528,7 +546,12 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
     #logging.debug( "# of lines in sheet_header: %d" % len( sheet_header ) )
     if hist_mod == 'h':
         for l, line in enumerate( sheet_header ):
-            c = ws.cell( row = line[ "r" ], column = line[ "c" ] )
+            #c = ws.cell( row = line[ "r" ], column = line[ "c" ] )
+            row = line[ "r" ]
+            col = line[ "c" ]
+            col = col + 1
+            logging.info( "row: %d, column: %d" % ( row, col ) )
+            c = ws.cell( row = row, column = col )
             c.value = line[ "value" ]
             if l == 8:                      # update intial 0 with actual value
                 c.value = nrecords[ 0 ]     # number of data records
@@ -554,36 +577,42 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
     logging.debug( "language: %s" % language )
     
     if hist_mod == 'h':
-        ws_cr = wb.create_sheet( 1, "Copyrights" )
+        #ws_cr = wb.create_sheet( 1, "Copyrights" )
+        ws_cr = wb.create_sheet( "Copyrights", 1 )
     else:
-        ws_cr = wb.create_sheet( 5, "Copyrights" )
+        #ws_cr = wb.create_sheet( 5, "Copyrights" )
+        ws_cr = wb.create_sheet( "Copyrights", 5 )
     
-    c = ws_cr.cell( row = 1, column = 0 )
+    #col = 0
+    col = 1
+    c = ws_cr.cell( row = 1, column = col )
     c.value = "Electronic Repository of Russian Historical Statistics / Электронный архив Российской исторической статистики"
-    c = ws_cr.cell( row = 2, column = 0 )
+    c = ws_cr.cell( row = 2, column = col )
     c.value = "2014-%d" % date.today().year
     
     if language == "en":
-        c = ws_cr.cell( row = 4, column = 0 )
+        c = ws_cr.cell( row = 4, column = col )
+        #c.alignment = Alignment( horizontal = "left" ) 
         c.value = "Creative Commons License"
-        c = ws_cr.cell( row = 5, column = 0 )
+            
+        c = ws_cr.cell( row = 5, column = col )
         c.value = "This work is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License."
-        c = ws_cr.cell( row = 6, column = 0 )
+        c = ws_cr.cell( row = 6, column = col )
         c.value = "http://creativecommons.org/licenses/by-nc-sa/4.0/"
-        c = ws_cr.cell( row = 8, column = 0 )
+        c = ws_cr.cell( row = 8, column = col )
         c.value = "By downloading and using data from the Electronic Repository of Russian Historical Statistics the user agrees to the terms of this license. Providing a correct reference to the resource is a formal requirement of the license: "
-        c = ws_cr.cell( row = 9, column = 0 )
+        c = ws_cr.cell( row = 9, column = col )
         c.value = "Kessler, Gijs and Andrei Markevich (%d), Electronic Repository of Russian Historical Statistics, 18th - 21st centuries, http://ristat.org/" % date.today().year
     elif language == "ru":
-        c = ws_cr.cell( row = 4, column = 0 )
+        c = ws_cr.cell( row = 4, column = col )
         c.value = "Лицензия Creative Commons"
-        c = ws_cr.cell( row = 5, column = 0 )
+        c = ws_cr.cell( row = 5, column = col )
         c.value = "Это произведение доступно по лицензии Creative Commons «Attribution-NonCommercial-ShareAlike» («Атрибуция — Некоммерческое использование — На тех же условиях») 4.0 Всемирная."
-        c = ws_cr.cell( row = 6, column = 0 )
+        c = ws_cr.cell( row = 6, column = col )
         c.value = "http://creativecommons.org/licenses/by-nc-sa/4.0/deed.ru"
-        c = ws_cr.cell( row = 8, column = 0 )
+        c = ws_cr.cell( row = 8, column = col )
         c.value = "Скачивая и начиная использовать данные пользователь автоматически соглашается с этой лицензией. Наличие корректно оформленной ссылки является обязательным требованием лицензии:"
-        c = ws_cr.cell( row = 9, column = 0 )
+        c = ws_cr.cell( row = 9, column = col )
         c.value = "Кесслер Хайс и Маркевич Андрей (%d), Электронный архив Российской исторической статистики, XVIII – XXI вв., [Электронный ресурс] : [сайт]. — Режим доступа: http://ristat.org/" % date.today().year
 
     try:
@@ -593,6 +622,56 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         type_, value, tb = exc_info()
         msg = "saving xlsx failed: %s" % value
     
+    # sigh, openpyxl can't sort, let's sort with pandas
+    #pandas_sort( xlsx_pathname, nlevels )
+    
     return xlsx_pathname, msg
+
+
+
+def pandas_sort( xlsx_pathname_in, nlevels ):
+    logging.info( "pandas_sort()" )
+    
+    ( xlsx_head, xlsx_tail ) = os.path.split( xlsx_pathname_in )
+    ( xlsx_root, xlsx_ext ) = os.path.splitext( xlsx_tail )
+    xlsx_tail_pd = xlsx_root + "-pd" + xlsx_ext
+    xlsx_pathname_out = os.path.join( xlsx_head, xlsx_tail_pd )
+
+    logging.debug( "xlsx_pathname_in: %s" % xlsx_pathname_in )
+    logging.debug( "xlsx_head: %s" % xlsx_head )
+    logging.debug( "xlsx_tail: %s" % xlsx_tail )
+    logging.debug( "xlsx_root: %s" % xlsx_root )
+    logging.debug( "xlsx_ext: %s" % xlsx_ext )
+    logging.debug( "xlsx_pathname_out: %s" % xlsx_pathname_out )
+
+    # sort dataframe rows by Levels ([hist]classes)
+    sort_levels = []
+    for l in range( nlevels ):
+        l_str = "Level %d" % ( l + 1 )
+        sort_levels.append( l_str )
+    
+    # Create a Pandas Excel writer using XlsxWriter as the engine.
+    #engine = "openpyxl"
+    engine = "xlsxwriter"
+    writer = pd.ExcelWriter( xlsx_pathname_out, engine = engine )
+    
+    #EF = pd.read_excel( xlsx_pathname_in )  # AttributeError: 'DataFrame' object has no attribute 'sheet_names'
+    EF = pd.ExcelFile( xlsx_pathname_in )
+    
+    for sheet_name in EF.sheet_names:
+        logging.info( "sheet: %s" % sheet_name )
+        
+        # index = False: no row numbers in output (but they did show the sorting effect)
+        if sheet_name == "Copyrights":
+            nskiprows = 0
+            df = EF.parse( sheet_name )
+            df.to_excel( writer, sheet_name = sheet_name, index = True )
+        else:
+            nskiprows = 9   # start at table header
+            df = EF.parse( sheet_name, skiprows = nskiprows )
+            df = df.sort( sort_levels )
+            df.to_excel( writer, sheet_name = sheet_name, index = False )
+        
+    writer.save()
 
 # [eof]

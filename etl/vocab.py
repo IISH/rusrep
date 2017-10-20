@@ -3,7 +3,7 @@
 
 """
 VT-06-Jul-2016 latest change by VT
-FL-08-Sep-2017
+FL-20-Oct-2017
 """
 
 # future-0.16.0 imports for Python 2/3 compatibility
@@ -47,18 +47,20 @@ def vocabulary( host, apikey, ids, abs_ascii_dir ):
                 data = f.read()
                 csvio = StringIO( str( data ) )
                 dataframe = pd.read_csv( csvio, sep = '|', dtype = 'unicode' )
-    
-        filtercols = []
+        
+        # fetch columns from dataverse vocabulary file
+        filter_columns = []
         mapping = {}
         for col in dataframe.columns:
-            findval = re.search( r'RUS|EN|ID|DATATYPE|YEAR|basisyear', col )
+            findval = re.search( r'RUS|EN|ID|TOPIC_ID|TOPIC_ROOT|DATATYPE|YEAR|basisyear', col )
             if findval:
                 mapping[ col ] = findval.group( 0 )
-                filtercols.append( col )
-
+                filter_columns.append( col )
+        
         vocab = {}
-        if filtercols:
-            vocab = dataframe[ filtercols ]
+        if filter_columns:
+            logging.info( "filter_columns: %s" % filter_columns )
+            vocab = dataframe[ filter_columns ]
             newcolumns = []
             for field in vocab:
                 value = mapping[ field ]
@@ -70,9 +72,11 @@ def vocabulary( host, apikey, ids, abs_ascii_dir ):
             len_vocab = len( vocab )
             len_totvocab += len_vocab
             lexicon.append( vocab )
-        
-        logging.info( "id: %s, filename: %s, items: %d" % ( thisid, filename, len_vocab ) )
-        
+            
+            logging.info( "id: %s, filename: %s, items: %d" % ( thisid, filename, len_vocab ) )
+        else:
+            logging.warning( "No filter_columns" )
+    
     logging.info( "lexicon contains %d vocabularies containing %d items in total" % ( len( lexicon ), len_totvocab ) )
     # concatenate the vocabularies with pandas
     return pd.concat( lexicon )

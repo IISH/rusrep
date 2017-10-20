@@ -5,7 +5,7 @@ VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
-FL-29-Sep-2017 
+FL-11-Oct-2017 
 
 def get_configparser():
 def connect():
@@ -78,6 +78,9 @@ import datetime
 import json
 import logging
 import os
+
+# matplotlib needs tmp a dir
+os.environ[ "MPLCONFIGDIR" ] = "/tmp"
 import pandas as pd
 import random
 import re
@@ -308,6 +311,7 @@ def json_generator( cursor, json_dataname, data, download_key = None ):
         # remove them from entry_path before comparison
         entry_path_cpy = copy.deepcopy( entry_path )
         
+        delete_list = []
         if classification == "historical":
             delete_list = [ "histclass5", "histclass6", "histclass7", "histclass8", "histclass9", "histclass10" ]
         elif classification == "modern":
@@ -667,7 +671,7 @@ def sqlconstructor( sql ):
 
 
 
-def topic_counts():
+def topic_counts( schema ):
     logging.info( "topic_counts()" )
 
     configparser = get_configparser()
@@ -683,7 +687,11 @@ def topic_counts():
     connection = psycopg2.connect( connection_string )
     cursor = connection.cursor( cursor_factory = psycopg2.extras.NamedTupleCursor )
 
-    sql_topics  = "SELECT datatype, topic_name FROM datasets.topics"
+    if schema:
+        sql_topics = "SELECT datatype, topic_name FROM %s.topics" % schema
+    else:
+        sql_topics = "SELECT datatype, topic_name FROM topics"
+    
     sql_topics += " ORDER BY datatype"
     logging.info( sql_topics )
     cursor.execute( sql_topics )
@@ -727,9 +735,12 @@ def topic_counts():
 def load_topics():
     logging.debug( "load_topics()" )
     
-    all_cnt_dict = topic_counts()
+    #schema = "datasets"
+    schema = "public"
+    all_cnt_dict = topic_counts( schema )
     
-    sql = "SELECT * FROM datasets.topics"
+    sql = "SELECT * FROM %s.topics" % schema
+    
     sql = sqlfilter( sql ) 
     logging.debug( "sql: %s" % sql )
     
@@ -852,9 +863,12 @@ def load_vocabulary( vocab_type ):
     base_year = request.args.get( "base_year" )
     
     vocab_filter = {}
-    if vocab_type == "ERRHS_Vocabulary_regions":
-        vocab_type = "regions"
-    if vocab_type == "regions":
+    
+    
+    if vocab_type == "topics":
+        vocab_name = "ERRHS_Vocabulary_topics"
+    
+    elif vocab_type == "regions":
         vocab_name = "ERRHS_Vocabulary_regions"
         if basisyear:
             vocab_filter[ "basisyear" ] = basisyear
@@ -943,7 +957,9 @@ def load_vocabulary( vocab_type ):
     db = client.get_database( db_name )
     
     params = {}
-    if vocab_type == "regions":
+    if vocab_type == "topics":
+        params[ "vocabulary" ] = vocab_name
+    elif vocab_type == "regions":
         params[ "vocabulary" ] = vocab_name
         if basisyear:
             params[ "basisyear" ] = basisyear
@@ -960,12 +976,22 @@ def load_vocabulary( vocab_type ):
     uid = 0
     logging.debug( "processing %d items in vocab %s" % ( vocab.count(), vocab_type ) )
     for item in vocab:
+        logging.debug( "item: %s" % item )
         #del item[ "basisyear" ]
         del item[ "_id" ]
         del item[ "vocabulary" ]
+        topics  = {}
         regions = {}
         
-        if vocab_type == "regions":
+        if vocab_type == "topics":
+            topics[ "topic_id" ]       = item[ "TOPIC_ID" ]
+            topics[ "topic_root" ]     = item[ "TOPIC_ROOT" ]
+            topics[ "topic_name_rus" ] = item[ "RUS" ]
+            topics[ "topic_name" ]     = item[ "EN" ]
+            topics[ "datatype" ]       = item[ "DATATYPE" ]
+            item = topics
+            data.append( item )
+        elif vocab_type == "regions":
             uid += 1
             regions[ "region_name" ]     = item[ "RUS" ]
             regions[ "region_name_eng" ] = item[ "EN" ]
@@ -1009,7 +1035,9 @@ def load_vocabulary( vocab_type ):
         logging.debug( item )
     
     json_hash = {}
-    if vocab_type == "regions":
+    if vocab_type == "topics":
+        json_hash[ "data" ] = data
+    elif vocab_type == "regions":
         json_hash[ "regions" ] = data
     elif vocab_type == "modern":
         json_hash = data
@@ -1681,7 +1709,7 @@ def cleanup_downloads( download_dir, time_limit ):
                 logging.debug( "delete: %s" % file_name )
                 os.unlink( file_path )  # download file
             else:                                   # keep
-                logging.debug( "seconds : %d, keep:   %s" % ( seconds, ile_name ) )
+                logging.debug( "seconds : %d, keep:   %s" % ( seconds, file_name ) )
                 pass
     
     if f_deleted > 0:
@@ -1740,9 +1768,10 @@ def export():
 
 
 
-@app.route( "/topics" )
-def topics():
-    logging.debug( "/topics" )
+@app.route( "/topics_old" )
+def topics_old():
+    logging.debug( "/topics_old" )
+    # uses a pre-fabricated postgres table: obsolete
     language = request.args.get( "language" )
     download_key = request.args.get( "download_key" )
     
@@ -1750,6 +1779,16 @@ def topics():
     json_string, cache_except = json_cache( json_list, language, "data", download_key )
     
     return Response( json_string, mimetype = "application/json; charset=utf-8" )
+
+@app.route( "/topics" )
+def topics():
+    logging.debug( "/topics" )
+    logging.debug( "topics() request.args: %s" % str( request.args ) )
+    # uses a vocabulary file from dataverse
+    data = load_vocabulary( "topics" )
+    
+    logging.debug( "/topics return Response" )
+    return Response( json.dumps( data ), mimetype = "application/json; charset=utf-8" )
 
 
 
@@ -2055,8 +2094,6 @@ def aggregation():
 @app.route( "/indicators", methods = [ "POST", "GET" ] )
 def indicators():
     logging.debug( "indicators()" )
-    
-    logging.info( "Python version: %s" % sys.version  )
 
     eng_data = {}
     cursor = connect()
@@ -2111,20 +2148,29 @@ def download():
     logging.debug( "/download %s" % request.args )
     
     configparser = get_configparser()
-    ristatkey = configparser.get( "config", "ristatkey" )
     dataverse_root = configparser.get( "config", "dataverse_root" )
+    ristatkey = configparser.get( "config", "ristatkey" )
+    
+    logging.debug( "dataverse_root: %s" % dataverse_root )
+    logging.debug( "ristatkey: %s" % ristatkey )
     
     id_ = request.args.get( "id" )
+    logging.debug( "id_: %s" % id_ )
+    
     if id_:
-        url = "%s/api/access/datafile/%s?&key=%s&show_entity_ids=true&q=authorName:*" % ( dataverse_root, id_, ristatkey )
+        url = "https://%s/api/access/datafile/%s?key=%s&show_entity_ids=true&q=authorName:*" % ( dataverse_root, id_, ristatkey )
+        
+        logging.debug( "url: %s" % url )
+        
         f = urllib2.urlopen( url )
-        pdfdata = f.read()
+        data = f.read()
         filetype = "application/pdf"
         
         if request.args.get( "filetype" ) == "excel":
             filetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        
-        return Response( pdfdata, mimetype = filetype )
+		
+        logging.debug( "filetype: %s" % filetype )
+        return Response( data, mimetype = filetype )
     
     key = request.args.get( "key" )
     logging.debug( "key: %s" % key )
@@ -2244,17 +2290,16 @@ def download():
 @app.route( "/documentation" )
 def documentation():
     logging.debug( "/documentation" )
-    
+    logging.debug( "Python version: %s" % sys.version  )
+
     configparser   = get_configparser()
     dataverse_root = configparser.get( "config", "dataverse_root" )
     api_root       = configparser.get( "config", "api_root" )
     ristatkey      = configparser.get( "config", "ristatkey" )
     ristatdocs     = configparser.get( "config", "hdl_documentation" )
     
-    dataverse_root = "datasets.socialhistory.org"
-    logging.debug( "dataverse_root: %s" % dataverse_root )
-    logging.debug( "ristatkey: %s" % ristatkey )
-    
+    #logging.info( "dataverse_root: %s" % dataverse_root )
+    #logging.info( "ristatkey: %s" % ristatkey )
     connection = Connection( dataverse_root, ristatkey )
     dataverse = connection.get_dataverse( "RISTAT" )
     

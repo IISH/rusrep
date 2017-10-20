@@ -7,8 +7,6 @@ This script retrieves RiStat files from Dataverse and updates MongoDB.
 - gets vocabulary data from PostgreSQL and stores it MongoDB
 - transforms binary xlsx spreadsheet files to csv files
 
-Notice: dpe/rusrep/etl contains a xlsx2csv.py copy; 
-better use the curent version from PyPI
 
 VT-07-Jul-2016 latest change by VT
 FL-03-Mar-2017 Py2/Py3 compatibility: using pandas instead of xlsx2csv to create csv files
@@ -19,6 +17,7 @@ FL-03-Jul-2017 Translate data files to english
 FL-07-Jul-2017 sys.stderr.write() cannot write to cron.log as normal user
 FL-11-Jul-2017 pandas: do not parse numbers, but keep strings as they are
 FL-13-Aug-2017 Py2/Py3 cleanup
+FL-04-Sep-2017 latest change
 
 ToDo:
  - replace urllib by requests
@@ -153,12 +152,16 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", co
     logging.debug( "handle_name: %s" % handle_name )
     logging.info( "dst_dir: %s, dv_format: %s, copy_local: %s, to_csv: %s" % ( dst_dir, dv_format, copy_local, to_csv ) )
     
-    host = "datasets.socialhistory.org"
+    #host = "datasets.socialhistory.org"
+    dv_host = config_parser.get( "config", "dataverse_root" )
     ristat_key = config_parser.get( "config", "ristatkey" )
-    logging.debug( "host: %s" % host )
-    #logging.debug( "ristat_key: %s" % ristat_key )
+    #logging.debug( "host: %s" % host )
+    logging.info( "dv_host: %s" % dv_host )
+    logging.info( "ristat_key: %s" % ristat_key )
     
-    dv_connection = Connection( host, ristat_key )
+    #dv_connection = Connection( host, ristat_key )
+    dv_connection = Connection( dv_host, ristat_key )
+    
     dataverse  = dv_connection.get_dataverse( 'RISTAT' )
     logging.debug( "title: %s" % dataverse.title )
     #datasets = dataverse.get_datasets()
@@ -202,8 +205,7 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", co
         if handle == clio_handle:
             logging.info( "handle_name: %s, using handle: %s" % ( handle_name, handle ) )
             datasetid = item[ 'id' ]
-            url  = "https://" + str( host ) + "/api/datasets/" + str( datasetid )
-            #url += "/?&key=" + str( ristat_key )
+            url  = "https://" + str( dv_host ) + "/api/datasets/" + str( datasetid )
             url += "?key=" + str( ristat_key )
             
             dataframe = load_json( url )
@@ -229,7 +231,7 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", co
                 ids[ paperitem[ 'id'] ] = name
                 paperitem[ 'handle' ] = handle
                 paperitem[ 'url' ] = "http://data.sandbox.socialhistoryservices.org/service/download?id=%s" % paperitem[ 'id' ]
-                url  = "https://%s/api/access/datafile/%s" % ( host, paperitem[ 'id' ] )
+                url  = "https://%s/api/access/datafile/%s" % ( dv_host, paperitem[ 'id' ] )
                 url += "?&key=%s&show_entity_ids=true&q=authorName:*" % str( ristat_key )
                 if not dv_format == "":
                     url += "&format=original"
@@ -358,10 +360,10 @@ def update_vocabularies( config_parser, mongo_client, dv_format, copy_local = Fa
         logging.debug( doc )
     
     # parameters to retrieve the vocabulary files
-    host   = config_parser.get( "config", "dataverse_root" )
+    dv_host = config_parser.get( "config", "dataverse_root" )
     apikey = config_parser.get( "config", "ristatkey" )
     dbname = config_parser.get( "config", "vocabulary" )
-    logging.debug( "host:   %s" % host )
+    logging.debug( "dv_host:   %s" % dv_host )
     logging.debug( "apikey: %s" % apikey )
     logging.debug( "dbname: %s" % dbname )
     
@@ -373,7 +375,7 @@ def update_vocabularies( config_parser, mongo_client, dv_format, copy_local = Fa
     # appends them to a bigvocabulary
     tmp_dir = config_parser.get( "config", "tmppath" )
     abs_ascii_dir = os.path.join( tmp_dir, "dataverse", ascii_dir, handle_name )
-    bigvocabulary = vocabulary( host, apikey, ids, abs_ascii_dir )    # type: <class 'pandas.core.frame.DataFrame'>
+    bigvocabulary = vocabulary( dv_host, apikey, ids, abs_ascii_dir )    # type: <class 'pandas.core.frame.DataFrame'>
     #print bigvocabulary.to_json( orient = 'records' )
     vocab_json = json.loads( bigvocabulary.to_json( orient = 'records' ) )  # type: <type 'list'>
     
@@ -445,13 +447,13 @@ def row_count( config_parser ):
 
     config_parser.read( configpath )
     
-    host     = config_parser.get( 'config', 'dbhost' )
+    dbhost   = config_parser.get( 'config', 'dbhost' )
     dbname   = config_parser.get( 'config', 'dbname' )
     dbtable  = config_parser.get( 'config', 'dbtable' )
     user     = config_parser.get( 'config', 'dblogin' )
     password = config_parser.get( 'config', 'dbpassword' )
     
-    connection_string = "host = '%s' dbname = '%s' user = '%s' password = '%s'" % ( host, dbname, user, password )
+    connection_string = "host = '%s' dbname = '%s' user = '%s' password = '%s'" % ( dbhost, dbname, user, password )
     logging.debug( "connection_string: %s" % connection_string )
     pg_connection = psycopg2.connect( connection_string )
     
@@ -483,13 +485,13 @@ def clear_postgres( config_parser ):
 
     config_parser.read( configpath )
     
-    host     = config_parser.get( 'config', 'dbhost' )
+    dbhost   = config_parser.get( 'config', 'dbhost' )
     dbname   = config_parser.get( 'config', 'dbname' )
     dbtable  = config_parser.get( 'config', 'dbtable' )
     user     = config_parser.get( 'config', 'dblogin' )
     password = config_parser.get( 'config', 'dbpassword' )
     
-    connection_string = "host = '%s' dbname = '%s' user = '%s' password = '%s'" % ( host, dbname, user, password )
+    connection_string = "host = '%s' dbname = '%s' user = '%s' password = '%s'" % ( dbhost, dbname, user, password )
     logging.info( "connection_string: %s" % connection_string )
 
     pg_connection = psycopg2.connect( connection_string )
@@ -528,13 +530,13 @@ def store_handle_docs( config_parser, handle_name ):
 
     config_parser.read( configpath )
     
-    host     = config_parser.get( 'config', 'dbhost' )
+    dbhost   = config_parser.get( 'config', 'dbhost' )
     dbname   = config_parser.get( 'config', 'dbname' )
     dbtable  = config_parser.get( 'config', 'dbtable' )
     user     = config_parser.get( 'config', 'dblogin' )
     password = config_parser.get( 'config', 'dbpassword' )
     
-    connection_string = "host = '%s' dbname = '%s' user = '%s' password = '%s'" % ( host, dbname, user, password )
+    connection_string = "host = '%s' dbname = '%s' user = '%s' password = '%s'" % ( dbhost, dbname, user, password )
     logging.info( "connection_string: %s" % connection_string )
 
     pg_connection = psycopg2.connect( connection_string )
@@ -964,12 +966,12 @@ def topic_counts( config_parser ):
 
     config_parser.read( configpath )
     
-    host     = config_parser.get( 'config', 'dbhost' )
+    dbhost   = config_parser.get( 'config', 'dbhost' )
     dbname   = config_parser.get( 'config', 'dbname' )
     user     = config_parser.get( 'config', 'dblogin' )
     password = config_parser.get( 'config', 'dbpassword' )
     
-    connection_string = "host = '%s' dbname = '%s' user = '%s' password = '%s'" % ( host, dbname, user, password )
+    connection_string = "host = '%s' dbname = '%s' user = '%s' password = '%s'" % ( dbhost, dbname, user, password )
     logging.info( "connection_string: %s" % connection_string )
 
     pg_connection = psycopg2.connect( connection_string )
