@@ -863,9 +863,12 @@ def load_vocabulary( vocab_type ):
     base_year = request.args.get( "base_year" )
     
     vocab_filter = {}
-    if vocab_type == "ERRHS_Vocabulary_regions":
-        vocab_type = "regions"
-    if vocab_type == "regions":
+    
+    
+    if vocab_type == "topics":
+        vocab_name = "ERRHS_Vocabulary_topics"
+    
+    elif vocab_type == "regions":
         vocab_name = "ERRHS_Vocabulary_regions"
         if basisyear:
             vocab_filter[ "basisyear" ] = basisyear
@@ -954,7 +957,9 @@ def load_vocabulary( vocab_type ):
     db = client.get_database( db_name )
     
     params = {}
-    if vocab_type == "regions":
+    if vocab_type == "topics":
+        params[ "vocabulary" ] = vocab_name
+    elif vocab_type == "regions":
         params[ "vocabulary" ] = vocab_name
         if basisyear:
             params[ "basisyear" ] = basisyear
@@ -971,12 +976,22 @@ def load_vocabulary( vocab_type ):
     uid = 0
     logging.debug( "processing %d items in vocab %s" % ( vocab.count(), vocab_type ) )
     for item in vocab:
+        logging.debug( "item: %s" % item )
         #del item[ "basisyear" ]
         del item[ "_id" ]
         del item[ "vocabulary" ]
+        topics  = {}
         regions = {}
         
-        if vocab_type == "regions":
+        if vocab_type == "topics":
+            topics[ "topic_id" ]       = item[ "TOPIC_ID" ]
+            topics[ "topic_root" ]     = item[ "TOPIC_ROOT" ]
+            topics[ "topic_name_rus" ] = item[ "RUS" ]
+            topics[ "topic_name" ]     = item[ "EN" ]
+            topics[ "datatype" ]       = item[ "DATATYPE" ]
+            item = topics
+            data.append( item )
+        elif vocab_type == "regions":
             uid += 1
             regions[ "region_name" ]     = item[ "RUS" ]
             regions[ "region_name_eng" ] = item[ "EN" ]
@@ -1020,7 +1035,9 @@ def load_vocabulary( vocab_type ):
         logging.debug( item )
     
     json_hash = {}
-    if vocab_type == "regions":
+    if vocab_type == "topics":
+        json_hash[ "data" ] = data
+    elif vocab_type == "regions":
         json_hash[ "regions" ] = data
     elif vocab_type == "modern":
         json_hash = data
@@ -1751,9 +1768,10 @@ def export():
 
 
 
-@app.route( "/topics" )
-def topics():
-    logging.debug( "/topics" )
+@app.route( "/topics_old" )
+def topics_old():
+    logging.debug( "/topics_old" )
+    # uses a pre-fabricated postgres table: obsolete
     language = request.args.get( "language" )
     download_key = request.args.get( "download_key" )
     
@@ -1761,6 +1779,16 @@ def topics():
     json_string, cache_except = json_cache( json_list, language, "data", download_key )
     
     return Response( json_string, mimetype = "application/json; charset=utf-8" )
+
+@app.route( "/topics" )
+def topics():
+    logging.debug( "/topics" )
+    logging.debug( "topics() request.args: %s" % str( request.args ) )
+    # uses a vocabulary file from dataverse
+    data = load_vocabulary( "topics" )
+    
+    logging.debug( "/topics return Response" )
+    return Response( json.dumps( data ), mimetype = "application/json; charset=utf-8" )
 
 
 
