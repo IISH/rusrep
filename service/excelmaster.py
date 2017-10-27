@@ -47,10 +47,10 @@ def preprocessor( datafilter ):
         
         logging.debug( "db_datacache.data.find with key: %s" % key )
         result = db_datacache.data.find( { "key": key } )
-        #logging.info( "preprocessor() cached result: %s for key: %s" % ( type( result ), key ) )
+        #logging.debug( "preprocessor() cached result: %s for key: %s" % ( type( result ), key ) )
         
         ter_codes = []      # actually used region codes
-        logging.info( "# of rowitems: %d" % result.count() )
+        logging.debug( "# of rowitems: %d" % result.count() )
         
         for rowitem in result:
             logging.debug( "rowitem: %s" % str( rowitem ) )
@@ -430,7 +430,7 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                         logging.debug( "name: %s ???" % name )
                         continue
                     
-                    logging.info( "row: %d, column: %d" % ( row, column ) )
+                    logging.debug( "row: %d, column: %d" % ( row, column ) )
                     cell = ws.cell( row = row, column = column )
                     column_name = name
                     if column_name in vocab_regs_terms[ "terms" ]:

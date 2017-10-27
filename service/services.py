@@ -5,7 +5,7 @@ VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
-FL-11-Oct-2017 
+FL-27-Oct-2017 
 
 def get_configparser():
 def connect():
@@ -312,10 +312,17 @@ def json_generator( cursor, json_dataname, data, download_key = None ):
         entry_path_cpy = copy.deepcopy( entry_path )
         
         delete_list = []
+        """
         if classification == "historical":
             delete_list = [ "histclass5", "histclass6", "histclass7", "histclass8", "histclass9", "histclass10" ]
         elif classification == "modern":
             delete_list = [ "class5", "class6", "class7", "class8", "class9", "class10" ]
+        """
+        if classification == "historical":
+            delete_list = [ "histclass6", "histclass7", "histclass8", "histclass9", "histclass10" ]
+        elif classification == "modern":
+            delete_list = [ "class6", "class7", "class8", "class9", "class10" ]
+        
         for e in delete_list:
             try:
                 del entry_path_cpy[ e ]
