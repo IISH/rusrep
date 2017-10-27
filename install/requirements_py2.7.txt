@@ -1,4 +1,4 @@
-# FL-27-Sep-2017
+# FL-27-Oct-2017
 
 # pip requirements file for RusRep with a Python-2.7.14
 # setuptools, pip, and virtualenv should already be present in the (virtual) python2.7
@@ -9,20 +9,21 @@
 
 future == 0.16.0
 six == 1.11.0
+simplejson == 3.11.1
 jsonmerge == 1.4.0      # also fetched unctools32-3.2.3.post2 jsonschema-2.6.0
-ldap == 1.0.2           # also fetched ldap3-2.3 pyasn1-0.3.5
+ldap == 1.0.2           # also fetched ldap3-2.3 pyasn1-0.3.7
 Flask == 0.12.2         # also fetched Jinja2-2.9.6 MarkupSafe-1.0 Werkzeug-0.12.2 click-6.7 itsdangerous-0.24
-psycopg2 == 2.7.3.1
+psycopg2 == 2.7.3.2
 pymongo == 3.5.1
-pandas == 0.20.3        # also fetched numpy-1.13.1 python-dateutil-2.6.1 pytz-2017.2
+pandas == 0.20.3        # also fetched numpy-1.13.3 python-dateutil-2.6.1 pytz-2017.2
 bidict == 0.13.1
-rdflib == 4.2.2         # also fetched isodate-0.5.4 pyparsing-2.2.0
+rdflib == 4.2.2         # also fetched isodate-0.6.0 pyparsing-2.2.0
 xlrd == 1.1.0
-openpyxl == 2.4.8       # also fetched et-xmlfile-1.0.1 jdcal-1.3
+openpyxl == 2.4.9       # also fetched et-xmlfile-1.0.1 jdcal-1.3
 PyICU == 1.9.7          # requires C++11, otherwise use PyICU-1.9.6
 
 # dataverse-client-python not yet in PyPI, fetch dataverse-0.1.2 from github
 git+https://github.com/IQSS/dataverse-client-python.git#egg=dataverse
-# also fetched bleach-2.0.0 certifi-2017.7.27.1 chardet-3.0.4 html5lib-0.999999999  idna-2.6 lxml-4.0.0 requests-2.18.4 urllib3-1.22 webencodings-0.5.1
+# also fetched bleach-2.1.1 certifi-2017.7.27.1 chardet-3.0.4 html5lib-1.0b10  idna-2.6 lxml-4.1.0 requests-2.18.4 urllib3-1.22 webencodings-0.5.1
 
 # [eof]
