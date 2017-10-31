@@ -2,13 +2,14 @@
 # -*- coding: utf-8 -*-
 
 # VT-07-Jul-2016 Latest change by VT
-# FL-27-Oct-2017 Latest change
+# FL-31-Oct-2017 Latest change
 
 import json
 import logging
 import openpyxl
 import os
 import re
+import sys
 
 from datetime import date
 from icu import Locale, Collator
@@ -194,11 +195,11 @@ def preprocessor( datafilter ):
     logging.debug( "preprocessor (%d) vocab_regs_terms: %s" % ( len( vocab_regs_terms ), str( vocab_regs_terms ) ) )
     logging.debug( "preprocessor (%d) sheet_header: %s"     % ( len( sheet_header ),     str( sheet_header ) ) )
     
-    return ( lex_lands, vocab_regs_terms, sheet_header, qinput )
+    return ( lex_lands, vocab_regs_terms, sheet_header, topic_name, qinput )
 
 
 
-def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header, qinput ):
+def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header, topic_name, qinput ):
     logging.debug( "aggregate_dataset() key: %s" % key )
     
     xlsx_pathname = ""
@@ -616,13 +617,21 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         msg = "saving xlsx failed: %s" % value
     
     # sigh, openpyxl can't sort, let's sort with pandas
-    #pandas_sort( xlsx_pathname, nlevels )
+    
+    params = {
+        "lang"       : lang,
+        "hist_mod"   : hist_mod, 
+        "topic_name" : topic_name, 
+        "base_year"  : base_year
+    }
+    
+    pandas_sort( xlsx_pathname, nlevels, params )
     
     return xlsx_pathname, msg
 
 
 
-def pandas_sort( xlsx_pathname_in, nlevels ):
+def pandas_sort( xlsx_pathname_in, nlevels, params ):
     logging.info( "pandas_sort()" )
     
     ( xlsx_head, xlsx_tail ) = os.path.split( xlsx_pathname_in )
@@ -658,11 +667,72 @@ def pandas_sort( xlsx_pathname_in, nlevels ):
         if sheet_name == "Copyrights":
             nskiprows = 0
             df = EF.parse( sheet_name )
-            df.to_excel( writer, sheet_name = sheet_name, index = True )
+            df.to_excel( writer, sheet_name = sheet_name, index = False )
         else:
-            nskiprows = 9   # start at table header
-            df = EF.parse( sheet_name, skiprows = nskiprows )
-            df = df.sort( sort_levels )
+            nskiprows = 8       # start at table header
+            df_table = EF.parse( sheet_name, skiprows = nskiprows )
+            
+            df = pd.DataFrame()
+            df = df_table
+            
+            # sort the table
+            try:
+                df = df.sort_values( by = sort_levels )
+            except:
+                logging.error( "sorting failed with  with sort_levels:\n%s" % sort_levels )
+                type_, value, tb = sys.exc_info()
+                logging.error( "%s" % value )
+            
+            # set comment lines below the table
+            header = list( df )
+            c0 = header[ 0 ]
+            c1 = header[ 1 ]
+            nrows = len( df )
+            row_offset = nrows
+            
+            lang       = params[ "lang" ]
+            hist_mod   = params[ "hist_mod" ]
+            topic_name = params[ "topic_name" ]
+            base_year  = params[ "base_year" ]
+            
+            df.loc[ row_offset, c0 ] = ""
+            df.loc[ row_offset, c1 ] = ""
+                
+            if lang == 'en':
+                if hist_mod == 'h':
+                    classification = "HISTORICAL"
+                elif hist_mod == 'm':
+                    classification = "MODERN"
+                else:
+                    classification = ""
+                
+                df.loc[ row_offset + 1, c0 ] = "Electronic repository of Russian Historical Statistics - ristat.org"
+                df.loc[ row_offset + 3, c0 ] = "TOPIC:"
+                df.loc[ row_offset + 3, c1 ] = topic_name
+                df.loc[ row_offset + 4, c0 ] = "BENCHMARK-YEAR:"
+                df.loc[ row_offset + 4, c1 ] = base_year
+                df.loc[ row_offset + 5, c0 ] = "CLASSIFICATION:"
+                df.loc[ row_offset + 5, c1 ] = classification
+                df.loc[ row_offset + 6, c0 ] = "NUMBER"
+                df.loc[ row_offset + 6, c1 ] = nrows
+            else:
+                if hist_mod == 'h':
+                    classification = "ИСТОРИЧЕСКАЯ"
+                elif hist_mod == 'm':
+                    classification = "СОВРЕМЕННАЯ"
+                else:
+                    classification = ""
+                
+                df.loc[ row_offset + 1, c0 ] = "Электронный архив Российской исторической статистики - ristat.org"
+                df.loc[ row_offset + 3, c0 ] = "ТЕМА:"
+                df.loc[ row_offset + 3, c1 ] = topic_name
+                df.loc[ row_offset + 4, c0 ] = "ГОД:"
+                df.loc[ row_offset + 4, c1 ] = base_year
+                df.loc[ row_offset + 5, c0 ] = "КЛАССИФИКАЦИЯ:"
+                df.loc[ row_offset + 5, c1 ] = classification
+                df.loc[ row_offset + 6, c0 ] = "ЧИСЛО"
+                df.loc[ row_offset + 6, c1 ] = nrows
+            
             df.to_excel( writer, sheet_name = sheet_name, index = False )
         
     writer.save()

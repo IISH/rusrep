@@ -5,7 +5,7 @@ VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
-FL-27-Oct-2017 
+FL-31-Oct-2017 
 
 def get_configparser():
 def connect():
@@ -312,7 +312,7 @@ def json_generator( cursor, json_dataname, data, download_key = None ):
         entry_path_cpy = copy.deepcopy( entry_path )
         
         delete_list = []
-        """
+        
         if classification == "historical":
             delete_list = [ "histclass5", "histclass6", "histclass7", "histclass8", "histclass9", "histclass10" ]
         elif classification == "modern":
@@ -322,6 +322,7 @@ def json_generator( cursor, json_dataname, data, download_key = None ):
             delete_list = [ "histclass6", "histclass7", "histclass8", "histclass9", "histclass10" ]
         elif classification == "modern":
             delete_list = [ "class6", "class7", "class8", "class9", "class10" ]
+        """
         
         for e in delete_list:
             try:
@@ -1261,8 +1262,9 @@ def loadjson( json_dataurl ):
 def filecat_subtopic( cursor, datatype, base_year ):
     logging.debug( "filecatalog_subtopic()" )
     
-    query  = "SELECT * FROM russianrepository "
-    query += "WHERE datatype = '%s' AND base_year = '%s'" % ( datatype, base_year )
+    query  = "SELECT * FROM russianrepository"
+    query += " WHERE datatype = '%s' AND base_year = '%s'" % ( datatype, base_year )
+    query += " ORDER BY ter_code"
     
     cursor.execute( query )
     records = cursor.fetchall()
@@ -1334,6 +1336,16 @@ def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
         }
         
         df1 = pd.read_csv( csv_pathname, **kwargs_pandas )
+        
+        # sort by ter_code and histclasses
+        sort_columns = []
+        sort_columns.append( "TER_CODE" )
+        for l in range( 10 ):
+            l_str = "HISTCLASS%d" % ( l + 1 )
+            sort_columns.append( l_str )
+        logging.debug( "sort by: %s" % sort_columns )
+        df1 = df1.sort_values( by = sort_columns )
+        
         root, ext = os.path.splitext( csv_filename )
         xlsx_filename = root + ".xlsx"
         xlsx_pathname = os.path.join( download_dir, xlsx_filename )
@@ -2197,10 +2209,10 @@ def download():
         clientcache = MongoClient()
         datafilter = {}
         datafilter[ "key" ] = key
-        ( lex_lands, vocab_regs_terms, sheet_header, qinput ) = preprocessor( datafilter )
+        ( lex_lands, vocab_regs_terms, sheet_header, topic_name, qinput ) = preprocessor( datafilter )
         
         xlsx_name = "%s.xlsx" % key
-        pathname, msg = aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header, qinput )
+        pathname, msg = aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header, topic_name, qinput )
         if os.path.isfile( pathname ):
             logging.debug( "pathname: %s" % pathname )
         else:
