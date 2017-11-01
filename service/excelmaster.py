@@ -580,33 +580,40 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
     
     column = 1
     cell = ws_cr.cell( row = 1, column = column )
-    cell.value = "Electronic Repository of Russian Historical Statistics / Электронный архив Российской исторической статистики"
+    cell.value = "_"
     cell = ws_cr.cell( row = 2, column = column )
+    cell.value = "Electronic Repository of Russian Historical Statistics / Электронный архив Российской исторической статистики"
+    cell = ws_cr.cell( row = 3, column = column )
     cell.value = "2014-%d" % date.today().year
+    cell = ws_cr.cell( row = 4, column = column )
+    cell.value = "_"
     
     if language == "en":
-        cell = ws_cr.cell( row = 4, column = column )
+        cell = ws_cr.cell( row = 5, column = column )
         #cell.alignment = Alignment( horizontal = "left" ) 
         cell.value = "Creative Commons License"
-            
-        cell = ws_cr.cell( row = 5, column = column )
-        cell.value = "This work is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License."
         cell = ws_cr.cell( row = 6, column = column )
+        cell.value = "This work is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License."
+        cell = ws_cr.cell( row = 7, column = column )
         cell.value = "http://creativecommons.org/licenses/by-nc-sa/4.0/"
         cell = ws_cr.cell( row = 8, column = column )
-        cell.value = "By downloading and using data from the Electronic Repository of Russian Historical Statistics the user agrees to the terms of this license. Providing a correct reference to the resource is a formal requirement of the license: "
+        cell.value = "_"
         cell = ws_cr.cell( row = 9, column = column )
+        cell.value = "By downloading and using data from the Electronic Repository of Russian Historical Statistics the user agrees to the terms of this license. Providing a correct reference to the resource is a formal requirement of the license: "
+        cell = ws_cr.cell( row = 10, column = column )
         cell.value = "Kessler, Gijs and Andrei Markevich (%d), Electronic Repository of Russian Historical Statistics, 18th - 21st centuries, http://ristat.org/" % date.today().year
     elif language == "ru":
-        cell = ws_cr.cell( row = 4, column = column )
-        cell.value = "Лицензия Creative Commons"
         cell = ws_cr.cell( row = 5, column = column )
-        cell.value = "Это произведение доступно по лицензии Creative Commons «Attribution-NonCommercial-ShareAlike» («Атрибуция — Некоммерческое использование — На тех же условиях») 4.0 Всемирная."
+        cell.value = "Лицензия Creative Commons"
         cell = ws_cr.cell( row = 6, column = column )
+        cell.value = "Это произведение доступно по лицензии Creative Commons «Attribution-NonCommercial-ShareAlike» («Атрибуция — Некоммерческое использование — На тех же условиях») 4.0 Всемирная."
+        cell = ws_cr.cell( row = 7, column = column )
         cell.value = "http://creativecommons.org/licenses/by-nc-sa/4.0/deed.ru"
         cell = ws_cr.cell( row = 8, column = column )
-        cell.value = "Скачивая и начиная использовать данные пользователь автоматически соглашается с этой лицензией. Наличие корректно оформленной ссылки является обязательным требованием лицензии:"
+        cell.value = "_"
         cell = ws_cr.cell( row = 9, column = column )
+        cell.value = "Скачивая и начиная использовать данные пользователь автоматически соглашается с этой лицензией. Наличие корректно оформленной ссылки является обязательным требованием лицензии:"
+        cell = ws_cr.cell( row = 10, column = column )
         cell.value = "Кесслер Хайс и Маркевич Андрей (%d), Электронный архив Российской исторической статистики, XVIII – XXI вв., [Электронный ресурс] : [сайт]. — Режим доступа: http://ristat.org/" % date.today().year
 
     try:
