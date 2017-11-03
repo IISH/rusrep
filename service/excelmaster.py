@@ -2,13 +2,14 @@
 # -*- coding: utf-8 -*-
 
 # VT-07-Jul-2016 Latest change by VT
-# FL-11-Oct-2017 Latest change
+# FL-31-Oct-2017 Latest change
 
 import json
 import logging
 import openpyxl
 import os
 import re
+import sys
 
 from datetime import date
 from icu import Locale, Collator
@@ -17,10 +18,7 @@ from pymongo import MongoClient
 from sys import exc_info
 
 from openpyxl.styles import Alignment
-try: 
-    from openpyxl.cell import get_column_letter     # old
-except ImportError:
-    from openpyxl.utils import get_column_letter    # new
+from openpyxl.utils import get_column_letter
 
 
 def preprocessor( datafilter ):
@@ -50,10 +48,10 @@ def preprocessor( datafilter ):
         
         logging.debug( "db_datacache.data.find with key: %s" % key )
         result = db_datacache.data.find( { "key": key } )
-        #logging.info( "preprocessor() cached result: %s for key: %s" % ( type( result ), key ) )
+        #logging.debug( "preprocessor() cached result: %s for key: %s" % ( type( result ), key ) )
         
         ter_codes = []      # actually used region codes
-        logging.info( "# of rowitems: %d" % result.count() )
+        logging.debug( "# of rowitems: %d" % result.count() )
         
         for rowitem in result:
             logging.debug( "rowitem: %s" % str( rowitem ) )
@@ -197,11 +195,11 @@ def preprocessor( datafilter ):
     logging.debug( "preprocessor (%d) vocab_regs_terms: %s" % ( len( vocab_regs_terms ), str( vocab_regs_terms ) ) )
     logging.debug( "preprocessor (%d) sheet_header: %s"     % ( len( sheet_header ),     str( sheet_header ) ) )
     
-    return ( lex_lands, vocab_regs_terms, sheet_header, qinput )
+    return ( lex_lands, vocab_regs_terms, sheet_header, topic_name, qinput )
 
 
 
-def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header, qinput ):
+def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header, topic_name, qinput ):
     logging.debug( "aggregate_dataset() key: %s" % key )
     
     xlsx_pathname = ""
@@ -287,10 +285,10 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         base_years = [ 1795, 1858, 1897, 1959, 2002 ]
         ws_0 = wb.get_active_sheet()
         ws_0.title = "1795"
-        ws_1 = wb.create_sheet( 1, "1858" )
-        ws_2 = wb.create_sheet( 2, "1897" )
-        ws_3 = wb.create_sheet( 3, "1959" )
-        ws_4 = wb.create_sheet( 4, "2002" )
+        ws_1 = wb.create_sheet( "1858", 1 )
+        ws_2 = wb.create_sheet( "1897", 2 )
+        ws_3 = wb.create_sheet( "1959", 3 )
+        ws_4 = wb.create_sheet( "2002", 4 )
         
         vocab_regions = db_vocabulary.data.find( { "vocabulary": "ERRHS_Vocabulary_regions" } )
         logging.debug( "vocab_regions: %s" % vocab_regions )
@@ -370,7 +368,7 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
             for name in sorted( chain ):
                 header_chain.add( name )
         
-        max_cols = len( header_chain )
+        max_columns = len( header_chain )
         logging.debug( "# of names in header_chain: %d" % len( header_chain ) )
         logging.debug( "names in chain: %s" % str( header_chain ) )
         
@@ -381,7 +379,7 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         logging.debug( "levels in header_chain: %d" % nlevels )
         
         # sheet_header line here; lines above for legend
-        i = 9
+        row = 9
         logging.debug( "# of itemchains in lex_lands: %d" % len( lex_lands ) )
         logging.debug( "lex_lands old: %s" % str( lex_lands ) )
         
@@ -392,71 +390,70 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
             chain = json.loads( itemchain )
             logging.debug( "chain: %s" %  str( chain ) )
             
-            j = 0           # column
+            column = 1
             # sheet_header
-            if i == 9:      # row
+            if row == 9:      # row
                 logging.debug( "# of names in header_chain: %d" % len( header_chain ) )
                 logging.debug( "names in header_chain: %s" % str( header_chain ) )
-                #i_name = 0
-                #j_in_use = []
+                #row_name = 0
+                #column_in_use = []
                 for name in sorted( header_chain ):
                     logging.debug( "name: %s: " % name )
                     if name == "base_year":
-                        j = 0
+                        column =  1
                     elif name == "datatype":
-                        j = 1
+                        column =  2
                     elif name in [ "class1", "histclass1" ]:
-                        j = 2
+                        column =  3
                     elif name in [ "class2", "histclass2" ]:
-                        j = 3
+                        column =  4
                     elif name in [ "class3", "histclass3" ]:
-                        j = 4
+                        column =  5
                     elif name in [ "class4", "histclass4" ]:
-                        j = 5
+                        column =  6
                     elif name in [ "class5", "histclass5" ]:
-                        j = 6
+                        column =  7
                     elif name in [ "class6", "histclass6" ]:
-                        j = 7
+                        column =  8
                     elif name in [ "class7", "histclass7" ]:
-                        j = 8
+                        column =  9
                     elif name in [ "class8", "histclass8" ]:
-                        j = 9
+                        column =  10
                     elif name in [ "class9", "histclass9" ]:
-                        j = 10
+                        column =  11
                     elif name in [ "class10", "histclass10" ]:
-                        j = 11
+                        column =  12
                     elif name == "value_unit":
-                        j = nlevels + 2
+                        column =  nlevels + 3
                     elif name in skip_list:
                         continue
                     else:
                         logging.debug( "name: %s ???" % name )
                         continue
                     
-                    j = j + 1
-                    logging.info( "i: %d, j: %d" % ( i, j ) )
-                    c = ws.cell( row = i, column = j )
+                    logging.debug( "row: %d, column: %d" % ( row, column ) )
+                    cell = ws.cell( row = row, column = column )
                     column_name = name
                     if column_name in vocab_regs_terms[ "terms" ]:
                         column_name = vocab_regs_terms[ "terms" ][ column_name ]
-                    c.value = column_name
-                    logging.debug( "header column %d: %s" % ( j, c.value ) )
+                    cell.value = column_name
+                    logging.debug( "header column %d: %s" % ( column, cell.value ) )
                 
-                j = max_cols
+                column = max_columns
                 logging.debug( "# of ter_names in sorted_regions: %d" % len( sorted_regions ) )
                 for ter_name in sorted_regions:
                     ter_code = regions[ ter_name ]
-                    c = ws.cell( row = i, column = j )
+                    cell = ws.cell( row = row, column = column )
                     ter_name = ter_code
                     if ter_code in vocab_regs_terms[ "regions" ]:
                         ter_name = vocab_regs_terms[ "regions" ][ ter_code ]
-                    c.value = ter_name
-                    j += 1
+                    cell.value = ter_name
+                    column += 1
                 
-                i += 1
+                row += 1
             
             # data records
-            j = 0
+            column = 1
             logging.debug( "# of names in chain: %d" % len( chain ) )
             logging.debug( "names in chain: %s" % str( chain ) )
             try:
@@ -476,40 +473,39 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
             for name in sorted( chain ):
                 logging.debug( "name: %s: " % name )
                 if name == "base_year":
-                    j = 0
+                    column =  1
                 elif name == "datatype":
-                    j = 1
+                    column =  2
                 elif name in [ "class1", "histclass1" ]:
-                    j = 2
+                    column =  3
                 elif name in [ "class2", "histclass2" ]:
-                    j = 3
+                    column =  4
                 elif name in [ "class3", "histclass3" ]:
-                    j = 4
+                    column =  5
                 elif name in [ "class4", "histclass4" ]:
-                    j = 5
+                    column =  6
                 elif name in [ "class5", "histclass5" ]:
-                    j = 6
+                    column =  7
                 elif name in [ "class6", "histclass6" ]:
-                    j = 7
+                    column =  8
                 elif name in [ "class7", "histclass7" ]:
-                    j = 8
+                    column =  9
                 elif name in [ "class8", "histclass8" ]:
-                    j = 9
+                    column =  10
                 elif name in [ "class9", "histclass9" ]:
-                    j = 10
+                    column =  11
                 elif name in [ "class10", "histclass10" ]:
-                    j = 11
+                    column =  12
                 elif name == "value_unit":
-                    j = nlevels + 2
+                    column = nlevels + 3
                 elif name in skip_list:
                     continue
                 else:
                     logging.debug( "name: %s ???" % name )
                     continue
                 
-                j = j + 1
-                logging.debug( "row: %d, column: %d, name: %s" % ( i, j, name ) )
-                c = ws.cell( row = i, column = j )
+                logging.debug( "row: %d, column: %d, name: %s" % ( row, column, name ) )
+                cell = ws.cell( row = row, column = column )
                 value = chain[ name ]
                 
                 #if value == '.':
@@ -517,11 +513,11 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                 if value == '':
                     value = '.'
                 
-                c.value = value
-                logging.debug( "row: %d, column: %d, name: %s, value: %s" % ( i, j, name, value ) )
+                cell.value = value
+                logging.debug( "row: %d, column: %d, name: %s, value: %s" % ( row, column, name, value ) )
             
             # display region names sorted alphabetically
-            j = max_cols
+            column = max_columns
             num_regions = len( sorted_regions )
             for idx, ter_name in enumerate( sorted_regions ):
                 ter_code = regions[ ter_name ]
@@ -532,42 +528,43 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                 else:
                     ter_value = na
                 
-                c = ws.cell( row = i, column = j )
-                c.value = ter_value
-                logging.debug( "%d: %s" % ( j, ter_value ) )
-                j += 1
+                cell = ws.cell( row = row, column = column )
+                cell.value = ter_value
+                logging.debug( "%d: %s" % ( column, ter_value ) )
+                column += 1
             
-            i += 1
+            row += 1
         
-        nrecords.append( i - 10 )   # number of data records for current sheet
+        nrecords.append( row - 10 )   # number of data records for current sheet
     
     logging.debug( "byear_counts: %s" % str( byear_counts ) )
     
     #logging.debug( "# of lines in sheet_header: %d" % len( sheet_header ) )
     if hist_mod == 'h':
         for l, line in enumerate( sheet_header ):
-            #c = ws.cell( row = line[ "r" ], column = line[ "c" ] )
-            row = line[ "r" ]
-            col = line[ "c" ]
-            col = col + 1
-            logging.info( "row: %d, column: %d" % ( row, col ) )
-            c = ws.cell( row = row, column = col )
-            c.value = line[ "value" ]
-            if l == 8:                      # update intial 0 with actual value
-                c.value = nrecords[ 0 ]     # number of data records
+            row    = line[ "r" ] + 1
+            column = line[ "c" ] + 1
+            logging.debug( "row: %d, column: %d" % ( row, column ) )
+            cell = ws.cell( row = row, column = column )
+            cell.value = line[ "value" ]
+            if l == 8:                          # update intial 0 with actual value
+                cell.value = nrecords[ 0 ]      # number of data records
             logging.debug( "sheet_header l: %d, r: %d, c: %d, value: %s" % ( l, line[ "r" ], line[ "c" ], line[ "value" ] ) )
     elif hist_mod == 'm':
         for w, ws in enumerate( wb.worksheets ):
             prev_value = ""
             for l, line in enumerate( sheet_header ):
-                c = ws.cell( row = line[ "r" ], column = line[ "c" ] )
+                row    = line[ "r" ] + 1
+                column = line[ "c" ] + 1
+                logging.debug( "row: %d, column: %d" % ( row, column ) )
+                cell = ws.cell( row = row, column = column )
                 if prev_value in [ "BENCHMARK-YEAR:", "ГОД:" ]:
-                    c.value = ws.title
+                    cell.value = ws.title
                 else:
-                    c.value = line[ "value" ]
+                    cell.value = line[ "value" ]
                 if l == 8:                      # update intial 0 with actual value
-                    c.value = nrecords[ w ]     # number of data records
-                prev_value = c.value
+                    cell.value = nrecords[ w ]  # number of data records
+                prev_value = cell.value
                 logging.debug( "sheet_header l: %d, r: %d, c: %d, value: %s" % ( l, line[ "r" ], line[ "c" ], line[ "value" ] ) )
     
     # create copyright sheet; extract language id from filename
@@ -577,43 +574,47 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
     logging.debug( "language: %s" % language )
     
     if hist_mod == 'h':
-        #ws_cr = wb.create_sheet( 1, "Copyrights" )
         ws_cr = wb.create_sheet( "Copyrights", 1 )
     else:
-        #ws_cr = wb.create_sheet( 5, "Copyrights" )
         ws_cr = wb.create_sheet( "Copyrights", 5 )
     
-    #col = 0
-    col = 1
-    c = ws_cr.cell( row = 1, column = col )
-    c.value = "Electronic Repository of Russian Historical Statistics / Электронный архив Российской исторической статистики"
-    c = ws_cr.cell( row = 2, column = col )
-    c.value = "2014-%d" % date.today().year
+    column = 1
+    cell = ws_cr.cell( row = 1, column = column )
+    cell.value = "_"
+    cell = ws_cr.cell( row = 2, column = column )
+    cell.value = "Electronic Repository of Russian Historical Statistics / Электронный архив Российской исторической статистики"
+    cell = ws_cr.cell( row = 3, column = column )
+    cell.value = "2014-%d" % date.today().year
+    cell = ws_cr.cell( row = 4, column = column )
+    cell.value = "_"
     
     if language == "en":
-        c = ws_cr.cell( row = 4, column = col )
-        #c.alignment = Alignment( horizontal = "left" ) 
-        c.value = "Creative Commons License"
-            
-        c = ws_cr.cell( row = 5, column = col )
-        c.value = "This work is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License."
-        c = ws_cr.cell( row = 6, column = col )
-        c.value = "http://creativecommons.org/licenses/by-nc-sa/4.0/"
-        c = ws_cr.cell( row = 8, column = col )
-        c.value = "By downloading and using data from the Electronic Repository of Russian Historical Statistics the user agrees to the terms of this license. Providing a correct reference to the resource is a formal requirement of the license: "
-        c = ws_cr.cell( row = 9, column = col )
-        c.value = "Kessler, Gijs and Andrei Markevich (%d), Electronic Repository of Russian Historical Statistics, 18th - 21st centuries, http://ristat.org/" % date.today().year
+        cell = ws_cr.cell( row = 5, column = column )
+        #cell.alignment = Alignment( horizontal = "left" ) 
+        cell.value = "Creative Commons License"
+        cell = ws_cr.cell( row = 6, column = column )
+        cell.value = "This work is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License."
+        cell = ws_cr.cell( row = 7, column = column )
+        cell.value = "http://creativecommons.org/licenses/by-nc-sa/4.0/"
+        cell = ws_cr.cell( row = 8, column = column )
+        cell.value = "_"
+        cell = ws_cr.cell( row = 9, column = column )
+        cell.value = "By downloading and using data from the Electronic Repository of Russian Historical Statistics the user agrees to the terms of this license. Providing a correct reference to the resource is a formal requirement of the license: "
+        cell = ws_cr.cell( row = 10, column = column )
+        cell.value = "Kessler, Gijs and Andrei Markevich (%d), Electronic Repository of Russian Historical Statistics, 18th - 21st centuries, http://ristat.org/" % date.today().year
     elif language == "ru":
-        c = ws_cr.cell( row = 4, column = col )
-        c.value = "Лицензия Creative Commons"
-        c = ws_cr.cell( row = 5, column = col )
-        c.value = "Это произведение доступно по лицензии Creative Commons «Attribution-NonCommercial-ShareAlike» («Атрибуция — Некоммерческое использование — На тех же условиях») 4.0 Всемирная."
-        c = ws_cr.cell( row = 6, column = col )
-        c.value = "http://creativecommons.org/licenses/by-nc-sa/4.0/deed.ru"
-        c = ws_cr.cell( row = 8, column = col )
-        c.value = "Скачивая и начиная использовать данные пользователь автоматически соглашается с этой лицензией. Наличие корректно оформленной ссылки является обязательным требованием лицензии:"
-        c = ws_cr.cell( row = 9, column = col )
-        c.value = "Кесслер Хайс и Маркевич Андрей (%d), Электронный архив Российской исторической статистики, XVIII – XXI вв., [Электронный ресурс] : [сайт]. — Режим доступа: http://ristat.org/" % date.today().year
+        cell = ws_cr.cell( row = 5, column = column )
+        cell.value = "Лицензия Creative Commons"
+        cell = ws_cr.cell( row = 6, column = column )
+        cell.value = "Это произведение доступно по лицензии Creative Commons «Attribution-NonCommercial-ShareAlike» («Атрибуция — Некоммерческое использование — На тех же условиях») 4.0 Всемирная."
+        cell = ws_cr.cell( row = 7, column = column )
+        cell.value = "http://creativecommons.org/licenses/by-nc-sa/4.0/deed.ru"
+        cell = ws_cr.cell( row = 8, column = column )
+        cell.value = "_"
+        cell = ws_cr.cell( row = 9, column = column )
+        cell.value = "Скачивая и начиная использовать данные пользователь автоматически соглашается с этой лицензией. Наличие корректно оформленной ссылки является обязательным требованием лицензии:"
+        cell = ws_cr.cell( row = 10, column = column )
+        cell.value = "Кесслер Хайс и Маркевич Андрей (%d), Электронный архив Российской исторической статистики, XVIII – XXI вв., [Электронный ресурс] : [сайт]. — Режим доступа: http://ristat.org/" % date.today().year
 
     try:
         wb.save( xlsx_pathname )
@@ -623,13 +624,21 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         msg = "saving xlsx failed: %s" % value
     
     # sigh, openpyxl can't sort, let's sort with pandas
-    #pandas_sort( xlsx_pathname, nlevels )
+    
+    params = {
+        "lang"       : lang,
+        "hist_mod"   : hist_mod, 
+        "topic_name" : topic_name, 
+        "base_year"  : base_year
+    }
+    
+    pandas_sort( xlsx_pathname, nlevels, params )
     
     return xlsx_pathname, msg
 
 
 
-def pandas_sort( xlsx_pathname_in, nlevels ):
+def pandas_sort( xlsx_pathname_in, nlevels, params ):
     logging.info( "pandas_sort()" )
     
     ( xlsx_head, xlsx_tail ) = os.path.split( xlsx_pathname_in )
@@ -665,11 +674,72 @@ def pandas_sort( xlsx_pathname_in, nlevels ):
         if sheet_name == "Copyrights":
             nskiprows = 0
             df = EF.parse( sheet_name )
-            df.to_excel( writer, sheet_name = sheet_name, index = True )
+            df.to_excel( writer, sheet_name = sheet_name, index = False )
         else:
-            nskiprows = 9   # start at table header
-            df = EF.parse( sheet_name, skiprows = nskiprows )
-            df = df.sort( sort_levels )
+            nskiprows = 8       # start at table header
+            df_table = EF.parse( sheet_name, skiprows = nskiprows )
+            
+            df = pd.DataFrame()
+            df = df_table
+            
+            # sort the table
+            try:
+                df = df.sort_values( by = sort_levels )
+            except:
+                logging.error( "sorting failed with  with sort_levels:\n%s" % sort_levels )
+                type_, value, tb = sys.exc_info()
+                logging.error( "%s" % value )
+            
+            # set comment lines below the table
+            header = list( df )
+            c0 = header[ 0 ]
+            c1 = header[ 1 ]
+            nrows = len( df )
+            row_offset = nrows
+            
+            lang       = params[ "lang" ]
+            hist_mod   = params[ "hist_mod" ]
+            topic_name = params[ "topic_name" ]
+            base_year  = params[ "base_year" ]
+            
+            df.loc[ row_offset, c0 ] = ""
+            df.loc[ row_offset, c1 ] = ""
+                
+            if lang == 'en':
+                if hist_mod == 'h':
+                    classification = "HISTORICAL"
+                elif hist_mod == 'm':
+                    classification = "MODERN"
+                else:
+                    classification = ""
+                
+                df.loc[ row_offset + 1, c0 ] = "Electronic repository of Russian Historical Statistics - ristat.org"
+                df.loc[ row_offset + 3, c0 ] = "TOPIC:"
+                df.loc[ row_offset + 3, c1 ] = topic_name
+                df.loc[ row_offset + 4, c0 ] = "BENCHMARK-YEAR:"
+                df.loc[ row_offset + 4, c1 ] = base_year
+                df.loc[ row_offset + 5, c0 ] = "CLASSIFICATION:"
+                df.loc[ row_offset + 5, c1 ] = classification
+                df.loc[ row_offset + 6, c0 ] = "NUMBER"
+                df.loc[ row_offset + 6, c1 ] = nrows
+            else:
+                if hist_mod == 'h':
+                    classification = "ИСТОРИЧЕСКАЯ"
+                elif hist_mod == 'm':
+                    classification = "СОВРЕМЕННАЯ"
+                else:
+                    classification = ""
+                
+                df.loc[ row_offset + 1, c0 ] = "Электронный архив Российской исторической статистики - ristat.org"
+                df.loc[ row_offset + 3, c0 ] = "ТЕМА:"
+                df.loc[ row_offset + 3, c1 ] = topic_name
+                df.loc[ row_offset + 4, c0 ] = "ГОД:"
+                df.loc[ row_offset + 4, c1 ] = base_year
+                df.loc[ row_offset + 5, c0 ] = "КЛАССИФИКАЦИЯ:"
+                df.loc[ row_offset + 5, c1 ] = classification
+                df.loc[ row_offset + 6, c0 ] = "ЧИСЛО"
+                df.loc[ row_offset + 6, c1 ] = nrows
+            
             df.to_excel( writer, sheet_name = sheet_name, index = False )
         
     writer.save()
