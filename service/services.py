@@ -5,7 +5,7 @@ VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
-FL-31-Oct-2017 
+FL-03-Nov-2017 
 
 def get_configparser():
 def connect():
@@ -336,22 +336,21 @@ def json_generator( cursor, json_dataname, data, download_key = None ):
         else:
             logging.debug( "remove entry_path: %s" % entry_path_cpy )
     
-    
     if len( path_list ) != 0:
         # pure '.' dot entries are not returned from db
         logging.debug( "missing path entries: %d" % len( path_list ) )
         for path_entry in path_list:
-            logging.debug( path_entry )
+            logging.debug( "path_entry: %s" % path_entry )
             new_entry = {}
             # also want to see "NA" entries in preview and download
             new_entry[ "path" ]       = path_entry
             new_entry[ "base_year" ]  = base_year
             new_entry[ "value_unit" ] = value_unit
             new_entry[ "datatype" ]   = datatype
-            new_entry[ "count" ]      = ''
+            new_entry[ "count" ]      = 1       # was ''
             new_entry[ "ter_code" ]   = ''
+            new_entry[ "total" ]      = ''      # unknown, so not 0 or 0.0
             json_list.append( new_entry )
-    
     
     return json_list
 
