@@ -5,7 +5,7 @@ VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
-FL-03-Nov-2017 
+FL-14-Nov-2017 
 
 def get_configparser():
 def connect():
@@ -32,7 +32,7 @@ def loadjson( json_dataurl ):
 def filecat_subtopic( cursor, datatype, base_year ):
 def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
 #def aggregation_1year( qinput, do_subclasses, download_key ):
-def aggregate_1year( qinput, do_subclasses, download_key ):
+def aggregate_1year( qinput, count_dots, do_subclasses, separate_tc ):
 def execute_1year( sql_query )
 def cleanup_downloads( download_dir, time_limit ):
 def format_secs( seconds ):
@@ -58,13 +58,11 @@ def format_secs( seconds ):
 @app.route( "/logfile" )                                        def getupdatelog():
 """
 
-from __future__ import absolute_import      # VT
-"""
+#from __future__ import absolute_import      # VT
 # future-0.16.0 imports for Python 2/3 compatibility
 from __future__ import ( absolute_import, division, print_function, unicode_literals )
 from builtins import ( ascii, bytes, chr, dict, filter, hex, input, int, list, map, 
     next, object, oct, open, pow, range, round, super, str, zip )
-"""
 
 import sys
 reload( sys )
@@ -912,53 +910,6 @@ def load_vocabulary( vocab_type ):
             eng_data[ item ] = units[ item ]
             #logging.debug( "%s => %s" % ( item, units[ item ] ) )
     
-    """
-    newfilter = {}
-    eng_data = {}
-    
-    if request.args.get( "classification" ):
-        vocname = request.args.get( "classification" )
-        if vocname == "historical":
-            newfilter[ "vocabulary" ] = "ERRHS_Vocabulary_histclasses"
-        else:
-            newfilter[ "vocabulary" ] = "ERRHS_Vocabulary_modclasses"
-        logging.debug( "newfilter: %s" % newfilter )
-    """
-    
-    """
-    if request.args.get( "language" ) == "en":
-        thisyear = ""
-        vocab_filter = {}
-        if request.args.get( "base_year" ):
-            if vocname == "historical":
-                base_year = request.args.get( "base_year" )
-                if base_year:
-                    vocab_filter[ "YEAR" ] = base_year
-                datatype = request.args.get( "datatype" )
-                if datatype:
-                    vocab_filter[ "DATATYPE" ] = datatype
-        
-        eng_data = translate_vocabulary( vocab_filter )
-        logging.debug( "translate_vocabulary eng_data items: %d" % len( eng_data ) )
-        #logging.debug( "eng_data: %s" % eng_data )
-        
-        units = translate_vocabulary( { "vocabulary": "ERRHS_Vocabulary_units" } )
-        logging.debug( "translate_vocabulary units items: %d" % len( units ) )
-        #logging.debug( "units: %s" % units )
-        
-        for item in units:
-            eng_data[ item ] = units[ item ]
-            #logging.debug( "%s => %s" % ( item, units[ item ] ) )
-    """
-    
-    """
-    params = { "vocabulary": vocname }
-    for name in request.args:
-        if name not in forbidden:
-                params[ name ] = request.args[ name ]
-    logging.debug( "params: %s" % params )
-    """
-    
     client = MongoClient()
     db_name = "vocabulary"
     db = client.get_database( db_name )
@@ -1062,111 +1013,6 @@ def load_vocabulary( vocab_type ):
     return json_hash
 
 
-"""
-def load_vocabulary_old(vocname):
-    logging.debug("load_vocabulary()")
-    client = MongoClient()
-    dbname = 'vocabulary'
-    db = client.get_database(dbname)
-    newfilter = {}
-    engdata = {}
-    if request.args.get('classification'):
-        vocname = request.args.get('classification')
-        if vocname == 'historical':
-            newfilter['vocabulary'] = 'ERRHS_Vocabulary_histclasses'
-        else:
-            newfilter['vocabulary'] = 'ERRHS_Vocabulary_modclasses'
-
-    if request.args.get('language') == 'en':
-        thisyear = ''
-        if request.args.get('base_year'):
-            if vocname == 'historical':
-                thisyear = request.args.get('base_year')
-                newfilter['YEAR'] = thisyear 
-        logging.debug( "translate_vocabulary with filter: %s" % newfilter )
-        #engdata = translatedvocabulary(newfilter)
-        engdata = translate_vocabulary(newfilter)
-        #units = translatedvocabulary({"vocabulary": "ERRHS_Vocabulary_units"})
-        units = translate_vocabulary({"vocabulary": "ERRHS_Vocabulary_units"})
-        logging.debug( "translate_vocabulary units items: %d" % len( units ) )
-        for item in units:
-            engdata[item] = units[item]
-
-    params = {"vocabulary": vocname}
-    for name in request.args:
-        if name not in forbidden:
-            params[name] = request.args.get(name)
-
-    if vocname:
-        logging.debug( "params: %s" % params )
-        vocab = db.data.find(params)
-    else:
-        vocab = db.data.find()
-
-    data = []
-    uid = 0
-    for item in vocab:
-        del item['_id']
-        del item['vocabulary']
-        regions = {}
-        if vocname == "ERRHS_Vocabulary_regions":
-            uid+=1
-            regions['region_name'] = item['RUS']
-            regions['region_name_eng'] = item['EN']
-            regions['region_code'] = item['ID']
-            regions['region_id'] = uid
-            regions['region_ord'] = 189702
-            regions['description'] = regions['region_name']
-            regions['active'] = 1
-            item = regions
-            data.append(item)
-        elif vocname == 'modern':
-            if engdata:
-                #item = translateitem(item, engdata)     # old
-                item = translate_item(item, engdata)     # new
-            data.append(item)
-        elif vocname == 'historical':
-            if engdata:
-                #item = translateitem(item, engdata)     # old
-                item = translate_item(item, engdata)     # new
-            data.append(item)
-        else:
-            # Translate first
-            newitem = {}
-            if engdata:
-                for name in item:
-                    value = item[name]
-                    if value in engdata: 
-                        value = engdata[value]
-                    newitem[name] = value
-                item = newitem
-            
-            (path, output) = classcollector(item)
-            if path:
-                output['path'] = path
-                data.append(output)
-            else:
-                data.append(item)
-
-    logging.debug( "%d items in %s data" % ( len( data ), vocname ) )
-    for item in data:
-        logging.debug( item )
-
-    jsonhash = {}
-    if vocname == "ERRHS_Vocabulary_regions":
-        jsonhash['regions'] = data
-    elif vocname == 'modern':
-        jsonhash = data
-    elif vocname == 'historical':
-        jsonhash = data
-    else:
-        jsonhash['data'] = data
-        jsondata = json.dumps(jsonhash, encoding="utf8", ensure_ascii=False, sort_keys=True, indent=4)
-        return jsondata
-
-    return jsonhash
-"""
-
 
 def load_data( cursor, year, datatype, region, debug ):
     logging.debug("load_data()")
@@ -1231,12 +1077,14 @@ def get_sql_where( name, value ):
     
     sql_query = ''
     result = re.match( "\[(.+)\]", value )
+    
     if result:
         query = result.group( 1 )
         ids = query.split( ',' )
         for param in ids:
             param=re.sub( "u'", "'", str( param ) )
             sql_query += "%s," % param
+        
         if sql_query:
             sql_query = sql_query[ :-1 ]
             sql_query = "%s in (%s)" % ( name, sql_query )
@@ -1406,11 +1254,9 @@ def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
 
 
 
-def aggregate_1year( qinput, count_dots, do_subclasses ):
+def aggregate_1year( qinput, count_dots, do_subclasses, separate_tc ):
     logging.debug( "aggregate_1year() count_dots: %s, do_subclasses: %s" % ( count_dots, do_subclasses ) )
     logging.debug( "qinput %s" % str( qinput ) )
-    
-    thisyear = ''
     
     try:
         language = qinput.get( "language" )
@@ -1469,12 +1315,19 @@ def aggregate_1year( qinput, count_dots, do_subclasses ):
             eng_data[ item ] = units[ item ]
     
     sql = {}
-    known_fields = {}
-    sql[ "condition" ] = ''
-    sql[ "order_by" ]  = ''
-    sql[ "group_by" ]  = ''
+    
+    # ter_code separate, in order to make 2 sql queries, with and without ter_code
+    sql[ "where_tc" ]     = ''
+    sql[ "condition_tc" ] = ''
+    known_fields_tc       = {}
+    
     sql[ "where" ]     = ''
+    sql[ "condition" ] = ''
+    known_fields       = {}
+    
     sql[ "internal" ]  = ''
+    sql[ "group_by" ]  = ''
+    sql[ "order_by" ]  = ''
     
     if qinput:
         for name in qinput:
@@ -1485,9 +1338,14 @@ def aggregate_1year( qinput, count_dots, do_subclasses ):
                     value = eng_data[ value ]
                     logging.debug( "eng_data name: %s, value: %s" % ( name, value ) )
                 
-                sql[ "where" ] += "%s AND " % get_sql_where( name, value )
-                sql[ "condition" ] += "%s, " % name
-                known_fields[ name ] = value
+                if separate_tc and name == "ter_code":
+                    sql[ "where_tc" ] += "%s AND " % get_sql_where( name, value )
+                    sql[ "condition_tc" ] += "%s, " % name
+                    known_fields_tc[ name ] = value
+                else:
+                    sql[ "where" ] += "%s AND " % get_sql_where( name, value )
+                    sql[ "condition" ] += "%s, " % name
+                    known_fields[ name ] = value
             
             elif name == "path":
                 full_path = qinput[ name ]
@@ -1517,6 +1375,7 @@ def aggregate_1year( qinput, count_dots, do_subclasses ):
                         
                         sql_local[ xkey ] = "(%s='%s' OR %s='. '), " % ( xkey, value, xkey )
                         
+                        #if separate_tc:...
                         if not known_fields.has_key( xkey ):
                             known_fields[ xkey ] = value
                             sql[ "condition" ] += "%s, " % xkey
@@ -1568,6 +1427,7 @@ def aggregate_1year( qinput, count_dots, do_subclasses ):
             sql_query += ", %s" % field
         logging.debug( "sql_query 1: %s" % sql_query )
     
+    #if separate_tc:...
     if sql[ "where" ]:
         logging.debug( "where: %s" % sql[ "where" ] )
         sql_query += ", %s" % sql[ "condition" ]
@@ -1579,7 +1439,7 @@ def aggregate_1year( qinput, count_dots, do_subclasses ):
         logging.debug( "sql_query 3: %s" % sql_query )
     
     if count_dots:
-        sql_query += " AND value = '.'"            # only dots
+        sql_query += " AND value = '.'"             # only dots
     else:
         sql_query += " AND value <> ''"             # suppress empty values
         sql_query += " AND value <> '.'"            # suppress a 'lone' "optional point", used in the table to flag missing data
@@ -1595,6 +1455,7 @@ def aggregate_1year( qinput, count_dots, do_subclasses ):
     
     sql[ "group_by" ] = " GROUP BY value_unit, ter_code"
     
+    #if separate_tc:...
     for field in known_fields:
         sql[ "group_by" ] += ", %s" % field
     for field in extra_classes:
@@ -1606,6 +1467,7 @@ def aggregate_1year( qinput, count_dots, do_subclasses ):
     
     # ordering by the db: applied to the russian contents, so the ordering of 
     # the english translation will not be perfect, but at least grouped. 
+    #if separate_tc:...
     logging.debug( "known_fields: %s" % str( known_fields ) )
     sql[ "order_by" ] = " ORDER BY "
     class_list = []
@@ -2060,13 +1922,13 @@ def aggregation():
     if not os.path.exists( download_dir ):
         os.makedirs( download_dir )
     
-    count_dots = False       # value = '.'
-    
+    count_dots  = False         # value = '.'
+    separate_tc = False         # True: ter_code constraint separate: 2 queries
     json_string = str( "{}" )
     
     if classification == "historical":
         # historical has base_year in qinput
-        sql_query, eng_data = aggregate_1year( qinput, count_dots, do_subclasses )
+        sql_query, eng_data = aggregate_1year( qinput, count_dots, do_subclasses, separate_tc )
         json_list = execute_1year( sql_query, eng_data, download_key )
         json_string, cache_except = json_cache( json_list, language, "data", download_key, qinput )
         if cache_except is not None:
@@ -2088,7 +1950,7 @@ def aggregation():
         for base_year in base_years:
             logging.debug( "base_year: %s" % base_year )
             qinput[ "base_year" ] = base_year   # add base_year to qinput
-            sql_query1, eng_data1 = aggregate_1year( qinput, count_dots, do_subclasses )
+            sql_query1, eng_data1 = aggregate_1year( qinput, count_dots, do_subclasses, separate_tc )
             json_list1 = execute_1year( sql_query1, eng_data1, download_key )
             logging.debug( "json_list1 for %s: \n%s" % ( base_year, str( json_list1 ) ) )
             json_list.extend( json_list1 )
