@@ -5,60 +5,50 @@ VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
-FL-14-Nov-2017 
+FL-15-Nov-2017 
 
 def get_configparser():
-def connect():
+def get_connection():
 def classcollector( keywords ):
 def strip_path_list( old_path ):
-def json_generator( cursor, json_dataname, data, download_key = None ):
+def json_generator( sql_names, json_dataname, data, download_key = None ):
 def json_cache( json_list, language, json_dataname, download_key, qinput = {} ):
 def collect_docs( qinput, download_dir, download_key ):
 def translate_vocabulary( vocab_filter, classification = None ):
-def translate_classes( cursor, classinfo ):
 def load_years( cursor, datatype ):
 def sqlfilter( sql ):
 def sqlconstructor( sql ):
 def topic_counts():
 def load_topics():
-def datasetfilter( data, sql_names, classification ):
+def dataset_filter( data, sql_names, classification ):
 def zap_empty_classes( item ):
 def translate_item( item, eng_data ):
 def load_vocabulary( vocab_type ):
-def load_data( cursor, year, datatype, region, debug ):
-def rdf_convertor( url ):
 def get_sql_where( name, value ):
 def loadjson( json_dataurl ):
 def filecat_subtopic( cursor, datatype, base_year ):
 def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
-#def aggregation_1year( qinput, do_subclasses, download_key ):
 def aggregate_1year( qinput, count_dots, do_subclasses, separate_tc ):
 def execute_1year( sql_query )
 def cleanup_downloads( download_dir, time_limit ):
 def format_secs( seconds ):
 
 @app.route( '/' )                                               def test():
-@app.route( "/export" )                                         def export():
-@app.route( "/topics" )                                         def topics():
-@app.route( "/filecatalog", methods = [ 'POST', 'GET' ] )       def filecatalog():
-@app.route( "/filecatalogdata", methods = [ 'POST', 'GET' ]  )  def filecatalogdata():
-@app.route( "/filecatalogget", methods = [ 'POST', 'GET' ] )    def filecatalogget():
-@app.route( "/vocab" )                                          def vocab():
-@app.route( "/aggregation", methods = ["POST", "GET" ] )        def aggregation():
-@app.route( "/indicators", methods = [ "POST", "GET" ] )        def indicators():
-@app.route( "/download" )                                       def download():
 @app.route( "/documentation" )                                  def documentation():
+@app.route( "/topics" )                                         def topics():
+@app.route( "/years" )                                          def years():
+@app.route( "/regions" )                                        def regions():
 @app.route( "/histclasses" )                                    def histclasses():
 @app.route( "/classes" )                                        def classes():
-@app.route( "/regions" )                                        def regions():
-@app.route( "/years" )                                          def years():
-@app.route( "/translate" )                                      def translate():
-@app.route( "/filter", methods = [ "POST", "GET" ] )            def login( settings = '' ):
-@app.route( "/maps" )                                           def maps():
+@app.route( "/indicators", methods = [ "POST", "GET" ] )        def indicators():
+@app.route( "/aggregation", methods = ["POST", "GET" ] )        def aggregation():
+@app.route( "/filecatalogdata", methods = [ 'POST', 'GET' ]  )  def filecatalogdata():
+@app.route( "/filecatalogget", methods = [ 'POST', 'GET' ] )    def filecatalogget():
+@app.route( "/download" )                                       def download():
 @app.route( "/logfile" )                                        def getupdatelog():
 """
 
-#from __future__ import absolute_import      # VT
+
 # future-0.16.0 imports for Python 2/3 compatibility
 from __future__ import ( absolute_import, division, print_function, unicode_literals )
 from builtins import ( ascii, bytes, chr, dict, filter, hex, input, int, list, map, 
@@ -133,8 +123,8 @@ def get_configparser():
 
 
 
-def connect():
-    logging.debug( "connect()" )
+def get_connection():
+    logging.debug( "get_connection()" )
     
     configparser = get_configparser()
     
@@ -152,11 +142,8 @@ def connect():
     
     # get a connection, if a connect cannot be made an exception will be raised here
     connection = psycopg2.connect( connection_string )
-    
-    # conn.cursor will return a cursor object, you can use this cursor to perform queries
-    cursor = connection.cursor()
-    
-    return cursor
+
+    return connection
 
 
 
@@ -215,7 +202,7 @@ def strip_path_list( old_path ):
 
 
 
-def json_generator( cursor, json_dataname, data, download_key = None ):
+def json_generator( sql_names, json_dataname, data, download_key = None ):
     logging.debug( "json_generator() json_dataname: %s, # of data items: %d" % ( json_dataname, len( data ) ) )
     logging.debug( "data: %s" % data )
     
@@ -252,8 +239,7 @@ def json_generator( cursor, json_dataname, data, download_key = None ):
     logging.debug( "# entries in path_list: %d" % len( path_list ) )
     for path_entry in path_list:
         logging.debug( path_entry )
-
-    sql_names  = [ desc[ 0 ] for desc in cursor.description ]
+    
     forbidden = { "data_active", 0, "datarecords", 1 }
     
     json_list = []
@@ -511,8 +497,8 @@ def translate_vocabulary( vocab_filter, classification = None ):
     for item in vocab:
         if "RUS" in item:
             try:
-                item[ "RUS" ] = item[ "RUS" ].encode( "UTF-8" )
-                item[ "EN" ]  = item[ "EN" ] .encode( "UTF-8" )
+                item[ "RUS" ] = item[ "RUS" ].encode( "utf-8" )
+                item[ "EN" ]  = item[ "EN" ] .encode( "utf-8" )
                 
                 if item[ "RUS" ].startswith( '"' ) and item[ "RUS" ].endswith( '"' ):
                     item[ "RUS" ] = string[ 1:-1 ]
@@ -542,88 +528,30 @@ def translate_vocabulary( vocab_filter, classification = None ):
 
 
 
-def translate_classes( cursor, classinfo ):
-    logging.debug( "translate_classes()" )
-    dictdata = {}
-    sql = "select * from datasets.classmaps"; # where class_rus in ";
-    sqlclass = ''
-    for classname in classinfo:
-        if sqlclass:
-            sqlclass = "%s, '%s'" % ( sqlclass, classinfo[ classname ] )
-        else:
-            sqlclass = "'%s'" % classinfo[ classname ]
-    sql = "%s (%s)" % ( sql, sqlclass )
-
-    sql = "select * from datasets.regions"
-    cursor.execute( sql )
-    data = cursor.fetchall()
-    sql_names = [ desc[ 0 ] for desc in cursor.description ]
-    if data:
-        for value_str in data:
-            data_keys = {}
-            for i in range( len( value_str ) ):
-                name  = sql_names[ i ]
-                value = value_str[ i ]
-                if name == "region_name":
-                    name = "class_rus"
-                if name == "region_name_eng":
-                    name = "class_eng"
-                data_keys[ name ] = value
-
-            dictdata[ data_keys[ "class_eng" ] ] = data_keys
-            dictdata[ data_keys[ "class_rus" ] ] = data_keys
-        
-    sql = "select * from datasets.valueunits";
-    cursor.execute( sql )
-    data = cursor.fetchall()
-    sql_names = [ desc[ 0 ] for desc in cursor.description ]
-    if data:
-        for value_str in data:
-            data_keys = {}
-            for i in range( len( value_str ) ):
-                name  = sql_names[ i ]
-                value = value_str[ i ]
-                data_keys[name] = value
-            dictdata[ data_keys[ "class_rus" ] ] = data_keys
-            dictdata[ data_keys[ "class_eng" ] ] = data_keys
-
-    # FIX
-    sql = "select * from datasets.classmaps"
-    cursor.execute( sql )
-    data = cursor.fetchall()
-    sql_names = [ desc[ 0 ] for desc in cursor.description ]
-    if data:
-        for value_str in data:
-            data_keys = {}
-            for i in range( len( value_str ) ):
-               name  = sql_names[ i ]
-               value = value_str[ i ]
-               data_keys[name] = value
-            dictdata[ data_keys[ "class_rus" ] ] = data_keys
-            dictdata[ data_keys[ "class_eng" ] ] = data_keys
-
-    return dictdata
-
-
-
 def load_years( cursor, datatype ):
+    """
+    return a json dictionary with record counts from table russianrepository for the given datatype
+    """
     logging.debug( "load_years()" )
     
     configparser = get_configparser()
     years = configparser.get( "config", "years" ).split( ',' )
-    data = {}
-    sql = "select base_year, count(*) as c from russianrepository where 1=1"
+    sql = "SELECT base_year, COUNT(*) AS cnt FROM russianrepository"
+    
     if datatype:
-        sql=sql + " and datatype='%s'" % datatype 
-    sql= sql + " group by base_year";
+        sql = sql + " WHERE datatype = '%s'" % datatype 
+    
+    sql = sql + " GROUP BY base_year";
+    logging.debug( sql )
     cursor.execute( sql )
     
-    # retrieve the records from the database
-    data = cursor.fetchall()
+    data = cursor.fetchall()    # retrieve the records from the database
     result = {}
+    
     for val in data:
         if val[ 0 ]:
             result[ val[ 0 ] ] = val[ 1 ]
+    
     for year in years:
         if int( year ) not in result:
             result[ int( year ) ] = 0
@@ -679,23 +607,15 @@ def sqlconstructor( sql ):
 def topic_counts( schema ):
     logging.info( "topic_counts()" )
 
-    configparser = get_configparser()
-    
-    host     = configparser.get( "config", "dbhost" )
-    dbname   = configparser.get( "config", "dbname" )
-    user     = configparser.get( "config", "dblogin" )
-    password = configparser.get( "config", "dbpassword" )
-    
-    connection_string = "host = '%s' dbname = '%s' user = '%s' password = '%s'" % ( host, dbname, user, password )
-    logging.info( "connection_string: %s" % connection_string )
-
-    connection = psycopg2.connect( connection_string )
+    connection = get_connection()
     cursor = connection.cursor( cursor_factory = psycopg2.extras.NamedTupleCursor )
 
+    sql_topics = "SELECT datatype, topic_name FROM "
+    
     if schema:
-        sql_topics = "SELECT datatype, topic_name FROM %s.topics" % schema
+        sql_topics += "%s.topics" % schema
     else:
-        sql_topics = "SELECT datatype, topic_name FROM topics"
+        sql_topics += "topics"
     
     sql_topics += " ORDER BY datatype"
     logging.info( sql_topics )
@@ -749,11 +669,17 @@ def load_topics():
     sql = sqlfilter( sql ) 
     logging.debug( "sql: %s" % sql )
     
-    cursor = connect()
-    cursor.execute( sql )       # execute
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute( sql )
 
-    data = cursor.fetchall()    # retrieve the records from the database
-    json_list_in = json_generator( cursor, "data", data )
+    data = cursor.fetchall()
+    sql_names  = [ desc[ 0 ] for desc in cursor.description ]
+    
+    cursor.close()
+    connection.close()
+    
+    json_list_in = json_generator( sql_names, "data", data )
     json_list_out = []
     for topic_dict in json_list_in:
         logging.debug( topic_dict )
@@ -765,56 +691,61 @@ def load_topics():
 
 
 
-def datasetfilter( data, sql_names, classification ):
-    logging.debug( "datasetfilter()" )
-    if data:
-        # retrieve the records from the database
-        datafilter = []
-        for dataline in data:
-            datarow = {}
-            active  = ''
-            for i in range( len( sql_names ) ):
-                name = sql_names[ i ]
-                if classification == "historical":
-                    if name.find( "class", 0 ):
-                        try:
-                            nextvalue = dataline[ i+1 ]
-                        except:
-                            nextvalue = '.'
-                        
-                        if ( dataline[ i ] == '.' and nextvalue == '.' ):
-                            skip = "yes"
-                        else:
-                            toplevel = re.search( "(\d+)", name )
-                            if name.find( "histclass10", 0 ):
-                                datarow[ name ] = dataline[ i ]
-                                if toplevel:
+def dataset_filter( data, sql_names, classification ):
+    logging.debug( "dataset_filter()" )
+    
+    datafilter = []
+    
+    for dataline in data:
+        datarow = {}
+        active  = ''
+        for i in range( len( sql_names ) ):
+            name = sql_names[ i ]
+            
+            if classification == "historical":
+                if name.find( "class", 0 ):
+                    try:
+                        nextvalue = dataline[ i+1 ]
+                    except:
+                        nextvalue = '.'
+                    
+                    if ( dataline[ i ] == '.' and nextvalue == '.' ):
+                        skip = "yes"
+                    else:
+                        toplevel = re.search( "(\d+)", name )
+                        if name.find( "histclass10", 0 ):
+                            datarow[ name ] = dataline[ i ]
+                            if toplevel:
+                                datarow[ "levels" ] = toplevel.group( 0 )
+            
+            elif classification == "modern":
+                if name.find( "histclass", 0 ):
+                    try:
+                        nextvalue = dataline[ i+1 ]
+                    except:
+                        nextvalue = '.'
+                    
+                    if ( dataline[i] == '.' and nextvalue == '.' ):
+                        skip = "yes"
+                    else:
+                        toplevel = re.search( "(\d+)", name )
+                        if name.find( "class10", 0 ):
+                            datarow[ name ] = dataline[ i ]
+                            if toplevel:
+                                if toplevel.group( 0 ) != "10":
                                     datarow[ "levels" ] = toplevel.group( 0 )
-                if classification == "modern":
-                    if name.find( "histclass", 0 ):
-                        try:
-                            nextvalue = dataline[ i+1 ]
-                        except:
-                            nextvalue = '.'
-                        
-                        if ( dataline[i] == '.' and nextvalue == '.' ):
-                            skip = "yes"
-                        else:
-                            toplevel = re.search( "(\d+)", name )
-                            if name.find( "class10", 0 ):
-                                datarow[ name ] = dataline[ i ]
-                                if toplevel:
-                                    if toplevel.group( 0 ) != "10":
-                                        datarow[ "levels" ] = toplevel.group( 0 )
-            try:
-                if datarow[ "levels" ] > 0:
-                    datafilter.append( datarow )
-            except:
-                pass
+        
+        try:
+            if datarow[ "levels" ] > 0:
+                datafilter.append( datarow )
+        except:
+            pass
+    
+    json_string = "{}"
+    if classification:
+        json_string = json.dumps( datafilter, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
 
-        if classification:
-            #return datafilter
-            return json.dumps( datafilter, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
+    return json_string 
 
 
 
@@ -825,7 +756,7 @@ def zap_empty_classes( item ):
     
     new_item = {}
     for name in item:
-        value = item[ name ].encode( "UTF-8" )
+        value = item[ name ].encode( "utf-8" )
         # skip trailing ". " in hist & modern classes
         if ( name.startswith( "histclass" ) or name.startswith( "class" ) ) and value == ". ":
             #logging.debug( "name: %s, value: %s" % ( name, value ) )
@@ -847,7 +778,7 @@ def translate_item( item, eng_data ):
     newitem = {}
     if eng_data:
         for name in item:
-            value = item[ name ].encode( "UTF-8" )
+            value = item[ name ].encode( "utf-8" )
             if value in eng_data:
                 logging.debug( "translate_item() %s -> %s" % ( value, eng_data[ value ] ) )
                 value = eng_data[ value ]
@@ -1014,64 +945,6 @@ def load_vocabulary( vocab_type ):
 
 
 
-def load_data( cursor, year, datatype, region, debug ):
-    logging.debug("load_data()")
-    data = {}
-
-    query = "select * from russianrepository WHERE 1 = 1 "
-    query = sqlfilter( query )
-    if debug:
-        print( "DEBUG " + query + " <br>\n" )
-    query += " order by territory asc"
-    
-    cursor.execute( query )
-    records = cursor.fetchall()
-    
-    row_count = 0
-    i = 0
-    for row in records:
-        i = i + 1
-        data[ i ] = row
-    
-    json_list = json_generator( cursor, "data", records )
-    
-    return json_list
-
-
-
-def rdf_convertor( url ):
-    logging.debug( "rdf_convertor()" )
-    
-    f = urllib.urlopen( url )
-    data = f.read()
-    csvio = StringIO( str( data ) )
-    dataframe = pd.read_csv( csvio, sep = '\t', dtype = "unicode" )
-    final_subset = dataframe
-    columns = final_subset.columns
-    
-    configparser = get_configparser()
-    rdf_prefix = configparser.get( "config", "rdf_prefix" )
-    vocab_uri  = configparser.get( "config", "vocab_uri" )
-    
-    rdf = rdf_prefix
-    g   = Graph()
-
-    for ids in final_subset.index:
-        item = final_subset.ix[ ids ]
-        uri = term.URIRef( "%s%s" % ( vocab_uri, str( item[ "ID" ] ) ) )
-        if uri:
-            for col in columns:
-                if col is not "ID":
-                    if item[ col ]:
-                        c = term.URIRef( col )
-                        g.add( ( uri, c, Literal( str( item[ col ] ) ) ) )
-                        rdf += "ristat:%s " % item[ "ID" ]
-                        rdf += "ristat:%s ristat:%s." % ( col, item[ col ] )
-                    rdf += "\n"
-    return g
-
-
-
 def get_sql_where( name, value ):
     logging.debug( "get_sql_where() name: %s, value: %s" % ( name, value ) )
     
@@ -1115,8 +988,9 @@ def filecat_subtopic( cursor, datatype, base_year ):
     
     cursor.execute( query )
     records = cursor.fetchall()
+    sql_names = [ desc[ 0 ] for desc in cursor.description ]
     
-    json_list = json_generator( cursor, "data", records )
+    json_list = json_generator( sql_names, "data", records )
     logging.debug( json_list )
     
     return json_list
@@ -1500,10 +1374,15 @@ def aggregate_1year( qinput, count_dots, do_subclasses, separate_tc ):
 
 def execute_1year( sql_query, eng_data, download_key ):
     logging.debug( "execute_1year()" )
+    
+    json_list = []
+    
     if sql_query:
         time0 = time()      # seconds since the epoch
         logging.debug( "query execute start: %s" % datetime.datetime.now() )
-        cursor = connect()
+        
+        connection = get_connection()
+        cursor = connection.cursor()
         cursor.execute( sql_query )
         logging.debug( "query execute stop: %s" % datetime.datetime.now() )
         str_elapsed = format_secs( time() - time0 )
@@ -1516,6 +1395,10 @@ def execute_1year( sql_query, eng_data, download_key ):
         # retrieve the records from the database
         data = cursor.fetchall()
         logging.debug( "result # of data records: %d" % len( data ) )
+        
+        cursor.close()
+        connection.close()
+        
         final_data = []
         for idx, item in enumerate( data ):
             logging.debug( "%d: %s" % ( idx, item ) )
@@ -1528,18 +1411,16 @@ def execute_1year( sql_query, eng_data, download_key ):
                     pass
                 
                 if value in eng_data:
-                    value = value.encode( "UTF-8" )
+                    value = value.encode( "utf-8" )
                     value = eng_data[ value ]
                 if thisname not in forbidden:
                     final_item.append( value )
             
             final_data.append( final_item )
         
-        json_list = json_generator( cursor, "data", final_data, download_key )
+        json_list = json_generator( sql_names, "data", final_data, download_key )
         
-        return json_list
-
-    return []
+    return json_list
 
 
 
@@ -1632,34 +1513,107 @@ def test():
     return description
 
 
+# Documentation - Get documentation needed to show files in help pop-up at GUI step 1
+@app.route( "/documentation" )
+def documentation():
+    logging.debug( "/documentation" )
+    logging.debug( "Python version: %s" % sys.version  )
 
-@app.route( "/export" )
-def export():
-    logging.debug( "/export" )
+    configparser   = get_configparser()
+    dataverse_root = configparser.get( "config", "dataverse_root" )
+    api_root       = configparser.get( "config", "api_root" )
+    ristatkey      = configparser.get( "config", "ristatkey" )
+    ristatdocs     = configparser.get( "config", "hdl_documentation" )
     
-    configparser = get_configparser()
-    keys = [ "intro", "intro_rus", "datatype_intro", "datatype_intro_rus", "note", "note_rus", "downloadpage1", "downloadpage1_rus" "downloadclick", "downloadclick_rus", "warningblank", "warningblank_rus", "mapintro", "mapintro_rus" ]
-    exportkeys = {}
-    for ikey in keys:
-        if configparser.get( "config", ikey ) is not None:
-            exportkeys[ ikey ] = configparser.get( "config", ikey )
-    result = json.dumps( exportkeys, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
-    return Response( result, mimetype = "application/json; charset=utf-8" )
-
-
-
-@app.route( "/topics_old" )
-def topics_old():
-    logging.debug( "/topics_old" )
-    # uses a pre-fabricated postgres table: obsolete
-    language = request.args.get( "language" )
-    download_key = request.args.get( "download_key" )
+    #logging.info( "dataverse_root: %s" % dataverse_root )
+    #logging.info( "ristatkey: %s" % ristatkey )
+    connection = Connection( dataverse_root, ristatkey )
+    dataverse = connection.get_dataverse( "RISTAT" )
     
-    json_list = load_topics()
-    json_string, cache_except = json_cache( json_list, language, "data", download_key )
+    settings = DataFilter( request.args )
+    papers = []
     
-    return Response( json_string, mimetype = "application/json; charset=utf-8" )
+    logging.debug( "request.args: %s" % request.args )
+    logging.debug( "settings: %s" % settings )
+    
+    datatype = ""
+    try:
+        datatype = int( request.args.get( "datatype" ) )
+    except:
+        pass
+    
+    datafilter = settings.datafilter
+    
+    logging.debug( "datatype: %s, type: %s" % ( datatype, type( datatype ) ) )
+    logging.debug( "datafilter: %s" % str( datafilter ) )
+    
+    name_start = "ERRHS_" + str( datatype ) + "_"
+    logging.debug( "name_start: %s" % name_start )
+    
+    for item in dataverse.get_contents():
+        handle = str( item[ "protocol" ] ) + ':' + str( item[ "authority" ] ) + '/' + str( item[ "identifier" ] )
+        if handle == ristatdocs:
+            datasetid = item[ "id" ]
+            url = "http://" + dataverse_root + "/api/datasets/" + str( datasetid ) + "/?&key=" + str( ristatkey )
+            logging.debug( "url: %s" % url )
+            dataframe = loadjson( url )
+            for files in dataframe[ "data" ][ "latestVersion" ][ "files" ]:
+                paperitem = {}
+                paperitem[ "id" ] = str( files[ "datafile" ][ "id" ] )
+                paperitem[ "name" ] = str( files[ "datafile" ][ "name" ] )
+                paperitem[ "url" ] = "%s/service/download?id=%s" % ( api_root, paperitem[ "id" ] )
+                logging.debug( "paperitem: %s" % paperitem )
+                
+                name = str( files[ "datafile" ][ "name" ] )
+                
+                if datatype != "":      # use datatype to limit the returned documents
+                    # find substring between the first two underscores
+                    sub_name = ""
+                    p1 = name.find( "_" )
+                    if p1 != -1:
+                        p2 = name.find( "_", p1+1 )
+                        if p2 != -1:
+                            sub_name = name[ p1+1:p2 ]
+                            logging.debug( "sub_name: %s" % sub_name )
+                            try:
+                                sub_digits = int( sub_name )
+                                if sub_digits != datatype:
+                                    continue    # datatype does not match: skip
+                            except:
+                                pass            # allow
+                
+                try:
+                    if "lang" in settings.datafilter:
+                        varpat = r"(_%s)" % ( settings.datafilter[ "lang" ] )
+                        pattern = re.compile( varpat, re.IGNORECASE )
+                        found = pattern.findall( paperitem[ "name" ] )
+                        if found:
+                            papers.append( paperitem )
+                    else:   # paperitem without language specified: add
+                        papers.append( paperitem )
+                    
+                    if "topic" in settings.datafilter:
+                        varpat = r"(_%s_.+_\d+_+%s.|class|region)" % ( settings.datafilter[ "topic" ], settings.datafilter[ "lang" ] )
+                        pattern = re.compile( varpat, re.IGNORECASE )
+                        found = pattern.findall( paperitem[ "name" ] )
+                        if found:
+                            papers.append( paperitem )
+                    else:
+                        if "lang" not in settings.datafilter: 
+                            papers.append( paperitem )
+                except:
+                    if "lang" not in settings.datafilter:
+                        papers.append( paperitem )
+    
+    logging.debug( "papers in response:" )
+    for paper in papers:
+        logging.debug( paper )
+    
+    return Response( json.dumps( papers ), mimetype = "application/json; charset=utf-8" )
 
+
+
+# Topics - Get topics an process them as terms for GUI
 @app.route( "/topics" )
 def topics():
     logging.debug( "/topics" )
@@ -1672,44 +1626,210 @@ def topics():
 
 
 
-@app.route( "/filecatalog", methods = [ "POST", "GET" ] )
-def filecatalog():
-    logging.debug( "/filecatalog" )
+# Years - Get available years for year selection at GUI step 2
+@app.route( "/years" )
+def years():
+    logging.debug( "/years" )
     
-    # e.g.: ?lang=en&subtopics=1_01_1795x1_02_1795
-    subtopic_list = []
-    logging.debug( "# of arguments %s" % len( request.args ) )
-    for arg in request.args:
-        logging.debug( "arg: %s, value: %s" % ( arg, request.args[ arg ] ) )
-        if arg.startswith( "subtopics" ):
-            subtopic_list.append( request.args[ arg ] )
+    logging.debug( "request.args: %s" % str( request.args ) )
+    settings = DataFilter( request.args )
     
-    language = request.args.get( "lang" )
-    download_key = request.args.get( "download_key" )
+    datatype = ''
+    if "datatype" in settings.datafilter:
+        datatype = settings.datafilter[ "datatype" ]
     
-    logging.debug( "lang: %s" % language )
-    logging.debug( "download_key: %s" % download_key )
-    logging.debug( "subtopics: %s" % subtopic_list )
+    connection = get_connection()
+    cursor = connection.cursor()
+    # json_string = dictionary with record counts from table russianrepository for the given datatype
+    json_string = load_years( cursor, datatype )
+    cursor.close()
+    connection.close()
     
-    json_list = []
-    
-    if subtopic_list is not None:
-        cursor = connect()
-        for subtopic in subtopic_list:
-            logging.debug( "subtopic: %s" % subtopic )
-            if len( subtopic ) == 9:    # e.g.: 1_01_1795
-                base_year = subtopic[ 5: ]
-                datatype  = subtopic[ :4 ]
-                datatype  = datatype.replace( '_', '.' )
-                logging.debug( "datatype: %s, base_year: %s" % ( datatype, base_year ) )
-                json_list1 = filecat_subtopic( cursor, datatype, base_year )
-                #json_list.append( json_list1 )
-    
-    json_string, cache_except = json_cache( json_list, language, "data", download_key )
+    logging.debug( "/years return Response" )
     return Response( json_string, mimetype = "application/json; charset=utf-8" )
 
 
 
+# Regions - Get regions to build the region selector at GUI step 3 
+@app.route( "/regions" )
+def regions():
+    logging.debug( "/regions" )
+    logging.debug( "regions() request.args: %s" % str( request.args ) )
+    data = load_vocabulary( "regions" )
+    
+    logging.debug( "/regions return Response" )
+    return Response( json.dumps( data ), mimetype = "application/json; charset=utf-8" )
+
+
+
+# Histclasses - Get historical indicators for the indicator selection at GUI step 4
+@app.route( "/histclasses" )
+def histclasses():
+    logging.debug( "/histclasses" )
+    logging.debug( "histclasses() request.args: %s" % str( request.args ) )
+    data = load_vocabulary( "historical" )
+    
+    logging.debug( "/histclasses return Response" )
+    return Response( json.dumps( data ), mimetype = "application/json; charset=utf-8" )
+
+
+
+# Classes - Get modern indicators for the indicator selection at GUI step 4
+@app.route( "/classes" )
+def classes():
+    logging.debug( "/classes" )
+    logging.debug( "classes() request.args: %s" % str( request.args ) )
+    data = load_vocabulary( "modern" )
+    
+    logging.debug( "/classes return Response" )
+    return Response( json.dumps( data ), mimetype = "application/json; charset=utf-8" )
+
+
+
+# Indicators - Is this used by the GUI?
+@app.route( "/indicators", methods = [ "POST", "GET" ] )
+def indicators():
+    logging.debug( "indicators()" )
+
+    connection = get_connection()
+    cursor = connection.cursor()
+    
+    sql_query = "SELECT datatype, base_year, COUNT(*) FROM russianrepository GROUP BY base_year, datatype;"
+    cursor.execute( sql_query )
+    
+    sql_names = [ desc[ 0 ] for desc in cursor.description ]
+    logging.debug( "%d sql_names:" % len( sql_names ) )
+    logging.debug( sql_names )
+    
+    data = cursor.fetchall()    # retrieve the records from the database
+    cursor.close()
+    connection.close()
+    
+    eng_data = {}
+    final_data = []
+    
+    for item in data:
+        final_item = []
+        for i, thisname in enumerate( sql_names ):
+            value = item[ i ]
+            if value == ". ":
+                #logging.debug( "i: %d, name: %s, value: %s" % ( i, thisname, value ) )
+                # ". " marks a trailing dot in histclass or class: skip
+                pass
+            
+            if value in eng_data:
+                value = value.encode( "utf-8" )
+                value = eng_data[ value ]
+            if thisname not in forbidden:
+                final_item.append( value )
+        
+        final_data.append( final_item )
+        logging.debug( str( final_data ) )
+    
+    json_list = json_generator( sql_names, "data", final_data )
+    
+    language = request.args.get( "language" )
+    download_key = request.args.get( "download_key" )
+    json_string, cache_except = json_cache( json_list, language, "data", download_key )
+    
+    logging.debug( "json_string before return Response:" )
+    logging.debug( json_string )
+    
+    return Response( json_string, mimetype = "application/json; charset=utf-8" )
+
+
+
+# Aggregation - Preview User selection post and gets data to build preview in GUI step 5 
+@app.route( "/aggregation", methods = ["POST", "GET" ] )
+def aggregation():
+    logging.debug( "/aggregation" )
+    logging.debug( request.data )
+    
+    time0 = time()      # seconds since the epoch
+    logging.debug( "start: %s" % datetime.datetime.now() )
+    
+    try:
+        qinput = simplejson.loads( request.data )
+        logging.debug( qinput )
+    except:
+        type_, value, tb = exc_info()
+        msg = "failed: %s" % value
+        return str( { "msg": "%s" % msg } )
+    
+    language = qinput.get( "language" )
+    classification = qinput.get( "classification" )
+    datatype = qinput.get( "datatype" )
+    logging.debug( "language: %s, classification: %s, datatype: %s" % ( language, classification, datatype ) )
+    
+    # strip [hist]class5 & 6 from path (no longer needed)
+    old_path = qinput.get( "path" )
+    new_path, do_subclasses = strip_path_list( old_path )
+    qinput[ "path" ] = new_path                 # replace
+    
+    download_key = str( "%05.8f" % random.random() )  # used as base name for zip download
+    # put some additional info in the key
+    base_year = qinput.get( "base_year" )
+    if base_year is None or base_year == "":
+        base_year = "0000"
+    download_key = "%s-%s-%s-%s-%s" % ( language, classification[ 0 ], datatype, base_year, download_key[ 2: ] )
+    logging.debug( "download_key: %s" % download_key )
+    
+    configparser = get_configparser()
+    tmp_dir = configparser.get( "config", "tmppath" )
+    download_dir = os.path.join( tmp_dir, "download", download_key )
+    if not os.path.exists( download_dir ):
+        os.makedirs( download_dir )
+    
+    count_dots  = False         # value = '.'
+    separate_tc = False         # True: ter_code constraint separate: 2 queries
+    json_string = str( "{}" )
+    
+    if classification == "historical":
+        # historical has base_year in qinput
+        sql_query, eng_data = aggregate_1year( qinput, count_dots, do_subclasses, separate_tc )
+        json_list = execute_1year( sql_query, eng_data, download_key )
+        json_string, cache_except = json_cache( json_list, language, "data", download_key, qinput )
+        if cache_except is not None:
+            logging.error( "caching of aggregation data failed" )
+            logging.error( "length of json string: %d" % len( json_string ) )
+            # try to show the error in download sheet
+            #json_list_ = [ { "cache_except" : cache_except } ]
+            #json_string, cache_except = json_cache( json_list_, language, "data", download_key, qinput )
+        
+        logging.debug( "aggregated json_string: \n%s" % json_string )
+        
+        collect_docs( qinput, download_dir, download_key )  # collect doc files in download dir
+    
+    elif classification == "modern":
+        #json_datas = {}
+        json_list = []
+        base_years = [ "1795", "1858", "1897", "1959", "2002" ]
+        #base_years = [ "1858" ]
+        for base_year in base_years:
+            logging.debug( "base_year: %s" % base_year )
+            qinput[ "base_year" ] = base_year   # add base_year to qinput
+            sql_query1, eng_data1 = aggregate_1year( qinput, count_dots, do_subclasses, separate_tc )
+            json_list1 = execute_1year( sql_query1, eng_data1, download_key )
+            logging.debug( "json_list1 for %s: \n%s" % ( base_year, str( json_list1 ) ) )
+            json_list.extend( json_list1 )
+            
+        json_string, cache_except = json_cache( json_list, language, "data", download_key, qinput )
+        if cache_except is not None:
+            logging.error( "caching of aggregation data failed" )
+            logging.error( "length of json string: %d" % len( json_string ) )
+        logging.debug( "aggregated json_string: \n%s" % json_string )
+        
+        collect_docs( qinput, download_dir, download_key )  # collect doc files in download dir
+    
+    logging.debug( "stop: %s" % datetime.datetime.now() )
+    str_elapsed = format_secs( time() - time0 )
+    logging.info( "aggregation took %s" % str_elapsed )
+    
+    return Response( json_string, mimetype = "application/json; charset=utf-8" )
+
+
+
+# Filecatalog - Create filecatalog download link
 @app.route( "/filecatalogdata", methods = [ "POST", "GET" ]  )
 def filecatalogdata():
     logging.debug( "/filecatalogdata" )
@@ -1839,6 +1959,7 @@ def filecatalogdata():
 
 
 
+# Filecatalog - Get filecatalog download zip
 @app.route( "/filecatalogget", methods = [ "POST", "GET" ] )
 def filecatalogget():
     logging.debug( "/filecatalogget" )
@@ -1860,169 +1981,7 @@ def filecatalogget():
 
 
 
-@app.route( "/vocab" )
-def vocab():
-    logging.debug( "/vocab" )
-    
-    configparser   = get_configparser()
-    dataverse_root = configparser.get( "config", "dataverse_root" )
-    ristatkey      = configparser.get( "config", "ristatkey" )
-    
-    url = "%s/api/access/datafile/586?&key=%s&show_entity_ids=true&q=authorName:*" % ( dataverse_root, ristatkey )
-    g = rdf_convertor( url )
-    showformat = "json"
-    if request.args.get( "format" ):
-        showformat = request.args.get( "format" )
-    if showformat == "turtle":
-        jsondump = g.serialize( format = "n3" )
-        return Response( jsondump, mimetype = "application/x-turtle; charset=utf-8" )
-    else:
-        jsondump = g.serialize( format = "json-ld", indent = 4 )
-        return Response( jsondump, mimetype = "application/json; charset=utf-8" )
-
-
-
-@app.route( "/aggregation", methods = ["POST", "GET" ] )
-def aggregation():
-    logging.debug( "/aggregation" )
-    logging.debug( request.data )
-    
-    time0 = time()      # seconds since the epoch
-    logging.debug( "start: %s" % datetime.datetime.now() )
-    
-    try:
-        qinput = simplejson.loads( request.data )
-        logging.debug( qinput )
-    except:
-        type_, value, tb = exc_info()
-        msg = "failed: %s" % value
-        return str( { "msg": "%s" % msg } )
-    
-    language = qinput.get( "language" )
-    classification = qinput.get( "classification" )
-    datatype = qinput.get( "datatype" )
-    logging.debug( "language: %s, classification: %s, datatype: %s" % ( language, classification, datatype ) )
-    
-    # strip [hist]class5 & 6 from path (no longer needed)
-    old_path = qinput.get( "path" )
-    new_path, do_subclasses = strip_path_list( old_path )
-    qinput[ "path" ] = new_path                 # replace
-    
-    download_key = str( "%05.8f" % random.random() )  # used as base name for zip download
-    # put some additional info in the key
-    base_year = qinput.get( "base_year" )
-    if base_year is None or base_year == "":
-        base_year = "0000"
-    download_key = "%s-%s-%s-%s-%s" % ( language, classification[ 0 ], datatype, base_year, download_key[ 2: ] )
-    logging.debug( "download_key: %s" % download_key )
-    
-    configparser = get_configparser()
-    tmp_dir = configparser.get( "config", "tmppath" )
-    download_dir = os.path.join( tmp_dir, "download", download_key )
-    if not os.path.exists( download_dir ):
-        os.makedirs( download_dir )
-    
-    count_dots  = False         # value = '.'
-    separate_tc = False         # True: ter_code constraint separate: 2 queries
-    json_string = str( "{}" )
-    
-    if classification == "historical":
-        # historical has base_year in qinput
-        sql_query, eng_data = aggregate_1year( qinput, count_dots, do_subclasses, separate_tc )
-        json_list = execute_1year( sql_query, eng_data, download_key )
-        json_string, cache_except = json_cache( json_list, language, "data", download_key, qinput )
-        if cache_except is not None:
-            logging.error( "caching of aggregation data failed" )
-            logging.error( "length of json string: %d" % len( json_string ) )
-            # try to show the error in download sheet
-            #json_list_ = [ { "cache_except" : cache_except } ]
-            #json_string, cache_except = json_cache( json_list_, language, "data", download_key, qinput )
-        
-        logging.debug( "aggregated json_string: \n%s" % json_string )
-        
-        collect_docs( qinput, download_dir, download_key )  # collect doc files in download dir
-    
-    elif classification == "modern":
-        #json_datas = {}
-        json_list = []
-        base_years = [ "1795", "1858", "1897", "1959", "2002" ]
-        #base_years = [ "1858" ]
-        for base_year in base_years:
-            logging.debug( "base_year: %s" % base_year )
-            qinput[ "base_year" ] = base_year   # add base_year to qinput
-            sql_query1, eng_data1 = aggregate_1year( qinput, count_dots, do_subclasses, separate_tc )
-            json_list1 = execute_1year( sql_query1, eng_data1, download_key )
-            logging.debug( "json_list1 for %s: \n%s" % ( base_year, str( json_list1 ) ) )
-            json_list.extend( json_list1 )
-            
-        json_string, cache_except = json_cache( json_list, language, "data", download_key, qinput )
-        if cache_except is not None:
-            logging.error( "caching of aggregation data failed" )
-            logging.error( "length of json string: %d" % len( json_string ) )
-        logging.debug( "aggregated json_string: \n%s" % json_string )
-        
-        collect_docs( qinput, download_dir, download_key )  # collect doc files in download dir
-    
-    logging.debug( "stop: %s" % datetime.datetime.now() )
-    str_elapsed = format_secs( time() - time0 )
-    logging.info( "aggregation took %s" % str_elapsed )
-    
-    return Response( json_string, mimetype = "application/json; charset=utf-8" )
-
-
-
-@app.route( "/indicators", methods = [ "POST", "GET" ] )
-def indicators():
-    logging.debug( "indicators()" )
-
-    eng_data = {}
-    cursor = connect()
-    
-    sql_query = "SELECT datatype, base_year, COUNT(*) FROM russianrepository GROUP BY base_year, datatype;"
-
-    if sql_query:
-        cursor.execute( sql_query )
-        sql_names = [ desc[ 0 ] for desc in cursor.description ]
-        logging.debug( "%d sql_names:" % len( sql_names ) )
-        logging.debug( sql_names )
-        
-        # retrieve the records from the database
-        data = cursor.fetchall()
-        final_data = []
-        for item in data:
-            final_item = []
-            for i, thisname in enumerate( sql_names ):
-                value = item[ i ]
-                if value == ". ":
-                    #logging.debug( "i: %d, name: %s, value: %s" % ( i, thisname, value ) )
-                    # ". " marks a trailing dot in histclass or class: skip
-                    pass
-                
-            #for value in item:
-                if value in eng_data:
-                    value = value.encode( "UTF-8" )
-                    value = eng_data[ value ]
-                if thisname not in forbidden:
-                    final_item.append( value )
-            
-            final_data.append( final_item )
-            logging.debug( str( final_data ) )
-            
-        json_list = json_generator( cursor, "data", final_data )
-        
-        language = request.args.get( "language" )
-        download_key = request.args.get( "download_key" )
-        json_string, cache_except = json_cache( json_list, language, "data", download_key )
-        
-        logging.debug( "json_string before return Response:" )
-        logging.debug( json_string )
-        
-        return Response( json_string, mimetype = "application/json; charset=utf-8" )
-
-    return str( "{}" )
-
-
-
+# Still in use?
 @app.route( "/download" )
 def download():
     logging.debug( "/download %s" % request.args )
@@ -2167,227 +2126,7 @@ def download():
 
 
 
-@app.route( "/documentation" )
-def documentation():
-    logging.debug( "/documentation" )
-    logging.debug( "Python version: %s" % sys.version  )
-
-    configparser   = get_configparser()
-    dataverse_root = configparser.get( "config", "dataverse_root" )
-    api_root       = configparser.get( "config", "api_root" )
-    ristatkey      = configparser.get( "config", "ristatkey" )
-    ristatdocs     = configparser.get( "config", "hdl_documentation" )
-    
-    #logging.info( "dataverse_root: %s" % dataverse_root )
-    #logging.info( "ristatkey: %s" % ristatkey )
-    connection = Connection( dataverse_root, ristatkey )
-    dataverse = connection.get_dataverse( "RISTAT" )
-    
-    settings = DataFilter( request.args )
-    papers = []
-    
-    logging.debug( "request.args: %s" % request.args )
-    logging.debug( "settings: %s" % settings )
-    
-    datatype = ""
-    try:
-        datatype = int( request.args.get( "datatype" ) )
-    except:
-        pass
-    
-    datafilter = settings.datafilter
-    
-    logging.debug( "datatype: %s, type: %s" % ( datatype, type( datatype ) ) )
-    logging.debug( "datafilter: %s" % str( datafilter ) )
-    
-    name_start = "ERRHS_" + str( datatype ) + "_"
-    logging.debug( "name_start: %s" % name_start )
-    
-    for item in dataverse.get_contents():
-        handle = str( item[ "protocol" ] ) + ':' + str( item[ "authority" ] ) + '/' + str( item[ "identifier" ] )
-        if handle == ristatdocs:
-            datasetid = item[ "id" ]
-            url = "http://" + dataverse_root + "/api/datasets/" + str( datasetid ) + "/?&key=" + str( ristatkey )
-            logging.debug( "url: %s" % url )
-            dataframe = loadjson( url )
-            for files in dataframe[ "data" ][ "latestVersion" ][ "files" ]:
-                paperitem = {}
-                paperitem[ "id" ] = str( files[ "datafile" ][ "id" ] )
-                paperitem[ "name" ] = str( files[ "datafile" ][ "name" ] )
-                paperitem[ "url" ] = "%s/service/download?id=%s" % ( api_root, paperitem[ "id" ] )
-                logging.debug( "paperitem: %s" % paperitem )
-                
-                name = str( files[ "datafile" ][ "name" ] )
-                
-                if datatype != "":      # use datatype to limit the returned documents
-                    # find substring between the first two underscores
-                    sub_name = ""
-                    p1 = name.find( "_" )
-                    if p1 != -1:
-                        p2 = name.find( "_", p1+1 )
-                        if p2 != -1:
-                            sub_name = name[ p1+1:p2 ]
-                            logging.debug( "sub_name: %s" % sub_name )
-                            try:
-                                sub_digits = int( sub_name )
-                                if sub_digits != datatype:
-                                    continue    # datatype does not match: skip
-                            except:
-                                pass            # allow
-                
-                try:
-                    if "lang" in settings.datafilter:
-                        varpat = r"(_%s)" % ( settings.datafilter[ "lang" ] )
-                        pattern = re.compile( varpat, re.IGNORECASE )
-                        found = pattern.findall( paperitem[ "name" ] )
-                        if found:
-                            papers.append( paperitem )
-                    else:   # paperitem without language specified: add
-                        papers.append( paperitem )
-                    
-                    if "topic" in settings.datafilter:
-                        varpat = r"(_%s_.+_\d+_+%s.|class|region)" % ( settings.datafilter[ "topic" ], settings.datafilter[ "lang" ] )
-                        pattern = re.compile( varpat, re.IGNORECASE )
-                        found = pattern.findall( paperitem[ "name" ] )
-                        if found:
-                            papers.append( paperitem )
-                    else:
-                        if "lang" not in settings.datafilter: 
-                            papers.append( paperitem )
-                except:
-                    if "lang" not in settings.datafilter:
-                        papers.append( paperitem )
-    
-    logging.debug( "papers in response:" )
-    for paper in papers:
-        logging.debug( paper )
-    
-    return Response( json.dumps( papers ), mimetype = "application/json; charset=utf-8" )
-
-
-
-@app.route( "/histclasses" )
-def histclasses():
-    logging.debug( "/histclasses" )
-    logging.debug( "histclasses() request.args: %s" % str( request.args ) )
-    data = load_vocabulary( "historical" )
-    
-    logging.debug( "/histclasses return Response" )
-    return Response( json.dumps( data ), mimetype = "application/json; charset=utf-8" )
-
-
-
-@app.route( "/classes" )
-def classes():
-    logging.debug( "/classes" )
-    logging.debug( "classes() request.args: %s" % str( request.args ) )
-    data = load_vocabulary( "modern" )
-    
-    logging.debug( "/classes return Response" )
-    return Response( json.dumps( data ), mimetype = "application/json; charset=utf-8" )
-
-
-
-@app.route( "/regions" )
-def regions():
-    logging.debug( "/regions" )
-    logging.debug( "regions() request.args: %s" % str( request.args ) )
-    data = load_vocabulary( "regions" )
-    
-    logging.debug( "/regions return Response" )
-    return Response( json.dumps( data ), mimetype = "application/json; charset=utf-8" )
-
-
-
-@app.route( "/years" )
-def years():
-    logging.debug( "/years" )
-    logging.debug( "request.args: %s" % str( request.args ) )
-    cursor = connect()
-    settings = DataFilter( request.args )
-    datatype = ''
-    if "datatype" in settings.datafilter:
-        datatype = settings.datafilter[ "datatype" ]
-    data = load_years( cursor, datatype )
-    
-    #json_data = json.dumps( data )     # GUI expects list ?
-    logging.debug( "/years return Response" )
-    return Response( data, mimetype = "application/json; charset=utf-8" )
-
-
-
-@app.route( "/translate" )
-def translate():
-    logging.debug( "/translate" )
-    cursor = connect()
-    if cursor:
-        data = {}
-        sql = "select * from datasets.classmaps where 1=1";
-        sql = sqlfilter( sql )
-        
-        cursor.execute( sql )       # execute
-        
-        data = cursor.fetchall()    # retrieve the records from the database
-        json_list = json_generator( cursor, "data", data )
-        
-        language = request.args.get( "language" )
-        download_key = request.args.get( "download_key" )
-        json_string, cache_except = json_cache( json_list, language, "data", download_key )
-        
-        return Response( json_string, mimetype = "application/json; charset=utf-8" )
-
-
-
-@app.route( "/filter", methods = [ "POST", "GET" ] )
-def login( settings = '' ):
-    logging.debug( "login()" )
-    cursor = connect()
-    filter = {}
-    try:
-        qinput = request.json
-    except:
-        return "{}" 
-    try:
-        if qinput[ "action" ] == "aggregate":
-            sql = "select histclass1, datatype, value_unit, value, ter_code from russianrepository where 1=1 "
-    except:
-        sql = "select * from datasets.classification where 1=1";
-        #datatype="7.01" and base_year="1897" group by histclass1, datatype, value_unit, ter_code, value;
-    try:
-        classification = qinput[ "classification" ]
-    except:
-        classification = "historical"
-    forbidden = [ "classification", "action", "language" ]
-    for name in qinput:
-        if not name in forbidden:
-            sql+= " AND %s='%s'" % ( name, qinput[ name ] )
-
-    #return sql
-    if sql:
-        # execute
-        cursor.execute( sql )
-        sql_names = [ desc[ 0 ] for desc in cursor.description ]
-
-        data = cursor.fetchall()
-        json_data = datasetfilter( data, sql_names, classification )
-        return Response( json_data, mimetype = "application/json; charset=utf-8" )
-    else:
-        return ''
-
-
-
-# http://bl.ocks.org/mbostock/raw/4090846/us.json
-@app.route( "/maps" )
-def maps():
-    logging.debug( "/maps" )
-    donors_choose_url = "http://bl.ocks.org/mbostock/raw/4090846/us.json"
-    response = urllib2.urlopen( donors_choose_url )
-    json_response = json.load( response )
-    
-    return Response( json_response, mimetype = "application/json; charset=utf-8" )
-
-
-
+# Get cron autoupdate log to inspect for errors
 @app.route( "/logfile" )
 def getupdatelog():
     logging.debug( "/logfile" )
