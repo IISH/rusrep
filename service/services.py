@@ -5,7 +5,7 @@ VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
-FL-15-Nov-2017 
+FL-20-Nov-2017 
 
 def get_configparser():
 def get_connection():
@@ -30,6 +30,7 @@ def filecat_subtopic( cursor, datatype, base_year ):
 def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
 def aggregate_1year( qinput, count_dots, do_subclasses, separate_tc ):
 def execute_1year( sql_query )
+def temp_table( ter_code_list, json_list, json_list_tc)
 def cleanup_downloads( download_dir, time_limit ):
 def format_secs( seconds ):
 
@@ -1424,6 +1425,41 @@ def execute_1year( sql_query, eng_data, download_key ):
 
 
 
+def temp_table( ter_code_list, json_list, json_list_tc ):
+    logging.debug( "temp_table()" )
+    logging.debug( "# entries in json_list: %d" % len( json_list ) )
+    logging.debug( "# entries in json_list_tc: %d" % len( json_list_tc ) )
+    logging.debug( "# regions requested: %d" % len( ter_code_list ) )
+
+    # determine number of records
+    dict_list = []
+    for entry in json_list_tc: 
+        entry.pop( "total" )
+        entry.pop( "value_unit" )
+        if entry not in dict_list: 
+            dict_list.append( entry )
+    logging.debug( "# records in result: %d" % len( dict_list ) )
+    
+    connection = get_connection()
+    cursor = connection.cursor()
+    
+    """
+    # where is it?
+    sql_query  = "CREATE TEMP TABLE temp_aggregate ("
+    sql_query += "name VARCHAR(80)"
+    sql_query += ")"
+    sql_query += "ON COMMIT PRESERVE ROWS;"     # default
+    #sql_query += "ON COMMIT DELETE ROWS"       # delete all rows
+    #sql_query += "ON COMMIT DROP"              # drop table
+
+    cursor.execute( sql_query )
+    """
+    
+    cursor.close()
+    connection.close()
+
+
+
 def cleanup_downloads( download_dir, time_limit ):
     # remove too old downloads
     logging.debug( "cleanup_downloads() time_limit: %d, download_dir: %s" % ( time_limit, download_dir ) )
@@ -1786,8 +1822,23 @@ def aggregation():
     
     if classification == "historical":
         # historical has base_year in qinput
+        
+        # Two queries for temp table:
+        # - without ter_code (actually implies all ter_code's) for all wanted rows
+        # - with ter_code for the wanted regions
+        qinput_tc = copy.deepcopy( qinput )
+        ter_code_list = qinput_tc.pop( "ter_code", None )
+        logging.error( "ter_code: %s" % ter_code_list )
+        
         sql_query, eng_data = aggregate_1year( qinput, count_dots, do_subclasses, separate_tc )
         json_list = execute_1year( sql_query, eng_data, download_key )
+        
+        sql_query_tc, eng_data_tc = aggregate_1year( qinput_tc, count_dots, do_subclasses, separate_tc )
+        json_list_tc = execute_1year( sql_query_tc, eng_data_tc, download_key )
+        
+        temp_table( ter_code_list, json_list, json_list_tc )
+        
+        
         json_string, cache_except = json_cache( json_list, language, "data", download_key, qinput )
         if cache_except is not None:
             logging.error( "caching of aggregation data failed" )
@@ -1801,10 +1852,10 @@ def aggregation():
         collect_docs( qinput, download_dir, download_key )  # collect doc files in download dir
     
     elif classification == "modern":
-        #json_datas = {}
+        # modern does not have a base_year in qinput, wants all years; 
+        # add base_years one-by-one to qinput, and accumulate results.
         json_list = []
         base_years = [ "1795", "1858", "1897", "1959", "2002" ]
-        #base_years = [ "1858" ]
         for base_year in base_years:
             logging.debug( "base_year: %s" % base_year )
             qinput[ "base_year" ] = base_year   # add base_year to qinput
