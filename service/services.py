@@ -1425,36 +1425,108 @@ def execute_1year( sql_query, eng_data, download_key ):
 
 
 
-def temp_table( ter_code_list, json_list, json_list_tc ):
+def temp_table( classification, ter_code_list, json_list, json_list_tc ):
     logging.debug( "temp_table()" )
-    logging.debug( "# entries in json_list: %d" % len( json_list ) )
-    logging.debug( "# entries in json_list_tc: %d" % len( json_list_tc ) )
-    logging.debug( "# regions requested: %d" % len( ter_code_list ) )
+    logging.debug( "# of entries in json_list: %d" % len( json_list ) )
+    logging.debug( "# of entries in json_list_tc: %d" % len( json_list_tc ) )
+    
+    # number of asked regions
+    nregions = len( ter_code_list )
+    logging.debug( "# of regions requested: %d" % nregions )
 
-    # determine number of records
-    dict_list = []
+    # number of records
+    path_list = []
     for entry in json_list_tc: 
-        entry.pop( "total" )
-        entry.pop( "value_unit" )
-        if entry not in dict_list: 
-            dict_list.append( entry )
-    logging.debug( "# records in result: %d" % len( dict_list ) )
+        path = entry[ "path" ]
+        #entry.pop( "total" )
+        #entry.pop( "value_unit" )
+        #if entry not in dict_list: 
+        if path not in path_list:
+            #dict_list.append( entry )
+            path_list.append( path )
+    logging.debug( "# of records in result: %d" % len( path_list ) )
+    
+    # number of levels
+    path    = json_list_tc[ 0 ][ "path" ]
+    path_tc = json_list_tc[ 0 ][ "path" ]
+    nlevels    = len( path.keys() )
+    nlevels_tc = len( path_tc.keys() )
+    logging.debug( "# of levels: %d" % nlevels )
+    logging.debug( "# of levels_tc: %d" % nlevels_tc )
+    
+    # historical or modern?
+    level_prefix = "class"
+    if classification == "historical":
+        level_prefix = "hist" + level_prefix
     
     connection = get_connection()
     cursor = connection.cursor()
     
-    """
-    # where is it?
-    sql_query  = "CREATE TEMP TABLE temp_aggregate ("
-    sql_query += "name VARCHAR(80)"
-    sql_query += ")"
-    sql_query += "ON COMMIT PRESERVE ROWS;"     # default
-    #sql_query += "ON COMMIT DELETE ROWS"       # delete all rows
-    #sql_query += "ON COMMIT DROP"              # drop table
-
-    cursor.execute( sql_query )
-    """
+    use_temp_table = False
+    sql_delete = None
+    sql_create = ""
     
+    # TEMP TABLE: Both table definition and data are visible to the current session only 
+    table_name = "temp_aggregate"
+    if use_temp_table:
+        sql_create  = "CREATE TEMP TABLE %s (" % table_name 
+    else:
+        sql_delete = "DROP TABLE %s" % table_name 
+        sql_create  = "CREATE TABLE %s (" % table_name 
+    
+    for column in range( 1, nlevels_tc + 1 ):
+        sql_create += "%s%d VARCHAR(1024)," % ( level_prefix, column )
+    
+    sql_create += "unit VARCHAR(1024),"
+    sql_create += "count VARCHAR(1024),"
+    
+    ntc = len( ter_code_list )
+    for tc, ter_code in enumerate( ter_code_list ):
+        sql_create += "tc_%s VARCHAR(1024)" % ter_code
+        if tc + 1 < ntc:
+            sql_create += ","
+    
+    sql_create += ")"
+    
+    if use_temp_table:
+        sql_create += "ON COMMIT PRESERVE ROWS;"     # default
+        #sql_create += "ON COMMIT DELETE ROWS"       # delete all rows
+        #sql_create += "ON COMMIT DROP"              # drop table
+    
+    logging.debug( "sql_create: %s" % sql_create )
+    
+    if sql_delete:
+        cursor.execute( sql_delete )
+    cursor.execute( sql_create )
+    
+    # fill table
+    for path in path_list:
+        logging.debug( path )
+        columns = ""
+        values  = ""
+        for k, key in enumerate( path ):
+            value = path[ key ]
+            if k > 0:
+                columns += ","
+                values  += ","
+            columns += key
+            values  += "'%s'" % value
+        
+        columns += ",unit"
+        values  += ",'?'"
+        
+        columns += ",count"
+        values  += ",'0/%d'" % nregions
+        
+        for ter_code in ter_code_list:
+            columns += ",tc_%s" % ter_code
+            values  += ",'NA'"
+        
+        sql_insert = "INSERT INTO %s (%s) VALUES (%s);" % ( table_name , columns, values ) 
+        logging.debug( sql_insert )
+        cursor.execute( sql_insert )
+    
+    connection.commit()
     cursor.close()
     connection.close()
 
@@ -1836,7 +1908,7 @@ def aggregation():
         sql_query_tc, eng_data_tc = aggregate_1year( qinput_tc, count_dots, do_subclasses, separate_tc )
         json_list_tc = execute_1year( sql_query_tc, eng_data_tc, download_key )
         
-        temp_table( ter_code_list, json_list, json_list_tc )
+        temp_table( classification, ter_code_list, json_list, json_list_tc )
         
         
         json_string, cache_except = json_cache( json_list, language, "data", download_key, qinput )
