@@ -1434,17 +1434,25 @@ def temp_table( classification, ter_code_list, json_list, json_list_tc ):
     nregions = len( ter_code_list )
     logging.debug( "# of regions requested: %d" % nregions )
 
-    # number of records
-    path_list = []
+    # number of unique records in path_list_tc
+    path_list_tc = []
     for entry in json_list_tc: 
         path = entry[ "path" ]
-        #entry.pop( "total" )
-        #entry.pop( "value_unit" )
-        #if entry not in dict_list: 
-        if path not in path_list:
-            #dict_list.append( entry )
-            path_list.append( path )
-    logging.debug( "# of records in result: %d" % len( path_list ) )
+        if path not in path_list_tc:
+            path_list_tc.append( path )
+    logging.debug( "# of unique records in path_tc result: %d" % len( path_list_tc ) )
+    
+    # we only need to keep the json_list entries that have counts, the others 
+    # are contained in json_list_tc
+    logging.debug( "# of records in path result: %d" % len( json_list ) )
+    json_list_cnt = []
+    for entry in json_list:
+        if entry[ "total" ] != '':
+            json_list_cnt.append( entry )
+    logging.debug( "# of records in path result with count: %d" % len( json_list_cnt ) )
+     
+    for e, entry in enumerate( json_list_cnt ):
+        logging.debug( "%d total: %s, %s" % ( e, entry[ "total" ], entry[ "path" ] ) )
     
     # number of levels
     path    = json_list_tc[ 0 ][ "path" ]
@@ -1500,8 +1508,8 @@ def temp_table( classification, ter_code_list, json_list, json_list_tc ):
     cursor.execute( sql_create )
     
     # fill table
-    for path in path_list:
-        logging.debug( path )
+    for p, path in enumerate( path_list_tc ):
+        logging.debug( "%d-of-%d path: %s" % ( p, len( path_list_tc ), path ) )
         columns = ""
         values  = ""
         for k, key in enumerate( path ):
@@ -1512,19 +1520,47 @@ def temp_table( classification, ter_code_list, json_list, json_list_tc ):
             columns += key
             values  += "'%s'" % value
         
+        unit = '?'
+        ncounts = 0
+        for ter_code in ter_code_list:
+            logging.debug( "ter_code: %s" % ter_code )
+            # search for path + ter_code in list with counts
+            value = "NA"
+            for entry in json_list_cnt:
+                if path == entry[ "path" ] and ter_code == entry[ "ter_code" ]:
+                    ncounts += 1
+                    unit  = entry[ "value_unit" ]
+                    value = entry[ "total" ]
+                    break
+            
+            columns += ",tc_%s" % ter_code
+            values  += ",'%s'"  % value
+        
+        logging.debug( "columns: %s" % columns )
+        logging.debug( "values:  %s" % values )
+        
         columns += ",unit"
-        values  += ",'?'"
+        values  += ",'%s'" % unit
         
         columns += ",count"
-        values  += ",'0/%d'" % nregions
-        
-        for ter_code in ter_code_list:
-            columns += ",tc_%s" % ter_code
-            values  += ",'NA'"
+        values  += ",'%d/%d'" % ( ncounts, nregions )
         
         sql_insert = "INSERT INTO %s (%s) VALUES (%s);" % ( table_name , columns, values ) 
         logging.debug( sql_insert )
         cursor.execute( sql_insert )
+    
+    order_by = ""
+    for l in range( 1, 1 + nlevels_tc ):
+        if l > 1:
+            order_by += ','
+        order_by += "%s%d" % ( level_prefix, l )
+            
+    sql_query = "SELECT * FROM %s ORDER BY %s" % ( table_name, order_by )
+    logging.debug( sql_query )
+    cursor.execute( sql_query )
+    data = cursor.fetchall()
+    for r, record in enumerate( data ):
+        logging.debug( "%d: %s" % ( r, record ) )
     
     connection.commit()
     cursor.close()
