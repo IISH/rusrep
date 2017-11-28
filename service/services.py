@@ -5,14 +5,14 @@ VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
-FL-20-Nov-2017 
+FL-28-Nov-2017 
 
 def get_configparser():
 def get_connection():
 def classcollector( keywords ):
-def strip_path_list( old_path ):
+def strip_subclasses( old_path ):
 def json_generator( sql_names, json_dataname, data, download_key = None ):
-def json_cache( json_list, language, json_dataname, download_key, qinput = {} ):
+def json_cache( entry_list, language, json_dataname, download_key, qinput = {} ):
 def collect_docs( qinput, download_dir, download_key ):
 def translate_vocabulary( vocab_filter, classification = None ):
 def load_years( cursor, datatype ):
@@ -30,7 +30,7 @@ def filecat_subtopic( cursor, datatype, base_year ):
 def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
 def aggregate_1year( qinput, count_dots, do_subclasses, separate_tc ):
 def execute_1year( sql_query )
-def temp_table( ter_code_list, json_list, json_list_tc)
+def temp_table( params, entry_list, entry_list_tc)
 def cleanup_downloads( download_dir, time_limit ):
 def format_secs( seconds ):
 
@@ -170,10 +170,20 @@ def classcollector( keywords ):
 
 
 
-def strip_path_list( old_path ):
-    logging.debug( "strip_path_list()" )
-    # temporary fix until Pieter removes [hist]class5&6 from qinput
-    
+def strip_subclasses( old_path ):
+    logging.debug( "strip_subclasses()" )
+    """
+    FL-28-Nov-2017
+    path dict entries may have a subclasses:True parameter, meaning that in the 
+    GUI at level 4 the double checkbox was checked. If at least 1 entry with 
+    subclasses:True is encountered, we return do_subclasses = True, otherwise 
+    False. 
+    So mixing checkboxes at level 4 always has the effect that all ckecked 
+    boxes are taken be the double ones. In this way, a single SQL query suffices. 
+    Now that we use an intermediate temp table, we might as well use 2 queries: 
+    on for the subclasses:True entries, and the other for the remaning entries. 
+    And collecting both results in the temp table. 
+    """
     do_subclasses = False   # becomes True if subclasses were removed from path
     new_path = []
     logging.debug( "old path: (%s) %s" % ( type( old_path ), str( old_path ) ) )
@@ -227,7 +237,7 @@ def json_generator( sql_names, json_dataname, data, download_key = None ):
         base_year      = qinput.get( "base_year" )
         
         old_path_list = qinput.get( "path" )
-        path_list, do_subclasses = strip_path_list( old_path_list )
+        path_list, do_subclasses = strip_subclasses( old_path_list )
         
         logging.debug( "classification : %s" % classification )
         logging.debug( "language       : %s" % language )
@@ -243,7 +253,7 @@ def json_generator( sql_names, json_dataname, data, download_key = None ):
     
     forbidden = { "data_active", 0, "datarecords", 1 }
     
-    json_list = []
+    entry_list = []
     
     len_data = len( data )
     logging.debug( "# values in data: %d" % len_data )
@@ -282,11 +292,11 @@ def json_generator( sql_names, json_dataname, data, download_key = None ):
         
         ( path, output ) = classcollector( data_keys )
         output[ "path" ] = path
-        json_list.append( output )
+        entry_list.append( output )
     
     value_unit = ''
-    logging.debug( "# of entries in json_list: %d" % len( json_list ) )
-    for json_entry in json_list:
+    logging.debug( "# of entries in entry_list: %d" % len( entry_list ) )
+    for json_entry in entry_list:
         logging.debug( "json_entry: %s" % json_entry )
         value_unit = json_entry.get( "value_unit" )
         
@@ -302,12 +312,6 @@ def json_generator( sql_names, json_dataname, data, download_key = None ):
             delete_list = [ "histclass5", "histclass6", "histclass7", "histclass8", "histclass9", "histclass10" ]
         elif classification == "modern":
             delete_list = [ "class5", "class6", "class7", "class8", "class9", "class10" ]
-        """
-        if classification == "historical":
-            delete_list = [ "histclass6", "histclass7", "histclass8", "histclass9", "histclass10" ]
-        elif classification == "modern":
-            delete_list = [ "class6", "class7", "class8", "class9", "class10" ]
-        """
         
         for e in delete_list:
             try:
@@ -335,22 +339,22 @@ def json_generator( sql_names, json_dataname, data, download_key = None ):
             new_entry[ "count" ]      = 1       # was ''
             new_entry[ "ter_code" ]   = ''
             new_entry[ "total" ]      = ''      # unknown, so not 0 or 0.0
-            json_list.append( new_entry )
+            entry_list.append( new_entry )
     
-    return json_list
+    return entry_list
 
 
 
-def json_cache( json_list, language, json_dataname, download_key, qinput = {} ):
-    # cache json_list in mongodb with download_key as key
-    logging.debug( "json_cache() # entries in list: %d" %  len( json_list ) )
+def json_cache( entry_list, language, json_dataname, download_key, qinput = {} ):
+    # cache entry_list in mongodb with download_key as key
+    logging.debug( "json_cache() # entries in list: %d" %  len( entry_list ) )
     
     configparser = get_configparser()
     root = configparser.get( "config", "root" )
     
     json_hash = {}
     json_hash[ "language" ] = language
-    json_hash[ json_dataname ] = json_list
+    json_hash[ json_dataname ] = entry_list
     
     json_hash[ "url" ] = "%s/service/download?key=%s" % ( root, download_key )
     logging.debug( "json_hash: %s" % json_hash )
@@ -546,10 +550,10 @@ def load_years( cursor, datatype ):
     logging.debug( sql )
     cursor.execute( sql )
     
-    data = cursor.fetchall()    # retrieve the records from the database
+    sql_resp = cursor.fetchall()    # retrieve the records from the database
     result = {}
     
-    for val in data:
+    for val in sql_resp:
         if val[ 0 ]:
             result[ val[ 0 ] ] = val[ 1 ]
     
@@ -621,12 +625,12 @@ def topic_counts( schema ):
     sql_topics += " ORDER BY datatype"
     logging.info( sql_topics )
     cursor.execute( sql_topics )
-    resp = cursor.fetchall()
+    sql_resp = cursor.fetchall()
     
     #skip_list = [ "1", "2", "3", "4", "5", "6", "7" ]
     skip_list = []
     all_cnt_dict = {}
-    for record in resp:
+    for record in sql_resp:
         datatype   = record.datatype
         topic_name = record.topic_name
         if datatype not in skip_list:
@@ -637,9 +641,9 @@ def topic_counts( schema ):
             logging.debug( sql_count )
             
             cursor.execute( sql_count )
-            cnt_resp = cursor.fetchall()
+            sql_cnt_resp = cursor.fetchall()
             cnt_dict = {}
-            for cnt_rec in cnt_resp:
+            for cnt_rec in sql_cnt_resp:
                 #print( cnt_rec )
                 cnt_dict[ cnt_rec.base_year ] = int( cnt_rec.count )    # strip trailing 'L'
             
@@ -674,21 +678,21 @@ def load_topics():
     cursor = connection.cursor()
     cursor.execute( sql )
 
-    data = cursor.fetchall()
-    sql_names  = [ desc[ 0 ] for desc in cursor.description ]
+    sql_resp = cursor.fetchall()
+    sql_names = [ desc[ 0 ] for desc in cursor.description ]
     
     cursor.close()
     connection.close()
     
-    json_list_in = json_generator( sql_names, "data", data )
-    json_list_out = []
-    for topic_dict in json_list_in:
+    entry_list_in = json_generator( sql_names, "data", sql_resp )
+    entry_list_out = []
+    for topic_dict in entry_list_in:
         logging.debug( topic_dict )
         datatype = topic_dict[ "datatype" ]
         topic_dict[ "byear_counts" ] = all_cnt_dict[ datatype ]
-        json_list_out.append(topic_dict )
+        entry_list_out.append(topic_dict )
     
-    return json_list_out
+    return entry_list_out
 
 
 
@@ -988,13 +992,13 @@ def filecat_subtopic( cursor, datatype, base_year ):
     query += " ORDER BY ter_code"
     
     cursor.execute( query )
-    records = cursor.fetchall()
+    sql_resp = cursor.fetchall()
     sql_names = [ desc[ 0 ] for desc in cursor.description ]
     
-    json_list = json_generator( sql_names, "data", records )
-    logging.debug( json_list )
+    entry_list = json_generator( sql_names, "data", sql_resp )
+    logging.debug( entry_list )
     
-    return json_list
+    return entry_list
 
 
 
@@ -1273,7 +1277,7 @@ def aggregate_1year( qinput, count_dots, do_subclasses, separate_tc ):
         logging.debug( "sql key: %s, sql value: %s" % ( key, str( sql[ key ] ) ) )
     
     extra_classes = []
-    if do_subclasses:   # 3&4 were removed from path; add them all here
+    if do_subclasses:   # 5&6 were removed from path; add them all here
         if classification == "historical":
             extra_classes = [ "histclass5", "histclass6", "histclass7", "histclass8", "histclass9", "histclass10" ]
         elif classification == "modern":
@@ -1376,7 +1380,7 @@ def aggregate_1year( qinput, count_dots, do_subclasses, separate_tc ):
 def execute_1year( sql_query, eng_data, download_key ):
     logging.debug( "execute_1year()" )
     
-    json_list = []
+    entry_list = []
     
     if sql_query:
         time0 = time()      # seconds since the epoch
@@ -1394,14 +1398,14 @@ def execute_1year( sql_query, eng_data, download_key ):
         logging.debug( sql_names )
         
         # retrieve the records from the database
-        data = cursor.fetchall()
-        logging.debug( "result # of data records: %d" % len( data ) )
+        sql_resp = cursor.fetchall()
+        logging.debug( "result # of data records: %d" % len( sql_resp ) )
         
         cursor.close()
         connection.close()
         
         final_data = []
-        for idx, item in enumerate( data ):
+        for idx, item in enumerate( sql_resp ):
             logging.debug( "%d: %s" % ( idx, item ) )
             final_item = []
             for i, thisname in enumerate( sql_names ):
@@ -1419,44 +1423,54 @@ def execute_1year( sql_query, eng_data, download_key ):
             
             final_data.append( final_item )
         
-        json_list = json_generator( sql_names, "data", final_data, download_key )
+        entry_list = json_generator( sql_names, "data", final_data, download_key )
         
-    return json_list
+    return entry_list
 
 
 
-def temp_table( classification, ter_code_list, json_list, json_list_tc ):
+def temp_table( params, entry_list, entry_list_tc ):
     logging.debug( "temp_table()" )
-    logging.debug( "# of entries in json_list: %d" % len( json_list ) )
-    logging.debug( "# of entries in json_list_tc: %d" % len( json_list_tc ) )
-    
+    logging.debug( "# of entries in entry_list: %d" % len( entry_list ) )
+    logging.debug( "# of entries in entry_list_tc: %d" % len( entry_list_tc ) )
+    """
+    params = {
+        "language"       : language,
+        "classification" : classification,
+        "datatype"       : datatype,
+        "base_year"      : base_year,
+        "ter_codes"      : ter_codes
+    }
+    """
     # number of asked regions
-    nregions = len( ter_code_list )
+    ter_codes = params[ "ter_codes" ]
+    nregions = len( ter_codes )
     logging.debug( "# of regions requested: %d" % nregions )
 
     # number of unique records in path_list_tc
     path_list_tc = []
-    for entry in json_list_tc: 
+    for entry in entry_list_tc: 
         path = entry[ "path" ]
         if path not in path_list_tc:
             path_list_tc.append( path )
     logging.debug( "# of unique records in path_tc result: %d" % len( path_list_tc ) )
     
-    # we only need to keep the json_list entries that have counts, the others 
-    # are contained in json_list_tc
-    logging.debug( "# of records in path result: %d" % len( json_list ) )
-    json_list_cnt = []
-    for entry in json_list:
+    # we only need to keep the entry_list entries that have counts, the others 
+    # are contained in entry_list_tc
+    logging.debug( "# of records in path result: %d" % len( entry_list ) )
+    entry_list_cnt = []
+    for e, entry in enumerate( entry_list ):
+        logging.debug( "entry %d: %s" % ( e, entry ) )
         if entry[ "total" ] != '':
-            json_list_cnt.append( entry )
-    logging.debug( "# of records in path result with count: %d" % len( json_list_cnt ) )
+            entry_list_cnt.append( entry )
+    logging.debug( "# of records in path result with count: %d" % len( entry_list_cnt ) )
      
-    for e, entry in enumerate( json_list_cnt ):
+    for e, entry in enumerate( entry_list_cnt ):
         logging.debug( "%d total: %s, %s" % ( e, entry[ "total" ], entry[ "path" ] ) )
     
     # number of levels
-    path    = json_list_tc[ 0 ][ "path" ]
-    path_tc = json_list_tc[ 0 ][ "path" ]
+    path    = entry_list_tc[ 0 ][ "path" ]
+    path_tc = entry_list_tc[ 0 ][ "path" ]
     nlevels    = len( path.keys() )
     nlevels_tc = len( path_tc.keys() )
     logging.debug( "# of levels: %d" % nlevels )
@@ -1464,11 +1478,11 @@ def temp_table( classification, ter_code_list, json_list, json_list_tc ):
     
     # historical or modern?
     level_prefix = "class"
-    if classification == "historical":
+    if params.get( "classification" ) == "historical":
         level_prefix = "hist" + level_prefix
     
     connection = get_connection()
-    cursor = connection.cursor()
+    cursor = connection.cursor( cursor_factory = psycopg2.extras.DictCursor )
     
     use_temp_table = False
     sql_delete = None
@@ -1488,14 +1502,15 @@ def temp_table( classification, ter_code_list, json_list, json_list_tc ):
     sql_create += "unit VARCHAR(1024),"
     sql_create += "count VARCHAR(1024),"
     
-    ntc = len( ter_code_list )
-    for tc, ter_code in enumerate( ter_code_list ):
+    ntc = len( ter_codes )
+    for tc, ter_code in enumerate( ter_codes ):
         sql_create += "tc_%s VARCHAR(1024)" % ter_code
         if tc + 1 < ntc:
             sql_create += ","
     
     sql_create += ")"
     
+    # on production server: use DROP
     if use_temp_table:
         sql_create += "ON COMMIT PRESERVE ROWS;"     # default
         #sql_create += "ON COMMIT DELETE ROWS"       # delete all rows
@@ -1522,11 +1537,11 @@ def temp_table( classification, ter_code_list, json_list, json_list_tc ):
         
         unit = '?'
         ncounts = 0
-        for ter_code in ter_code_list:
+        for ter_code in ter_codes:
             logging.debug( "ter_code: %s" % ter_code )
             # search for path + ter_code in list with counts
             value = "NA"
-            for entry in json_list_cnt:
+            for entry in entry_list_cnt:
                 if path == entry[ "path" ] and ter_code == entry[ "ter_code" ]:
                     ncounts += 1
                     unit  = entry[ "value_unit" ]
@@ -1558,13 +1573,50 @@ def temp_table( classification, ter_code_list, json_list, json_list_tc ):
     sql_query = "SELECT * FROM %s ORDER BY %s" % ( table_name, order_by )
     logging.debug( sql_query )
     cursor.execute( sql_query )
-    data = cursor.fetchall()
-    for r, record in enumerate( data ):
+    sql_resp = cursor.fetchall()
+    sql_names = [ desc[ 0 ] for desc in cursor.description ]
+    logging.debug( "%d sql_names: \n%s" % ( len( sql_names ), sql_names ) )
+    
+    entry_list_sorted = []
+    for r, row in enumerate( sql_resp ):
+        record = dict( row )
         logging.debug( "%d: %s" % ( r, record ) )
+        
+        # in: names: ['histclass1', 'histclass2', 'histclass3', 'histclass4', 'histclass5', 'unit', 'count', 'tc_1858_28', 'tc_1858_59']
+        # in record 0: ('Military estates', 'Indefinitely furloughed', '.', '.', 'Both sexes', 'persons', '1/2', '10522.0', 'NA')
+        # in: Record(histclass1='Military estates', histclass2='Indefinitely furloughed', histclass3='.', histclass4='.', histclass5='Both sexes', unit='persons', count='1/2', tc_1858_28='10522.0', tc_1858_59='NA')
+        # out: {'count': 1L, 'total': 84.0, 'datatype': '1.05', 'base_year': 1858, u'path': {'histclass4': 'Kronshtadt', 'histclass5': 'Children of both sexes', 'histclass2': 'Indefinitely furloughed', 'histclass3': '.', 'histclass1': 'Military estates'}, 'ter_code': '1858_59', 'value_unit': 'persons'}
+
+        # 1 entry per ter_code
+        for ter_code in ter_codes:
+            new_entry = {
+                "datatype"  : params[ "datatype" ],
+                "base_year" : params[ "base_year" ],
+                "ter_code"  : ter_code,
+            }
+            
+            path = {}
+            
+            for key in record:
+                value = record[ key ]
+                if "class" in key:
+                    path[ key ] = value
+                
+                
+                
+            #new_entry[ "value_unit" ] = record[ "" ]
+            #new_entry[ "total" ]      = record[ "" ]
+            #new_entry[ "ter_code" ]   = record[ "" ]
+            
+            logging.debug( new_entry )
+            
+            entry_list_sorted.append( new_entry )
     
     connection.commit()
     cursor.close()
     connection.close()
+    
+    return entry_list_sorted
 
 
 
@@ -1845,14 +1897,14 @@ def indicators():
     logging.debug( "%d sql_names:" % len( sql_names ) )
     logging.debug( sql_names )
     
-    data = cursor.fetchall()    # retrieve the records from the database
+    sl_resp = cursor.fetchall()    # retrieve the records from the database
     cursor.close()
     connection.close()
     
     eng_data = {}
     final_data = []
     
-    for item in data:
+    for item in sl_resp:
         final_item = []
         for i, thisname in enumerate( sql_names ):
             value = item[ i ]
@@ -1870,11 +1922,11 @@ def indicators():
         final_data.append( final_item )
         logging.debug( str( final_data ) )
     
-    json_list = json_generator( sql_names, "data", final_data )
+    entry_list = json_generator( sql_names, "data", final_data )
     
     language = request.args.get( "language" )
     download_key = request.args.get( "download_key" )
-    json_string, cache_except = json_cache( json_list, language, "data", download_key )
+    json_string, cache_except = json_cache( entry_list, language, "data", download_key )
     
     logging.debug( "json_string before return Response:" )
     logging.debug( json_string )
@@ -1907,7 +1959,7 @@ def aggregation():
     
     # strip [hist]class5 & 6 from path (no longer needed)
     old_path = qinput.get( "path" )
-    new_path, do_subclasses = strip_path_list( old_path )
+    new_path, do_subclasses = strip_subclasses( old_path )
     qinput[ "path" ] = new_path                 # replace
     
     download_key = str( "%05.8f" % random.random() )  # used as base name for zip download
@@ -1935,25 +1987,32 @@ def aggregation():
         # - without ter_code (actually implies all ter_code's) for all wanted rows
         # - with ter_code for the wanted regions
         qinput_tc = copy.deepcopy( qinput )
-        ter_code_list = qinput_tc.pop( "ter_code", None )
-        logging.error( "ter_code: %s" % ter_code_list )
+        ter_codes = qinput_tc.pop( "ter_code", None )
+        logging.error( "ter_code: %s" % ter_codes )
         
         sql_query, eng_data = aggregate_1year( qinput, count_dots, do_subclasses, separate_tc )
-        json_list = execute_1year( sql_query, eng_data, download_key )
+        entry_list = execute_1year( sql_query, eng_data, download_key )
         
         sql_query_tc, eng_data_tc = aggregate_1year( qinput_tc, count_dots, do_subclasses, separate_tc )
-        json_list_tc = execute_1year( sql_query_tc, eng_data_tc, download_key )
+        entry_list_tc = execute_1year( sql_query_tc, eng_data_tc, download_key )
         
-        temp_table( classification, ter_code_list, json_list, json_list_tc )
+        params = {
+            "language"       : language,
+            "classification" : classification,
+            "datatype"       : datatype,
+            "base_year"      : base_year,
+            "ter_codes"      : ter_codes
+        }
+        entry_list_sorted = temp_table( params, entry_list, entry_list_tc )
         
+        json_string, cache_except = json_cache( entry_list, language, "data", download_key, qinput )
         
-        json_string, cache_except = json_cache( json_list, language, "data", download_key, qinput )
         if cache_except is not None:
             logging.error( "caching of aggregation data failed" )
             logging.error( "length of json string: %d" % len( json_string ) )
             # try to show the error in download sheet
-            #json_list_ = [ { "cache_except" : cache_except } ]
-            #json_string, cache_except = json_cache( json_list_, language, "data", download_key, qinput )
+            #entry_list_ = [ { "cache_except" : cache_except } ]
+            #json_string, cache_except = json_cache( entry_list_, language, "data", download_key, qinput )
         
         logging.debug( "aggregated json_string: \n%s" % json_string )
         
@@ -1962,17 +2021,18 @@ def aggregation():
     elif classification == "modern":
         # modern does not have a base_year in qinput, wants all years; 
         # add base_years one-by-one to qinput, and accumulate results.
-        json_list = []
+        entry_list = []
         base_years = [ "1795", "1858", "1897", "1959", "2002" ]
         for base_year in base_years:
             logging.debug( "base_year: %s" % base_year )
             qinput[ "base_year" ] = base_year   # add base_year to qinput
             sql_query1, eng_data1 = aggregate_1year( qinput, count_dots, do_subclasses, separate_tc )
-            json_list1 = execute_1year( sql_query1, eng_data1, download_key )
-            logging.debug( "json_list1 for %s: \n%s" % ( base_year, str( json_list1 ) ) )
-            json_list.extend( json_list1 )
+            entry_list1 = execute_1year( sql_query1, eng_data1, download_key )
+            logging.debug( "entry_list1 for %s: \n%s" % ( base_year, str( entry_list1 ) ) )
+            entry_list.extend( entry_list1 )
             
-        json_string, cache_except = json_cache( json_list, language, "data", download_key, qinput )
+        json_string, cache_except = json_cache( entry_list, language, "data", download_key, qinput )
+        
         if cache_except is not None:
             logging.error( "caching of aggregation data failed" )
             logging.error( "length of json string: %d" % len( json_string ) )
