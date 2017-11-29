@@ -5,13 +5,13 @@ VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
-FL-28-Nov-2017 
+FL-29-Nov-2017 
 
 def get_configparser():
 def get_connection():
 def classcollector( keywords ):
 def strip_subclasses( old_path ):
-def json_generator( sql_names, json_dataname, data, download_key = None ):
+def json_generator( sql_names, json_dataname, data ):
 def json_cache( entry_list, language, json_dataname, download_key, qinput = {} ):
 def collect_docs( qinput, download_dir, download_key ):
 def translate_vocabulary( vocab_filter, classification = None ):
@@ -29,8 +29,8 @@ def loadjson( json_dataurl ):
 def filecat_subtopic( cursor, datatype, base_year ):
 def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
 def aggregate_1year( qinput, count_dots, do_subclasses, separate_tc ):
-def execute_1year( sql_query )
-def temp_table( params, entry_list, entry_list_tc)
+def execute_1year( sql_query, eng_data )
+def reorder_entries( params, entry_list, entry_list_tc)
 def cleanup_downloads( download_dir, time_limit ):
 def format_secs( seconds ):
 
@@ -213,7 +213,7 @@ def strip_subclasses( old_path ):
 
 
 
-def json_generator( sql_names, json_dataname, data, download_key = None ):
+def json_generator( sql_names, json_dataname, data ):
     logging.debug( "json_generator() json_dataname: %s, # of data items: %d" % ( json_dataname, len( data ) ) )
     logging.debug( "data: %s" % data )
     
@@ -550,7 +550,7 @@ def load_years( cursor, datatype ):
     logging.debug( sql )
     cursor.execute( sql )
     
-    sql_resp = cursor.fetchall()    # retrieve the records from the database
+    sql_resp = cursor.fetchall()
     result = {}
     
     for val in sql_resp:
@@ -1377,7 +1377,7 @@ def aggregate_1year( qinput, count_dots, do_subclasses, separate_tc ):
 
 
 
-def execute_1year( sql_query, eng_data, download_key ):
+def execute_1year( sql_query, eng_data ):
     logging.debug( "execute_1year()" )
     
     entry_list = []
@@ -1397,7 +1397,6 @@ def execute_1year( sql_query, eng_data, download_key ):
         logging.debug( "%d sql_names:" % len( sql_names ) )
         logging.debug( sql_names )
         
-        # retrieve the records from the database
         sql_resp = cursor.fetchall()
         logging.debug( "result # of data records: %d" % len( sql_resp ) )
         
@@ -1423,25 +1422,18 @@ def execute_1year( sql_query, eng_data, download_key ):
             
             final_data.append( final_item )
         
-        entry_list = json_generator( sql_names, "data", final_data, download_key )
+        entry_list = json_generator( sql_names, "data", final_data )
         
     return entry_list
 
 
 
-def temp_table( params, entry_list, entry_list_tc ):
-    logging.debug( "temp_table()" )
+def reorder_entries( params, entry_list, entry_list_tc ):
+    logging.debug( "reorder_entries()" )
     logging.debug( "# of entries in entry_list: %d" % len( entry_list ) )
     logging.debug( "# of entries in entry_list_tc: %d" % len( entry_list_tc ) )
-    """
-    params = {
-        "language"       : language,
-        "classification" : classification,
-        "datatype"       : datatype,
-        "base_year"      : base_year,
-        "ter_codes"      : ter_codes
-    }
-    """
+    # params params.keys() = [ "language", "classification", "datatype", "base_year", "ter_codes" ]
+    
     # number of asked regions
     ter_codes = params[ "ter_codes" ]
     nregions = len( ter_codes )
@@ -1458,21 +1450,24 @@ def temp_table( params, entry_list, entry_list_tc ):
     # we only need to keep the entry_list entries that have counts, the others 
     # are contained in entry_list_tc
     logging.debug( "# of records in path result: %d" % len( entry_list ) )
+    
+    nlevels = 0
     entry_list_cnt = []
     for e, entry in enumerate( entry_list ):
+        path = entry[ "path" ]
+        nlevels = max( nlevels, len( path.keys() ) )
         logging.debug( "entry %d: %s" % ( e, entry ) )
+        params[ "unit"] = entry[ "value_unit" ]     # to replace '?' in entry_tc
         if entry[ "total" ] != '':
             entry_list_cnt.append( entry )
     logging.debug( "# of records in path result with count: %d" % len( entry_list_cnt ) )
-     
+    
+    nlevels_tc = 0
     for e, entry in enumerate( entry_list_cnt ):
+        path_tc = entry[ "path" ]
+        nlevels_tc = max( nlevels_tc, len( path_tc.keys() ) )
         logging.debug( "%d total: %s, %s" % ( e, entry[ "total" ], entry[ "path" ] ) )
     
-    # number of levels
-    path    = entry_list_tc[ 0 ][ "path" ]
-    path_tc = entry_list_tc[ 0 ][ "path" ]
-    nlevels    = len( path.keys() )
-    nlevels_tc = len( path_tc.keys() )
     logging.debug( "# of levels: %d" % nlevels )
     logging.debug( "# of levels_tc: %d" % nlevels_tc )
     
@@ -1500,13 +1495,11 @@ def temp_table( params, entry_list, entry_list_tc ):
         sql_create += "%s%d VARCHAR(1024)," % ( level_prefix, column )
     
     sql_create += "unit VARCHAR(1024),"
-    sql_create += "count VARCHAR(1024),"
+    sql_create += "count VARCHAR(1024)"
     
     ntc = len( ter_codes )
     for tc, ter_code in enumerate( ter_codes ):
-        sql_create += "tc_%s VARCHAR(1024)" % ter_code
-        if tc + 1 < ntc:
-            sql_create += ","
+        sql_create += ",tc_%s VARCHAR(1024)" % ter_code
     
     sql_create += ")"
     
@@ -1540,7 +1533,8 @@ def temp_table( params, entry_list, entry_list_tc ):
         for ter_code in ter_codes:
             logging.debug( "ter_code: %s" % ter_code )
             # search for path + ter_code in list with counts
-            value = "NA"
+            #value = "NA"       # check language for Russian variant
+            value = ''
             for entry in entry_list_cnt:
                 if path == entry[ "path" ] and ter_code == entry[ "ter_code" ]:
                     ncounts += 1
@@ -1569,7 +1563,8 @@ def temp_table( params, entry_list, entry_list_tc ):
         if l > 1:
             order_by += ','
         order_by += "%s%d" % ( level_prefix, l )
-            
+    
+    # fetch sorted result
     sql_query = "SELECT * FROM %s ORDER BY %s" % ( table_name, order_by )
     logging.debug( sql_query )
     cursor.execute( sql_query )
@@ -1577,10 +1572,14 @@ def temp_table( params, entry_list, entry_list_tc ):
     sql_names = [ desc[ 0 ] for desc in cursor.description ]
     logging.debug( "%d sql_names: \n%s" % ( len( sql_names ), sql_names ) )
     
+    connection.commit()
+    cursor.close()
+    connection.close()
+    
     entry_list_sorted = []
     for r, row in enumerate( sql_resp ):
         record = dict( row )
-        logging.debug( "%d: %s" % ( r, record ) )
+        logging.debug( "%d: record: %s" % ( r, record ) )
         
         # in: names: ['histclass1', 'histclass2', 'histclass3', 'histclass4', 'histclass5', 'unit', 'count', 'tc_1858_28', 'tc_1858_59']
         # in record 0: ('Military estates', 'Indefinitely furloughed', '.', '.', 'Both sexes', 'persons', '1/2', '10522.0', 'NA')
@@ -1596,26 +1595,27 @@ def temp_table( params, entry_list, entry_list_tc ):
             }
             
             path = {}
-            
+            total = ''
             for key in record:
                 value = record[ key ]
                 if "class" in key:
-                    path[ key ] = value
-                
-                
-                
-            #new_entry[ "value_unit" ] = record[ "" ]
-            #new_entry[ "total" ]      = record[ "" ]
-            #new_entry[ "ter_code" ]   = record[ "" ]
+                    if value is None:
+                        path[ key ] = ''
+                    else:
+                        path[ key ] = value
+                elif key == "unit":
+                    if value == '?':
+                        new_entry[ "value_unit" ] = params[ "unit"]
+                    else:
+                        new_entry[ "value_unit" ] = value
+                elif ter_code in key:
+                    new_entry[ "total" ] = value
             
-            logging.debug( new_entry )
-            
+            new_entry[ "path" ] = path
+            logging.debug( "new_entry: %s" % new_entry )
             entry_list_sorted.append( new_entry )
     
-    connection.commit()
-    cursor.close()
-    connection.close()
-    
+    logging.debug( "%d entries in list_sorted: \n%s" % ( len( entry_list_sorted ), entry_list_sorted ) )
     return entry_list_sorted
 
 
@@ -1897,7 +1897,7 @@ def indicators():
     logging.debug( "%d sql_names:" % len( sql_names ) )
     logging.debug( sql_names )
     
-    sl_resp = cursor.fetchall()    # retrieve the records from the database
+    sl_resp = cursor.fetchall()
     cursor.close()
     connection.close()
     
@@ -1983,7 +1983,7 @@ def aggregation():
     if classification == "historical":
         # historical has base_year in qinput
         
-        # Two queries for temp table:
+        # Two queries for temp table in reorder_entries:
         # - without ter_code (actually implies all ter_code's) for all wanted rows
         # - with ter_code for the wanted regions
         qinput_tc = copy.deepcopy( qinput )
@@ -1991,21 +1991,22 @@ def aggregation():
         logging.error( "ter_code: %s" % ter_codes )
         
         sql_query, eng_data = aggregate_1year( qinput, count_dots, do_subclasses, separate_tc )
-        entry_list = execute_1year( sql_query, eng_data, download_key )
+        entry_list = execute_1year( sql_query, eng_data )
         
         sql_query_tc, eng_data_tc = aggregate_1year( qinput_tc, count_dots, do_subclasses, separate_tc )
-        entry_list_tc = execute_1year( sql_query_tc, eng_data_tc, download_key )
+        entry_list_tc = execute_1year( sql_query_tc, eng_data_tc )
         
         params = {
             "language"       : language,
             "classification" : classification,
             "datatype"       : datatype,
             "base_year"      : base_year,
-            "ter_codes"      : ter_codes
+            "ter_codes"      : qinput.get( "ter_code", '' )
         }
-        entry_list_sorted = temp_table( params, entry_list, entry_list_tc )
+        entry_list_sorted = reorder_entries( params, entry_list, entry_list_tc )
         
-        json_string, cache_except = json_cache( entry_list, language, "data", download_key, qinput )
+        #json_string, cache_except = json_cache( entry_list, language, "data", download_key, qinput )
+        json_string, cache_except = json_cache( entry_list_sorted, language, "data", download_key, qinput )
         
         if cache_except is not None:
             logging.error( "caching of aggregation data failed" )
@@ -2021,21 +2022,50 @@ def aggregation():
     elif classification == "modern":
         # modern does not have a base_year in qinput, wants all years; 
         # add base_years one-by-one to qinput, and accumulate results.
-        entry_list = []
+        #entry_list = []
+        #entry_list_tc = []
+        entry_list_sorted = []
         base_years = [ "1795", "1858", "1897", "1959", "2002" ]
         for base_year in base_years:
             logging.debug( "base_year: %s" % base_year )
             qinput[ "base_year" ] = base_year   # add base_year to qinput
-            sql_query1, eng_data1 = aggregate_1year( qinput, count_dots, do_subclasses, separate_tc )
-            entry_list1 = execute_1year( sql_query1, eng_data1, download_key )
-            logging.debug( "entry_list1 for %s: \n%s" % ( base_year, str( entry_list1 ) ) )
-            entry_list.extend( entry_list1 )
             
-        json_string, cache_except = json_cache( entry_list, language, "data", download_key, qinput )
+            # Two queries for temp table in reorder_entries:
+            # - without ter_code (actually implies all ter_code's) for all wanted rows
+            # - with ter_code for the wanted regions
+            qinput_tc = copy.deepcopy( qinput )
+            ter_codes = qinput_tc.pop( "ter_code", None )
+            logging.error( "ter_code: %s" % ter_codes )
+            
+            sql_query1, eng_data1 = aggregate_1year( qinput, count_dots, do_subclasses, separate_tc )
+            entry_list1 = execute_1year( sql_query1, eng_data1 )
+            
+            #logging.debug( "entry_list1 for %s: \n%s" % ( base_year, str( entry_list1 ) ) )
+            #entry_list.extend( entry_list1 )
+            
+            sql_query1_tc, eng_data1 = aggregate_1year( qinput_tc, count_dots, do_subclasses, separate_tc )
+            entry_list1_tc = execute_1year( sql_query1_tc, eng_data1 )
+            
+            #logging.debug( "entry_list1_tc for %s: \n%s" % ( base_year, str( entry_list1_tc ) ) )
+            #entry_list.extend( entry_list1_tc )
+            
+            params = {
+                "language"       : language,
+                "classification" : classification,
+                "datatype"       : datatype,
+                "base_year"      : base_year,
+                "ter_codes"      : qinput.get( "ter_code", '' )
+            }
+            entry_list_sorted1 = reorder_entries( params, entry_list1, entry_list1_tc )
+            entry_list_sorted.extend( entry_list_sorted1 )
+        
+        #json_string, cache_except = json_cache( entry_list, language, "data", download_key, qinput )
+        json_string, cache_except = json_cache( entry_list_sorted, language, "data", download_key, qinput )
         
         if cache_except is not None:
             logging.error( "caching of aggregation data failed" )
             logging.error( "length of json string: %d" % len( json_string ) )
+        
         logging.debug( "aggregated json_string: \n%s" % json_string )
         
         collect_docs( qinput, download_dir, download_key )  # collect doc files in download dir
