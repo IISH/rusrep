@@ -5,11 +5,11 @@ VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
-FL-29-Nov-2017 
+FL-04-Dec-2017 
 
 def get_configparser():
 def get_connection():
-def classcollector( keywords ):
+def class_collector( keywords ):
 def strip_subclasses( old_path ):
 def json_generator( sql_names, json_dataname, data ):
 def json_cache( entry_list, language, json_dataname, download_key, qinput = {} ):
@@ -148,25 +148,25 @@ def get_connection():
 
 
 
-def classcollector( keywords ):
-    logging.debug( "classcollector()" )
+def class_collector( keywords ):
+    logging.debug( "class_collector()" )
     logging.debug( "keywords: %s" % keywords )
     
-    classdict  = {}
-    normaldict = {}
+    class_dict  = {}
+    normal_dict = {}
     
     for item in keywords:
         logging.debug( "item: %s" % item )
-        classmatch = re.search( r'class', item )
-        if classmatch:
+        class_match = re.search( r'class', item )
+        if class_match:
             logging.debug( "class: %s" % item )
-            classdict[ item ] = keywords[ item ]
+            class_dict[ item ] = keywords[ item ]
         else:
-            normaldict[ item ] = keywords[ item ]
+            normal_dict[ item ] = keywords[ item ]
     
-    logging.debug( "classdict:  %s" % classdict )
-    logging.debug( "normaldict: %s" % normaldict )
-    return ( classdict, normaldict )
+    logging.debug( "class_dict:  %s" % class_dict )
+    logging.debug( "normal_dict: %s" % normal_dict )
+    return ( class_dict, normal_dict )
 
 
 
@@ -259,8 +259,8 @@ def json_generator( sql_names, json_dataname, data ):
     logging.debug( "# values in data: %d" % len_data )
     for idx, value_str in enumerate( data ):
         logging.debug( "n: %d-of-%d, value_str: %s" % ( 1+idx, len_data, str( value_str ) ) )
-        data_keys   = {}
-        extravalues = {}
+        data_keys    = {}
+        extra_values = {}
         for i in range( len( value_str ) ):
             name  = sql_names[ i ]
             value = value_str[ i ]
@@ -280,17 +280,17 @@ def json_generator( sql_names, json_dataname, data ):
             if name not in forbidden:
                 data_keys[ name ] = value
             else:
-                extravalues[ name ] = value
+                extra_values[ name ] = value
         
         # If aggregation check data output for "NA" values
         if "total" in data_keys:
-            if extravalues[ "data_active" ]:
+            if extra_values[ "data_active" ]:
                 if language == "en":
                     data_keys[ "total" ] = "NA"
                 elif language == "rus":
                     data_keys = "непригодный"
         
-        ( path, output ) = classcollector( data_keys )
+        ( path, output ) = class_collector( data_keys )
         output[ "path" ] = path
         entry_list.append( output )
     
@@ -917,7 +917,7 @@ def load_vocabulary( vocab_type ):
                     newitem[ name ] = value
                 item = newitem
             
-            ( path, output ) = classcollector( item )
+            ( path, output ) = class_collector( item )
             if path:
                 output[ "path" ] = path
                 data.append( output )
@@ -1048,14 +1048,16 @@ def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
         "base_year"
     ]
     
-    
+    delimiter = b'|'    # leading b required with __future__, otherwise: TypeError: "delimiter" must be an 1-character string
     with open( csv_pathname, "rb" ) as csv_file:
-        csv_reader = csv.reader( csv_file, delimiter = '|' )
+        csv_reader = csv.reader( csv_file, delimiter = delimiter )
         for row in csv_reader:
             logging.debug( ", ".join( row ) )
     
     if to_xlsx:
-        sep = str( u'|' ).encode( "utf-8" )
+        #sep = str( u'|' ).encode( "utf-8" )
+        #sep = str( delimiter ).encode( "utf-8" )       # "encode method has been disabled in newbytes"
+        sep = delimiter
         kwargs_pandas = { 
             "sep" : sep 
             #,"line_terminator" : '\n'   # TypeError: parser_f() got an unexpected keyword argument "line_terminator"
@@ -1435,8 +1437,9 @@ def reorder_entries( params, entry_list, entry_list_tc ):
     # params params.keys() = [ "language", "classification", "datatype", "base_year", "ter_codes" ]
     
     # number of asked regions
-    ter_codes = params[ "ter_codes" ]
-    nregions = len( ter_codes )
+    language  = params.get( "language" )
+    ter_codes = params.get( "ter_codes" )
+    nregions  = len( ter_codes )
     logging.debug( "# of regions requested: %d" % nregions )
 
     # number of unique records in path_list_tc
@@ -1470,6 +1473,8 @@ def reorder_entries( params, entry_list, entry_list_tc ):
     
     logging.debug( "# of levels: %d" % nlevels )
     logging.debug( "# of levels_tc: %d" % nlevels_tc )
+    nlevels_use = max( nlevels, nlevels_tc )
+    #nlevels_use = 1 + max( nlevels, nlevels_tc )
     
     # historical or modern?
     level_prefix = "class"
@@ -1491,7 +1496,7 @@ def reorder_entries( params, entry_list, entry_list_tc ):
         sql_delete = "DROP TABLE %s" % table_name 
         sql_create  = "CREATE TABLE %s (" % table_name 
     
-    for column in range( 1, nlevels_tc + 1 ):
+    for column in range( 1, nlevels_use + 1 ):
         sql_create += "%s%d VARCHAR(1024)," % ( level_prefix, column )
     
     sql_create += "unit VARCHAR(1024),"
@@ -1522,44 +1527,59 @@ def reorder_entries( params, entry_list, entry_list_tc ):
         values  = ""
         for k, key in enumerate( path ):
             value = path[ key ]
+            #value = postgres_escape_string( value )
             if k > 0:
                 columns += ","
                 values  += ","
             columns += key
-            values  += "'%s'" % value
+            values  += '"%s"' % value
         
         unit = '?'
         ncounts = 0
         for ter_code in ter_codes:
             logging.debug( "ter_code: %s" % ter_code )
+            # value string for empty fields (no number provided)
+            value = ""
+            if language.upper() == "EN":
+                value = "NA"
+            elif language.upper() == "RU":
+                value = "нет данных"
+            
             # search for path + ter_code in list with counts
-            #value = "NA"       # check language for Russian variant
-            value = ''
             for entry in entry_list_cnt:
                 if path == entry[ "path" ] and ter_code == entry[ "ter_code" ]:
                     ncounts += 1
+                    total = entry[ "total" ]        # double from aggregate sql query
+                    if round( total ) == total:     # only 0's after .
+                        total = int( total )        # suppress trailing .0...
                     unit  = entry[ "value_unit" ]
-                    value = entry[ "total" ]
+                    value = total
                     break
             
             columns += ",tc_%s" % ter_code
-            values  += ",'%s'"  % value
+            values  += ',"%s"'  % value
         
         logging.debug( "columns: %s" % columns )
         logging.debug( "values:  %s" % values )
         
         columns += ",unit"
-        values  += ",'%s'" % unit
+        values  += ',"%s"' % unit
         
         columns += ",count"
-        values  += ",'%d/%d'" % ( ncounts, nregions )
+        values  += ',"%d/%d"' % ( ncounts, nregions )
         
         sql_insert = "INSERT INTO %s (%s) VALUES (%s);" % ( table_name , columns, values ) 
+        #sql_insert = "INSERT INTO %s (%s) VALUES (%s)" % ( table_name , columns )
+        #sql_insert = cursor.mogrify( sql_insert )       # escaping stuff
+        #sql_insert = "INSERT INTO %s (%s) VALUES " % ( table_name , columns )
         logging.debug( sql_insert )
-        cursor.execute( sql_insert )
+        logging.debug( values )
+        cursor.execute( "INSERT INTO %s (%s) VALUES (%s),", table_name, columns, (values) )
+        #cursor.execute(sql_insert, ( values ) )
     
     order_by = ""
-    for l in range( 1, 1 + nlevels_tc ):
+    #for l in range( 1, 1 + nlevels_tc ):
+    for l in range( 1, 1 + nlevels_use ):
         if l > 1:
             order_by += ','
         order_by += "%s%d" % ( level_prefix, l )
@@ -1617,6 +1637,21 @@ def reorder_entries( params, entry_list, entry_list_tc ):
     
     logging.debug( "%d entries in list_sorted: \n%s" % ( len( entry_list_sorted ), entry_list_sorted ) )
     return entry_list_sorted
+
+
+
+def postgres_escape_string(s):
+   if not isinstance(s, basestring):
+       raise TypeError("%r must be a str or unicode" %(s, ))
+   escaped = repr(s)
+   if isinstance(s, unicode):
+       assert escaped[:1] == 'u'
+       escaped = escaped[1:]
+   if escaped[:1] == '"':
+       escaped = escaped.replace("'", "\\'")
+   elif escaped[:1] != "'":
+       raise AssertionError("unexpected repr: %s", escaped)
+   return "E'%s'" %(escaped[1:-1], )
 
 
 
