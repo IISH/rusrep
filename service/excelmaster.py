@@ -300,7 +300,8 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
     # initialise base_year counts
     byear_counts = { "1795" : 0, "1858" : 0, "1897" : 0, "1959" : 0, "2002" : 0 }
     
-    skip_list = [ "count" ]
+    #skip_list = [ "count" ]
+    skip_list = []
     
     # loop over the data sheets, and select the correct year data
     for sheet_idx in range( nsheets ):
@@ -425,6 +426,8 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                         column =  12
                     elif name == "value_unit":
                         column =  nlevels + 3
+                    elif name == "count":
+                        column =  nlevels + 4
                     elif name in skip_list:
                         continue
                     else:
@@ -498,6 +501,8 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                     column =  12
                 elif name == "value_unit":
                     column = nlevels + 3
+                elif name == "count":
+                    column =  nlevels + 4
                 elif name in skip_list:
                     continue
                 else:

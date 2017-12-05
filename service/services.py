@@ -1433,7 +1433,18 @@ def reorder_entries( params, entry_list, entry_list_tc ):
     
     # number of asked regions
     language  = params.get( "language" )
-    ter_codes = params.get( "ter_codes" )
+    classification = params.get( "classification" )
+
+    ter_codes = []
+    nregions = 0
+    if classification == "historical":
+        ter_codes = params.get( "ter_codes" )
+    else:
+        for entry in entry_list_tc:
+            ter_code = entry[ "ter_code" ]
+            if ter_code not in ter_codes:
+                ter_codes.append( ter_code )
+    
     nregions  = len( ter_codes )
     logging.debug( "# of regions requested: %d" % nregions )
 
@@ -1444,11 +1455,14 @@ def reorder_entries( params, entry_list, entry_list_tc ):
         path = entry[ "path" ]
         if path not in path_list_tc:
             path_list_tc.append( path )
+        
         value_unit = entry[ "value_unit" ]
         if len( value_unit ) > 0:
             unit = value_unit
-        
+    
     logging.debug( "# of unique records in path_tc result: %d" % len( path_list_tc ) )
+    
+    
     
     # we only need to keep the entry_list entries that have counts, the others 
     # are contained in entry_list_tc
@@ -1478,7 +1492,7 @@ def reorder_entries( params, entry_list, entry_list_tc ):
     
     # historical or modern?
     level_prefix = "class"
-    if params.get( "classification" ) == "historical":
+    if classification == "historical":
         level_prefix = "hist" + level_prefix
     
     connection = get_connection()
