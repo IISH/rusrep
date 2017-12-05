@@ -5,7 +5,7 @@ VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
-FL-04-Dec-2017 
+FL-05-Dec-2017 
 
 def get_configparser():
 def get_connection():
@@ -805,7 +805,6 @@ def load_vocabulary( vocab_type ):
     
     vocab_filter = {}
     
-    
     if vocab_type == "topics":
         vocab_name = "ERRHS_Vocabulary_topics"
     
@@ -830,11 +829,7 @@ def load_vocabulary( vocab_type ):
     
     eng_data = {}
     if language == "en":
-        new_filter = {}
-        if base_year:
-            new_filter[ 'YEAR' ] = base_year    # vocab_filter also contains DATATYPE
-        logging.debug( "translate_vocabulary with filter: %s" % new_filter )
-        eng_data = translate_vocabulary( new_filter )
+        eng_data = translate_vocabulary( vocab_filter )
         logging.debug( "translate_vocabulary eng_data items: %d" % len( eng_data ) )
         #logging.debug( "eng_data: %s" % eng_data )
         
@@ -1443,11 +1438,16 @@ def reorder_entries( params, entry_list, entry_list_tc ):
     logging.debug( "# of regions requested: %d" % nregions )
 
     # number of unique records in path_list_tc
+    unit = '?'
     path_list_tc = []
     for entry in entry_list_tc: 
         path = entry[ "path" ]
         if path not in path_list_tc:
             path_list_tc.append( path )
+        value_unit = entry[ "value_unit" ]
+        if len( value_unit ) > 0:
+            unit = value_unit
+        
     logging.debug( "# of unique records in path_tc result: %d" % len( path_list_tc ) )
     
     # we only need to keep the entry_list entries that have counts, the others 
@@ -1523,18 +1523,13 @@ def reorder_entries( params, entry_list, entry_list_tc ):
     # fill table
     for p, path in enumerate( path_list_tc ):
         logging.debug( "%d-of-%d path: %s" % ( p, len( path_list_tc ), path ) )
-        columns = ""
-        values  = ""
+        columns = []
+        values  = []
         for k, key in enumerate( path ):
             value = path[ key ]
-            #value = postgres_escape_string( value )
-            if k > 0:
-                columns += ","
-                values  += ","
-            columns += key
-            values  += '"%s"' % value
+            columns.append( key )
+            values .append( value )
         
-        unit = '?'
         ncounts = 0
         for ter_code in ter_codes:
             logging.debug( "ter_code: %s" % ter_code )
@@ -1552,30 +1547,32 @@ def reorder_entries( params, entry_list, entry_list_tc ):
                     total = entry[ "total" ]        # double from aggregate sql query
                     if round( total ) == total:     # only 0's after .
                         total = int( total )        # suppress trailing .0...
-                    unit  = entry[ "value_unit" ]
                     value = total
                     break
             
-            columns += ",tc_%s" % ter_code
-            values  += ',"%s"'  % value
+            columns.append( "tc_%s" % ter_code )
+            values .append( value )
         
         logging.debug( "columns: %s" % columns )
         logging.debug( "values:  %s" % values )
         
-        columns += ",unit"
-        values  += ',"%s"' % unit
+        columns.append( "unit" )
+        values .append( unit )
         
-        columns += ",count"
-        values  += ',"%d/%d"' % ( ncounts, nregions )
+        columns.append( "count" )
+        values .append( "%d/%d" % ( ncounts, nregions ) )
         
-        sql_insert = "INSERT INTO %s (%s) VALUES (%s);" % ( table_name , columns, values ) 
-        #sql_insert = "INSERT INTO %s (%s) VALUES (%s)" % ( table_name , columns )
-        #sql_insert = cursor.mogrify( sql_insert )       # escaping stuff
-        #sql_insert = "INSERT INTO %s (%s) VALUES " % ( table_name , columns )
+        logging.debug( "columns: %s" % columns )
+        logging.debug( "values:  %s" % values )
+        
+        # improve this with psycopg2.sql – SQL string composition, see http://initd.org/psycopg/docs/sql.html
+        fmt = "%s," * len ( columns )
+        fmt = fmt[ :-1 ]    #  remove trailing comma
+        columns_str = ','.join( columns )
+        sql_insert = "INSERT INTO %s (%s) VALUES ( %s )" % ( table_name, columns_str, fmt )
         logging.debug( sql_insert )
-        logging.debug( values )
-        cursor.execute( "INSERT INTO %s (%s) VALUES (%s),", table_name, columns, (values) )
-        #cursor.execute(sql_insert, ( values ) )
+        
+        cursor.execute(sql_insert, ( values ) )
     
     order_by = ""
     #for l in range( 1, 1 + nlevels_tc ):
@@ -1601,17 +1598,13 @@ def reorder_entries( params, entry_list, entry_list_tc ):
         record = dict( row )
         logging.debug( "%d: record: %s" % ( r, record ) )
         
-        # in: names: ['histclass1', 'histclass2', 'histclass3', 'histclass4', 'histclass5', 'unit', 'count', 'tc_1858_28', 'tc_1858_59']
-        # in record 0: ('Military estates', 'Indefinitely furloughed', '.', '.', 'Both sexes', 'persons', '1/2', '10522.0', 'NA')
-        # in: Record(histclass1='Military estates', histclass2='Indefinitely furloughed', histclass3='.', histclass4='.', histclass5='Both sexes', unit='persons', count='1/2', tc_1858_28='10522.0', tc_1858_59='NA')
-        # out: {'count': 1L, 'total': 84.0, 'datatype': '1.05', 'base_year': 1858, u'path': {'histclass4': 'Kronshtadt', 'histclass5': 'Children of both sexes', 'histclass2': 'Indefinitely furloughed', 'histclass3': '.', 'histclass1': 'Military estates'}, 'ter_code': '1858_59', 'value_unit': 'persons'}
-
         # 1 entry per ter_code
         for ter_code in ter_codes:
             new_entry = {
-                "datatype"  : params[ "datatype" ],
-                "base_year" : params[ "base_year" ],
-                "ter_code"  : ter_code,
+                "datatype"   : params[ "datatype" ],
+                "base_year"  : params[ "base_year" ],
+                "ter_code"   : ter_code,
+                "value_unit" : unit,
             }
             
             path = {}
@@ -1623,13 +1616,12 @@ def reorder_entries( params, entry_list, entry_list_tc ):
                         path[ key ] = ''
                     else:
                         path[ key ] = value
-                elif key == "unit":
-                    if value == '?':
-                        new_entry[ "value_unit" ] = params[ "unit"]
-                    else:
-                        new_entry[ "value_unit" ] = value
-                elif ter_code in key:
+                
+                if ter_code in key:
                     new_entry[ "total" ] = value
+                
+                if key == "count":
+                    new_entry[ "count" ] = value
             
             new_entry[ "path" ] = path
             logging.debug( "new_entry: %s" % new_entry )
@@ -1637,21 +1629,6 @@ def reorder_entries( params, entry_list, entry_list_tc ):
     
     logging.debug( "%d entries in list_sorted: \n%s" % ( len( entry_list_sorted ), entry_list_sorted ) )
     return entry_list_sorted
-
-
-
-def postgres_escape_string(s):
-   if not isinstance(s, basestring):
-       raise TypeError("%r must be a str or unicode" %(s, ))
-   escaped = repr(s)
-   if isinstance(s, unicode):
-       assert escaped[:1] == 'u'
-       escaped = escaped[1:]
-   if escaped[:1] == '"':
-       escaped = escaped.replace("'", "\\'")
-   elif escaped[:1] != "'":
-       raise AssertionError("unexpected repr: %s", escaped)
-   return "E'%s'" %(escaped[1:-1], )
 
 
 
