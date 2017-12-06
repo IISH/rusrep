@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # VT-07-Jul-2016 Latest change by VT
-# FL-31-Oct-2017 Latest change
+# FL-06-Dec-2017 Latest change
 
 import json
 import logging
@@ -93,7 +93,7 @@ def preprocessor( datafilter ):
                 
                 try:
                     count = itemlexicon[ 'count' ]
-                    del itemlexicon[ 'count' ]          # 'count' should not be part of lexkey
+                    #del itemlexicon[ 'count' ]          # 'count' should not be part of lexkey
                 except:
                     pass
                 
@@ -380,7 +380,8 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         logging.debug( "levels in header_chain: %d" % nlevels )
         
         # sheet_header line here; lines above for legend
-        row = 9
+        legend_offset = 9
+        row = legend_offset 
         logging.debug( "# of itemchains in lex_lands: %d" % len( lex_lands ) )
         logging.debug( "lex_lands old: %s" % str( lex_lands ) )
         
@@ -393,7 +394,7 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
             
             column = 1
             # sheet_header
-            if row == 9:      # row
+            if row == legend_offset:        # table header row
                 logging.debug( "# of names in header_chain: %d" % len( header_chain ) )
                 logging.debug( "names in header_chain: %s" % str( header_chain ) )
                 #row_name = 0
@@ -473,6 +474,12 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
             ter_data = lex_lands[ itemchain ]
             logging.debug( "ter_data: %s: " % str( ter_data ) )
             nclasses = 0
+            db_row = chain.get( "db_row" )
+            if db_row is not None:
+                row = db_row + legend_offset + 1    # +1: skip table header
+                
+            logging.debug( "db_row in chain: %d" % db_row )
+            
             for name in sorted( chain ):
                 logging.debug( "name: %s: " % name )
                 if name == "base_year":
