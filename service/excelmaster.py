@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # VT-07-Jul-2016 Latest change by VT
-# FL-06-Dec-2017 Latest change
+# FL-11-Dec-2017 Latest change
 
 import json
 import logging
@@ -291,7 +291,7 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         ws_4 = wb.create_sheet( "2002", 4 )
         
         vocab_regions = db_vocabulary.data.find( { "vocabulary": "ERRHS_Vocabulary_regions" } )
-        logging.debug( "vocab_regions: %s" % vocab_regions )
+        #logging.debug( "vocab_regions: %s" % vocab_regions )
         ter_code_list = []
         for region in vocab_regions:
             logging.debug( "region: %s" % str( region ) )
@@ -321,7 +321,7 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         # load regions for base_year
         regions_filter = {}
         regions_filter[ "vocabulary" ] = "ERRHS_Vocabulary_regions"
-        regions_filter[ 'basisyear' ] = str( base_year )
+        regions_filter[ 'basisyear' ] = str( base_year )            # regions depend on base_year
         vocab_regions = db_vocabulary.data.find( regions_filter )
         
         # get region names from ter_codes
@@ -457,6 +457,11 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                 row += 1
             
             # data records
+            add_to_counts = 0   # update total # of region counts (denominator)
+            counts_column = 0   # to be updated
+            counts_row    = 0   # to be updated
+            counts_value  = ''  # to be updated
+            
             column = 1
             logging.debug( "# of names in chain: %d" % len( chain ) )
             logging.debug( "names in chain: %s" % str( chain ) )
@@ -510,6 +515,9 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                     column = nlevels + 3
                 elif name == "count":
                     column =  nlevels + 4
+                    counts_column = column
+                    counts_row = row
+                    counts_value = chain[ name ]
                 elif name in skip_list:
                     continue
                 else:
@@ -539,11 +547,18 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                     ter_value = re.sub( r'\.0', '', str( ter_value ) )
                 else:
                     ter_value = na
+                    add_to_counts += 1
                 
                 cell = ws.cell( row = row, column = column )
                 cell.value = ter_value
                 logging.debug( "%d: %s" % ( column, ter_value ) )
                 column += 1
+            
+            logging.debug( "add_to_counts: %d, row: %d, column: %d" % ( add_to_counts, counts_row, counts_column ) )
+            if '/' in counts_value:     # update total number of regions (for give base_year)
+                cell = ws.cell( row = counts_row, column = counts_column )
+                num_denom = counts_value.split( '/' )
+                cell.value = "%s/%d" % ( num_denom[ 0 ], num_regions )
             
             row += 1
         
@@ -644,7 +659,8 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         "base_year"  : base_year
     }
     
-    pandas_sort( xlsx_pathname, nlevels, params )
+    # sorting now via temp postgres table
+    #pandas_sort( xlsx_pathname, nlevels, params )
     
     return xlsx_pathname, msg
 

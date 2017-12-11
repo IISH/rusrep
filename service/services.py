@@ -5,7 +5,7 @@ VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
-FL-06-Dec-2017 
+FL-11-Dec-2017 
 
 def get_configparser():
 def get_connection():
@@ -1509,7 +1509,10 @@ def reorder_entries( params, entry_list_ntc, entry_list = None ):
     if use_temp_table:
         sql_create  = "CREATE TEMP TABLE %s (" % table_name 
     else:
-        sql_delete = "DROP TABLE %s" % table_name 
+        try:
+            sql_delete = "DROP TABLE %s" % table_name 
+        except:
+            pass
         sql_create = "CREATE TABLE %s (" % table_name 
     
     for column in range( 1, nlevels_use + 1 ):
@@ -1533,12 +1536,15 @@ def reorder_entries( params, entry_list_ntc, entry_list = None ):
     logging.debug( "sql_create: %s" % sql_create )
     
     if sql_delete:
-        cursor.execute( sql_delete )
+        try:
+            cursor.execute( sql_delete )
+        except:
+            pass
     cursor.execute( sql_create )
     
     # fill table
     for p, path in enumerate( path_list_ntc ):
-        logging.debug( "%d-of-%d path: %s" % ( p, len( path_list_ntc ), path ) )
+        logging.debug( "%d-of-%d path: %s" % ( p+1, len( path_list_ntc ), path ) )
         columns = []
         values  = []
         for k, key in enumerate( path ):
@@ -1552,16 +1558,17 @@ def reorder_entries( params, entry_list_ntc, entry_list = None ):
             # value string for empty fields (no number provided)
             value = ""
             if language.upper() == "EN":
-                value = "NA"
+                value = "na"
             elif language.upper() == "RU":
                 value = "нет данных"
             
             # search for path + ter_code in list with counts
             for entry in entry_list_cnt:
-                logging.debug( "entry: %s" % entry )
+                #logging.debug( "entry: %s" % entry )
                 if path == entry[ "path" ] and ter_code == entry[ "ter_code" ]:
                     ncounts += 1
                     total = entry[ "total" ]        # double from aggregate sql query
+                    logging.debug( "ncounts: %d, total: %s, ter_code: %s, path: %s" % ( ncounts, total, ter_code, path ) )
                     if round( total ) == total:     # only 0's after .
                         total = int( total )        # suppress trailing .0...
                     value = total
