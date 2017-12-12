@@ -5,7 +5,7 @@ VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
-FL-06-Dec-2017 
+FL-11-Dec-2017 
 
 def get_configparser():
 def get_connection():
@@ -30,7 +30,7 @@ def filecat_subtopic( cursor, datatype, base_year ):
 def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
 def aggregate_year( qinput, add_subclasses ):
 def execute_year( sql_query, eng_data )
-def reorder_entries( params, entry_list_ntc, entry_list = None)
+def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None)
 def cleanup_downloads( download_dir, time_limit ):
 def format_secs( seconds ):
 
@@ -499,7 +499,8 @@ def translate_vocabulary( vocab_filter, classification = None ):
         vocab = db.data.find()
     
     data = {}
-    for item in vocab:
+    for i, item in enumerate( vocab ):
+        #logging.debug( "%d: %s" % ( i, item ) )
         if "RUS" in item:
             try:
                 item[ "RUS" ] = item[ "RUS" ].encode( "utf-8" )
@@ -513,20 +514,20 @@ def translate_vocabulary( vocab_filter, classification = None ):
                 item[ "RUS" ] = re.sub( r'"', '', item[ "RUS" ] )
                 item[ "EN" ]  = re.sub( r'"', '', item[ "EN" ] )
                 
+                # 2-way key/values; E->R & R->E
                 data[ item[ "RUS" ] ] = item[ "EN" ]
                 data[ item[ "EN" ] ]  = item[ "RUS" ] 
                 
                 if vocab_debug:
-                    logging.debug( "EN: %s RUS: %s" % ( item[ "EN" ], item[ "RUS" ] ) )
+                    logging.debug( "%d EN: |%s| RUS: |%s|" % ( i, item[ "EN" ], item[ "RUS" ] ) )
             except:
                 type_, value, tb = exc_info()
                 logging.error( "translate_vocabulary failed: %s" % value )
     
-    d = 0
-    for key in data:
-        d += 1
-        if vocab_debug:
-            logging.debug( "%d: key: %s, value: %s" % ( d, key, data[ key ] ) )
+    if vocab_debug:
+        for k, key in enumerate( data ):
+            logging.debug( "%d: key: %s, value: %s" % ( k, key, data[ key ] ) )
+    
     logging.debug( "translate_vocabulary: return %d items" % len( data ) )
     
     return data
@@ -1130,7 +1131,7 @@ def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
 
 
 
-def aggregate_year( qinput, add_subclasses ):
+def aggregate_year( qinput, add_subclasses, value_numerical ):
     logging.debug( "aggregate_year() add_subclasses: %s" % add_subclasses )
     logging.debug( "qinput %s" % str( qinput ) )
     
@@ -1179,14 +1180,17 @@ def aggregate_year( qinput, add_subclasses ):
                 vocab_filter[ "DATATYPE" ] = datatype
             elif classification == "modern":
                 vocab_filter[ "DATATYPE" ] = "MOD_" + datatype
+        logging.debug( "vocab_filter: %s" % str( vocab_filter ) )
         
         eng_data = translate_vocabulary( vocab_filter )
-        units = translate_vocabulary( { "vocabulary": "ERRHS_Vocabulary_units" } )
+        logging.debug( "translate_vocabulary returned %d eng_data items" % len( eng_data ) )
+        #logging.debug( "eng_data: %s" % str( eng_data ) )
+        for i, item in enumerate( eng_data ):
+            logging.debug( "%d: %s" % ( i, item ) )
         
-        logging.debug( "translate_vocabulary returned %d items" % len( units ) )
-        logging.debug( "vocab_filter: %s" % str( vocab_filter ) )
-        logging.debug( "eng_data: %s" % str( eng_data ) )
-        logging.debug( "units: %s" % str( units ) )
+        units = translate_vocabulary( { "vocabulary": "ERRHS_Vocabulary_units" } )
+        logging.debug( "translate_vocabulary returned %d units items" % len( units ) )
+        #logging.debug( "units: %s" % str( units ) )
         for item in units:
             eng_data[ item ] = units[ item ]
     
@@ -1230,15 +1234,18 @@ def aggregate_year( qinput, add_subclasses ):
                         
                     for xkey in clear_path:
                         value = path[ xkey ]
-                        value = str( value )    # ≥5000 : \xe2\x89\xa55000 => u'\\u22655000
-                        # otherwise, it is not found in eng_data
+                        #value = str( value )    # ≥5000 : \xe2\x89\xa55000 => u'\\u22655000
+                        value = value.encode( "utf-8" ) # otherwise, "≥5000 inhabitants" is not found in eng_data
+                        
                         logging.debug( "clear_path xkey: %s, value: %s" % ( xkey, value ) )
                         
                         if value in eng_data:
                             logging.debug( "xkey: %s, value: %s" % ( xkey, value ) )
                             value = eng_data[ value ]
                             logging.debug( "xkey: %s, value: %s" % ( xkey, value ) )
-                        
+                        else:
+                            logging.error( "not found: value: %s" % value )
+                            
                         sql_local[ xkey ] = "(%s='%s' OR %s='. '), " % ( xkey, value, xkey )
                         
                         if not known_fields.has_key( xkey ):
@@ -1271,11 +1278,11 @@ def aggregate_year( qinput, add_subclasses ):
         logging.debug( "extra_classes: %s" % extra_classes )
     
     sql_query  = "SELECT COUNT(*) AS datarecords" 
-    sql_query += ", SUM(CAST(value AS DOUBLE PRECISION)) AS total"
-    
-    sql_query += ", COUNT(*) AS count"
     sql_query += ", COUNT(*) - COUNT(value) AS data_active"
-    
+        
+    if value_numerical:
+        sql_query += ", SUM(CAST(value AS DOUBLE PRECISION)) AS total"
+        
     if classification == "modern":  # "ter_code" keyword not in qinput, but we always need it
         logging.debug( "modern classification: adding ter_code to SELECT" )
         sql_query += ", ter_code"
@@ -1298,11 +1305,14 @@ def aggregate_year( qinput, add_subclasses ):
         sql_query  = sql_query[ :-4 ]
         logging.debug( "sql_query 3: %s" % sql_query )
     
-    sql_query += " AND value <> ''"             # suppress empty values
-    sql_query += " AND value <> '.'"            # suppress a 'lone' "optional point", used in the table to flag missing data
-    # plus an optional single . for floating point values, and plus an optional leading sign
-    sql_query += " AND value ~ '^[-+]?\d*\.?\d*$'"
-    
+    if value_numerical:
+        sql_query += " AND value <> ''"             # suppress empty values
+        sql_query += " AND value <> '.'"            # suppress a 'lone' "optional point", used in the table to flag missing data
+        # plus an optional single . for floating point values, and plus an optional leading sign
+        sql_query += " AND value ~ '^[-+]?\d*\.?\d*$'"
+    else:
+        sql_query += " AND (value = '' OR value = ' ' OR value = '.' OR value = '. ' OR value = NULL)"
+        
     logging.debug( "sql_query 4: %s" % sql_query )
     
     if sql[ "internal" ]:
@@ -1310,7 +1320,10 @@ def aggregate_year( qinput, add_subclasses ):
         sql_query += " AND (%s) " % sql[ "internal" ]
         logging.debug( "sql_query 5: %s" % sql_query )
     
-    sql[ "group_by" ] = " GROUP BY value_unit, ter_code"
+    sql[ "group_by" ] = " GROUP BY value_unit"
+    
+    if not "ter_code" in known_fields: 
+        sql[ "group_by" ] += ", ter_code"
     
     for field in known_fields:
         sql[ "group_by" ] += ", %s" % field
@@ -1404,7 +1417,7 @@ def execute_year( sql_query, eng_data ):
 
 
 
-def reorder_entries( params, entry_list_ntc, entry_list = None ):
+def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None ):
     logging.debug( "reorder_entries()" )
     # params params.keys() = [ "language", "classification", "datatype", "base_year", "ter_codes" ]
     # no "ter_codes" for modern classification in params, get from entries
@@ -1504,12 +1517,15 @@ def reorder_entries( params, entry_list_ntc, entry_list = None ):
     sql_delete = None
     sql_create = ""
     
-    # TEMP TABLE: Both table definition and data are visible to the current session only 
+    # TEMP TABLE: Both table definition and data are visible to the current TCP session only 
     table_name = "temp_aggregate"
     if use_temp_table:
         sql_create  = "CREATE TEMP TABLE %s (" % table_name 
     else:
-        sql_delete = "DROP TABLE %s" % table_name 
+        try:
+            sql_delete = "DROP TABLE %s" % table_name 
+        except:
+            pass
         sql_create = "CREATE TABLE %s (" % table_name 
     
     for column in range( 1, nlevels_use + 1 ):
@@ -1533,12 +1549,25 @@ def reorder_entries( params, entry_list_ntc, entry_list = None ):
     logging.debug( "sql_create: %s" % sql_create )
     
     if sql_delete:
-        cursor.execute( sql_delete )
+        try:
+            cursor.execute( sql_delete )
+        except:
+            pass
     cursor.execute( sql_create )
     
     # fill table
+    # value strings for empty and combined fields
+    value_na   = ""
+    value_none = ""
+    if language.upper() == "EN":
+        value_na   = "na"
+        value_none = "cannot aggregate at this level"
+    elif language.upper() == "RU":
+        value_na   = "нет данных"
+        value_none = "агрегация на этом уровне невозможна"
+    
     for p, path in enumerate( path_list_ntc ):
-        logging.debug( "%d-of-%d path: %s" % ( p, len( path_list_ntc ), path ) )
+        logging.debug( "%d-of-%d path: %s" % ( p+1, len( path_list_ntc ), path ) )
         columns = []
         values  = []
         for k, key in enumerate( path ):
@@ -1549,22 +1578,25 @@ def reorder_entries( params, entry_list_ntc, entry_list = None ):
         ncounts = 0
         for ter_code in ter_codes:
             logging.debug( "ter_code: %s" % ter_code )
-            # value string for empty fields (no number provided)
-            value = ""
-            if language.upper() == "EN":
-                value = "NA"
-            elif language.upper() == "RU":
-                value = "нет данных"
+            value = value_na
             
             # search for path + ter_code in list with counts
             for entry in entry_list_cnt:
-                logging.debug( "entry: %s" % entry )
+                #logging.debug( "entry: %s" % entry )
                 if path == entry[ "path" ] and ter_code == entry[ "ter_code" ]:
                     ncounts += 1
                     total = entry[ "total" ]        # double from aggregate sql query
+                    logging.debug( "ncounts: %d, total: %s, ter_code: %s, path: %s" % ( ncounts, total, ter_code, path ) )
                     if round( total ) == total:     # only 0's after .
                         total = int( total )        # suppress trailing .0...
                     value = total
+                    
+                    # check for presence in non-number list
+                    for entry_none in entry_list_none:
+                        logging.debug( "entry_none: %s" % entry_none )
+                        if path == entry_none[ "path" ] and ter_code == entry_none[ "ter_code" ]:
+                            value = value_none
+                            break
                     break
             
             columns.append( "tc_%s" % ter_code )
@@ -1590,7 +1622,9 @@ def reorder_entries( params, entry_list_ntc, entry_list = None ):
         logging.debug( sql_insert )
         
         cursor.execute(sql_insert, ( values ) )
+
     
+    # fetch sorted result
     order_by = ""
     #for l in range( 1, 1 + nlevels_ntc ):
     for l in range( 1, 1 + nlevels_use ):
@@ -1598,7 +1632,6 @@ def reorder_entries( params, entry_list_ntc, entry_list = None ):
             order_by += ','
         order_by += "%s%d" % ( level_prefix, l )
     
-    # fetch sorted result
     sql_query = "SELECT * FROM %s ORDER BY %s" % ( table_name, order_by )
     logging.debug( sql_query )
     cursor.execute( sql_query )
@@ -1987,7 +2020,6 @@ def aggregation():
     datatype = qinput.get( "datatype" )
     logging.debug( "language: %s, classification: %s, datatype: %s" % ( language, classification, datatype ) )
     
-    # strip [hist]class5 & 6 from path (no longer needed)
     path = qinput.get( "path" )
     path_stripped, add_subclasses = strip_subclasses( path )
     qinput[ "path" ] = path_stripped                    # replace
@@ -2016,13 +2048,18 @@ def aggregation():
         # - with ter_codes for the wanted regions
         qinput_ntc = copy.deepcopy( qinput )
         ter_codes = qinput_ntc.pop( "ter_code", None )
-        logging.error( "ter_code: %s" % ter_codes )
+        logging.info( "ter_code: %s" % ter_codes )
         
-        sql_query, eng_data = aggregate_year( qinput, add_subclasses )
+        value_numerical = True          # only numbers
+        sql_query, eng_data = aggregate_year( qinput, add_subclasses, value_numerical )
         entry_list = execute_year( sql_query, eng_data )
         
-        sql_query_ntc, eng_data_ntc = aggregate_year( qinput_ntc, add_subclasses )
+        sql_query_ntc, eng_data_ntc = aggregate_year( qinput_ntc, add_subclasses, value_numerical )
         entry_list_ntc = execute_year( sql_query_ntc, eng_data_ntc )
+        
+        value_numerical = False         # non-numbers
+        sql_query_none, eng_data_none = aggregate_year( qinput, add_subclasses, value_numerical )
+        entry_list_none = execute_year( sql_query_none, eng_data_none )
         
         params = {
             "language"       : language,
@@ -2031,7 +2068,7 @@ def aggregation():
             "base_year"      : base_year,
             "ter_codes"      : qinput.get( "ter_code", '' )
         }
-        entry_list_sorted = reorder_entries( params, entry_list_ntc, entry_list )
+        entry_list_sorted = reorder_entries( params, entry_list_ntc, entry_list_none, entry_list )
         
         #json_string, cache_except = json_cache( entry_list, language, "data", download_key, qinput )
         json_string, cache_except = json_cache( entry_list_sorted, language, "data", download_key, qinput )
@@ -2066,35 +2103,16 @@ def aggregation():
             qinput[ "base_year" ] = base_year
             params[ "base_year" ] = base_year
             
-            """
-            # Two queries for temp table in reorder_entries:
-            # - without ter_code (actually implies all ter_code's) for all wanted rows
-            # - with ter_code for the wanted regions
-            qinput_ntc = copy.deepcopy( qinput )
-            ter_codes = qinput_ntc.pop( "ter_code", None )
-            logging.error( "ter_code: %s" % ter_codes )
-            
-            sql_query1, eng_data1 = aggregate_year( qinput, add_subclasses )
-            entry_list1 = execute_year( sql_query1, eng_data1 )
-            
-            #logging.debug( "entry_list1 for %s: \n%s" % ( base_year, str( entry_list1 ) ) )
-            #entry_list.extend( entry_list1 )
-            
-            sql_query1_ntc, eng_data1 = aggregate_year( qinput_ntc, add_subclasses )
-            entry_list1_ntc = execute_year( sql_query1_ntc, eng_data1 )
-            
-            #logging.debug( "entry_list1_ntc for %s: \n%s" % ( base_year, str( entry_list1_ntc ) ) )
-            #entry_list.extend( entry_list1_ntc )
-            
-            entry_list_sorted1 = reorder_entries( params, entry_list1, entry_list1_ntc )
-            entry_list_sorted.extend( entry_list_sorted1 )
-            """
-            
             # no ter_code in qinput for modern
-            sql_query_ntc, eng_data_ntc = aggregate_year( qinput, add_subclasses )
+            value_numerical = True          # only numbers
+            sql_query_ntc, eng_data_ntc = aggregate_year( qinput, add_subclasses, value_numerical )
             entry_list_ntc = execute_year( sql_query_ntc, eng_data_ntc )
             
-            entry_list_sorted_year = reorder_entries( params, entry_list_ntc )
+            value_numerical = False         # non-numbers
+            sql_query_none, eng_data_none = aggregate_year( qinput, add_subclasses, value_numerical )
+            entry_list_none = execute_year( sql_query_none, eng_data_none )
+            
+            entry_list_sorted_year = reorder_entries( params, entry_list_ntc, entry_list_none )
             entry_list_sorted.extend( entry_list_sorted_year )
         
         #json_string, cache_except = json_cache( entry_list, language, "data", download_key, qinput )
