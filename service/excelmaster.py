@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # VT-07-Jul-2016 Latest change by VT
-# FL-11-Dec-2017 Latest change
+# FL-13-Dec-2017 Latest change
 
 import json
 import logging
@@ -385,6 +385,7 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         logging.debug( "# of itemchains in lex_lands: %d" % len( lex_lands ) )
         logging.debug( "lex_lands old: %s" % str( lex_lands ) )
         
+        ndatarows = 0
         nitemchain = 0
         for itemchain in lex_lands:
             logging.debug( "itemchain %d: %s, %s" % ( nitemchain, itemchain, type( itemchain ) ) )
@@ -561,8 +562,10 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                 cell.value = "%s/%d" % ( num_denom[ 0 ], num_regions )
             
             row += 1
-        
-        nrecords.append( row - 10 )   # number of data records for current sheet
+            if row > legend_offset:
+                ndatarows += 1
+                
+        nrecords.append( ndatarows )   # number of data records for current sheet
     
     logging.debug( "byear_counts: %s" % str( byear_counts ) )
     
