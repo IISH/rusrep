@@ -5,12 +5,12 @@ VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
-FL-11-Dec-2017 
+FL-13-Dec-2017 
 
 def get_configparser():
 def get_connection():
 def class_collector( keywords ):
-def strip_subclasses( path ):
+def single_double_levels( path ):
 def json_generator( sql_names, json_dataname, data ):
 def json_cache( entry_list, language, json_dataname, download_key, qinput = {} ):
 def collect_docs( qinput, download_dir, download_key ):
@@ -67,15 +67,14 @@ import datetime
 import json
 import logging
 import os
-
-# matplotlib needs tmp a dir
-os.environ[ "MPLCONFIGDIR" ] = "/tmp"
+os.environ[ "MPLCONFIGDIR" ] = "/tmp"   # matplotlib (used by pandas) needs tmp a dir
 import pandas as pd
 import random
 import re
 import shutil
 import simplejson
 import time
+import uuid
 import urllib
 import urllib2
 import psycopg2
@@ -87,7 +86,7 @@ from io import BytesIO
 from flask import Flask, jsonify, Response, request, send_from_directory, send_file, session
 from jsonmerge import merge
 from pymongo import MongoClient
-from rdflib import Graph, Literal, term
+#from rdflib import Graph, Literal, term
 from socket import gethostname
 from StringIO import StringIO
 from sys import exc_info
@@ -170,8 +169,8 @@ def class_collector( keywords ):
 
 
 
-def strip_subclasses( path ):
-    logging.debug( "strip_subclasses()" )
+def single_double_levels( path ):
+    logging.debug( "single_double_levels()" )
     """
     FL-28-Nov-2017
     path dict entries may have a subclasses:True parameter, meaning that in the 
@@ -184,9 +183,15 @@ def strip_subclasses( path ):
     on for the subclasses:True entries, and the other for the remaning entries. 
     And collecting both results in the temp table. 
     """
-    add_subclasses = False   # becomes True if subclasses were removed from path
-    path_stripped = []
+    
     logging.debug( "path: (%s) %s" % ( type( path ), str( path ) ) )
+    
+    path_stripped = []      # "subclasses" param stripped
+    path_single   = []      # single  checkbox path elements (query not extended)
+    path_double   = []      # dounble checkbox path elements (query to be extended)
+    
+    add_subclasses = False   # becomes True if subclasses were removed from path_double
+    
     for old_entry in path:
         logging.debug( "old entry: %s" % old_entry )
         stripped_entry = copy.deepcopy( old_entry )
@@ -194,6 +199,7 @@ def strip_subclasses( path ):
         for k in old_entry:
             v = old_entry[ k ]
             #logging.debug( "k: %s, v: %s" % ( k, v ) )
+            
             if k == "subclasses" and v:     # True
                 del stripped_entry[ k ]
                 add_subclasses = True
@@ -207,14 +213,19 @@ def strip_subclasses( path ):
             
         logging.debug( "new entry: %s" % stripped_entry )
         path_stripped.append( stripped_entry )
+        if add_subclasses:
+            path_double.append( old_entry )
+        else:
+            path_single.append( old_entry )
+            
     logging.debug( "new path: (%s) %s" % ( type( path_stripped ), str( path_stripped ) ) )
     
-    return path_stripped, add_subclasses
+    return add_subclasses, path_stripped, path_single, path_double
 
 
 
 def json_generator( sql_names, json_dataname, data ):
-    logging.debug( "json_generator() json_dataname: %s, # of data items: %d" % ( json_dataname, len( data ) ) )
+    logging.info( "json_generator() json_dataname: %s, # of data items: %d" % ( json_dataname, len( data ) ) )
     logging.debug( "data: %s" % data )
     
     classification = "unknown"
@@ -237,13 +248,17 @@ def json_generator( sql_names, json_dataname, data ):
         base_year      = qinput.get( "base_year" )
         
         path_list = qinput.get( "path" )
-        path_list, add_subclasses = strip_subclasses( path_list )
+        add_subclasses, path_stripped, path_single, path_double = single_double_levels( path_list )
         
         logging.debug( "classification : %s" % classification )
         logging.debug( "language       : %s" % language )
         logging.debug( "datatype       : %s" % datatype )
         logging.debug( "base_year      : %s" % base_year )
-        logging.debug( "path_list      : %s" % path_list )
+        
+        logging.debug( "(%d) path_list     : %s" % ( len( path_list ),     path_list ) )
+        logging.debug( "(%d) path_stripped : %s" % ( len( path_stripped ), path_stripped ) )
+        logging.debug( "(%d) path_single   : %s" % ( len( path_single ),   path_single ) )
+        logging.debug( "(%d) path_double   : %s" % ( len( path_double ),   path_double ) )
     except:
         pass
 
@@ -347,7 +362,7 @@ def json_generator( sql_names, json_dataname, data ):
 
 def json_cache( entry_list, language, json_dataname, download_key, qinput = {} ):
     # cache entry_list in mongodb with download_key as key
-    logging.debug( "json_cache() # entries in list: %d" %  len( entry_list ) )
+    logging.info( "json_cache() # entries in list: %d" %  len( entry_list ) )
     
     configparser = get_configparser()
     root = configparser.get( "config", "root" )
@@ -392,7 +407,7 @@ def json_cache( entry_list, language, json_dataname, download_key, qinput = {} )
 
 def collect_docs( qinput, download_dir, download_key ):
     # collect the accompanying docs in the download dir
-    logging.debug( "collect_docs() %s" % download_key )
+    logging.info( "collect_docs() %s" % download_key )
     
     for key in qinput:
         logging.debug( "key: %s, value: %s" % ( key, qinput[ key ] ) )
@@ -1244,7 +1259,8 @@ def aggregate_year( qinput, add_subclasses, value_numerical ):
                             value = eng_data[ value ]
                             logging.debug( "xkey: %s, value: %s" % ( xkey, value ) )
                         else:
-                            logging.error( "not found: value: %s" % value )
+                            logging.debug( "not found: value: %s" % value )
+                            #logging.warning( "not found: value: %s" % value )
                             
                         sql_local[ xkey ] = "(%s='%s' OR %s='. '), " % ( xkey, value, xkey )
                         
@@ -1380,7 +1396,7 @@ def execute_year( sql_query, eng_data ):
         cursor.execute( sql_query )
         logging.debug( "query execute stop: %s" % datetime.datetime.now() )
         str_elapsed = format_secs( time() - time0 )
-        logging.info( "sql_query execute took %s" % str_elapsed )
+        logging.info( "execute_year() sql_query execute took %s" % str_elapsed )
         
         sql_names = [ desc[ 0 ] for desc in cursor.description ]
         logging.debug( "%d sql_names:" % len( sql_names ) )
@@ -1418,22 +1434,17 @@ def execute_year( sql_query, eng_data ):
 
 
 def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None ):
-    logging.debug( "reorder_entries()" )
+    logging.info( "reorder_entries()" )
     # params params.keys() = [ "language", "classification", "datatype", "base_year", "ter_codes" ]
     # no "ter_codes" for modern classification in params, get from entries
     # for modern, reorder_entries is called separate for each base_year
     
-    """
-    session_id = uuid.uuid4()
-    session_id = session[ "user_id" ]
-    logging.debug( "session_id: %s" % session_id )
-    """
-    
+    time0 = time()      # seconds since the epoch
     language  = params.get( "language" )
     classification = params.get( "classification" )
     
     nlevels_use = 0
-    level_prefix = ''           # "histclass" or "class"
+    #level_prefix = ''           # "histclass" or "class"
     unit = '?'                  # unit string
     entry_list_asked = []       # entries requested
     entry_list_cnt = []         # entries with counts
@@ -1499,21 +1510,23 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
             path_list_ntc.append( path )
             nlevels_ntc = max( nlevels_ntc, len( path.keys() ) )
         
-    logging.debug( "# of levels_ntc: %d" % nlevels_ntc )
+    logging.info( "# of levels_ntc: %d" % nlevels_ntc )
     nlevels_use = max( nlevels_use, nlevels_ntc )
-    logging.debug( "# of levels used: %d" % nlevels_use )
+    logging.info( "# of levels used: %d" % nlevels_use )
     
-    logging.debug( "# of unique records in path_list_ntc result: %d" % len( path_list_ntc ) )
-    logging.debug( "# of records in path result with count: %d" % len( entry_list_cnt ) )
+    logging.info( "# of unique records in path_list_ntc result: %d" % len( path_list_ntc ) )
+    logging.info( "# of records in path result with count: %d" % len( entry_list_cnt ) )
     
     nregions  = len( ter_codes )
-    logging.debug( "# of regions requested: %d" % nregions )
+    logging.info( "# of regions requested: %d" % nregions )
     
     
     connection = get_connection()
     cursor = connection.cursor( cursor_factory = psycopg2.extras.DictCursor )
     
-    use_temp_table = False
+    use_temp_table = True   # on production server
+    #use_temp_table = False
+    
     sql_delete = None
     sql_create = ""
     
@@ -1522,10 +1535,7 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
     if use_temp_table:
         sql_create  = "CREATE TEMP TABLE %s (" % table_name 
     else:
-        try:
-            sql_delete = "DROP TABLE %s" % table_name 
-        except:
-            pass
+        sql_delete = "DROP TABLE %s;" % table_name 
         sql_create = "CREATE TABLE %s (" % table_name 
     
     for column in range( 1, nlevels_use + 1 ):
@@ -1542,18 +1552,19 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
     
     # on production server: use DROP
     if use_temp_table:
-        #sql_create += "ON COMMIT PRESERVE ROWS;"     # default
-        #sql_create += "ON COMMIT DELETE ROWS"       # delete all rows
-        sql_create += "ON COMMIT DROP"              # drop table
+        #sql_create += " ON COMMIT PRESERVE ROWS"    # Default, No special action is taken at the ends of transactions
+        #sql_create += " ON COMMIT DELETE ROWS"      # All rows in the temporary table will be deleted at the end of each transaction block
+        sql_create += " ON COMMIT DROP"             # The temporary table will be dropped at the end of the current transaction block
+    sql_create += ";" 
+        
+    logging.info( "sql_create: %s" % sql_create )
     
-    logging.debug( "sql_create: %s" % sql_create )
-    
-    if sql_delete:
-        try:
-            cursor.execute( sql_delete )
-        except:
-            pass
-    cursor.execute( sql_create )
+    try:
+        cursor.execute( sql_create )
+    except:
+        logging.error( "creating temp table %s failed:" % table_name )
+        type_, value, tb = sys.exc_info()
+        logging.error( "%s" % value )
     
     # fill table
     # value strings for empty and combined fields
@@ -1566,12 +1577,12 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
         value_na   = "нет данных"
         value_none = "агрегация на этом уровне невозможна"
     
+    num_path = len( path_list_ntc )
     for p, path in enumerate( path_list_ntc ):
-        logging.debug( "%d-of-%d path: %s" % ( p+1, len( path_list_ntc ), path ) )
+        logging.debug( "%d-of-%d path: %s" % ( p+1, num_path, path ) )
         columns = []
         values  = []
-        for k, key in enumerate( path ):
-            value = path[ key ]
+        for key, value in path.items():
             columns.append( key )
             values .append( value )
         
@@ -1618,13 +1629,13 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
         fmt = "%s," * len ( columns )
         fmt = fmt[ :-1 ]    #  remove trailing comma
         columns_str = ','.join( columns )
-        sql_insert = "INSERT INTO %s (%s) VALUES ( %s )" % ( table_name, columns_str, fmt )
+        sql_insert = "INSERT INTO %s (%s) VALUES ( %s );" % ( table_name, columns_str, fmt )
         logging.debug( sql_insert )
         
-        cursor.execute(sql_insert, ( values ) )
+        cursor.execute( sql_insert, ( values ) )
 
     
-    # fetch sorted result
+    # fetch result sorted
     order_by = ""
     #for l in range( 1, 1 + nlevels_ntc ):
     for l in range( 1, 1 + nlevels_use ):
@@ -1632,12 +1643,20 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
             order_by += ','
         order_by += "%s%d" % ( level_prefix, l )
     
-    sql_query = "SELECT * FROM %s ORDER BY %s" % ( table_name, order_by )
-    logging.debug( sql_query )
+    sql_query = "SELECT * FROM %s ORDER BY %s;" % ( table_name, order_by )
+    logging.info( sql_query )
     cursor.execute( sql_query )
     sql_resp = cursor.fetchall()
     sql_names = [ desc[ 0 ] for desc in cursor.description ]
     logging.debug( "%d sql_names: \n%s" % ( len( sql_names ), sql_names ) )
+    
+    if sql_delete:
+        try:
+            cursor.execute( sql_delete )
+        except:
+            logging.error( "deleting temp table %s failed:" % table_name )
+            type_, value, tb = sys.exc_info()
+            logging.error( "%s" % value )
     
     connection.commit()
     cursor.close()
@@ -1679,6 +1698,9 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
             entry_list_sorted.append( new_entry )
     
     logging.debug( "%d entries in list_sorted: \n%s" % ( len( entry_list_sorted ), entry_list_sorted ) )
+    str_elapsed = format_secs( time() - time0 )
+    logging.info( "reordering entries took %s" % str_elapsed )
+    
     return entry_list_sorted
 
 
@@ -2001,7 +2023,7 @@ def indicators():
 # Aggregation - Preview User selection post and gets data to build preview in GUI step 5 
 @app.route( "/aggregation", methods = ["POST", "GET" ] )
 def aggregation():
-    logging.debug( "/aggregation" )
+    logging.info( "/aggregation" )
     logging.debug( request.data )
     
     time0 = time()      # seconds since the epoch
@@ -2021,14 +2043,22 @@ def aggregation():
     logging.debug( "language: %s, classification: %s, datatype: %s" % ( language, classification, datatype ) )
     
     path = qinput.get( "path" )
-    path_stripped, add_subclasses = strip_subclasses( path )
+    add_subclasses, path_stripped, path_single, path_double = single_double_levels( path )
+    logging.debug( "(%d) path          : %s" % ( len( path ),          path ) )
+    logging.debug( "(%d) path_stripped : %s" % ( len( path_stripped ), path_stripped ) )
+    logging.debug( "(%d) path_single   : %s" % ( len( path_single ),   path_single ) )
+    logging.debug( "(%d) path_double   : %s" % ( len( path_double ),   path_double ) )
+    
     qinput[ "path" ] = path_stripped                    # replace
     
-    download_key = str( "%05.8f" % random.random() )    # used as base name for zip download
+    #download_key = str( "%05.8f" % random.random() )    # used as base name for zip download
+    download_key = str( uuid.uuid4() )
+    
     # put some additional info in the key
     base_year = qinput.get( "base_year" )
     if base_year is None or base_year == "":
         base_year = "0000"
+    
     download_key = "%s-%s-%s-%s-%s" % ( language, classification[ 0 ], datatype, base_year, download_key[ 2: ] )
     logging.debug( "download_key: %s" % download_key )
     
@@ -2099,7 +2129,7 @@ def aggregation():
         # loop over base_years, and accumulate results.
         base_years = [ "1795", "1858", "1897", "1959", "2002" ]
         for base_year in base_years:
-            logging.debug( "base_year: %s" % base_year )
+            logging.info( "base_year: %s" % base_year )
             qinput[ "base_year" ] = base_year
             params[ "base_year" ] = base_year
             
