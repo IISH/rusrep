@@ -5,13 +5,13 @@ VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
-FL-13-Dec-2017 
+FL-18-Dec-2017 
 
 def get_configparser():
 def get_connection():
 def class_collector( keywords ):
 def single_double_levels( path ):
-def json_generator( sql_names, json_dataname, data ):
+def json_generator( qinput, sql_names, json_dataname, data ):
 def json_cache( entry_list, language, json_dataname, download_key, qinput = {} ):
 def collect_docs( qinput, download_dir, download_key ):
 def translate_vocabulary( vocab_filter, classification = None ):
@@ -19,17 +19,17 @@ def load_years( cursor, datatype ):
 def sqlfilter( sql ):
 def sqlconstructor( sql ):
 def topic_counts():
-def load_topics():
+#def load_topics( qinput ):
 def dataset_filter( data, sql_names, classification ):
 def zap_empty_classes( item ):
 def translate_item( item, eng_data ):
 def load_vocabulary( vocab_type ):
 def get_sql_where( name, value ):
 def loadjson( json_dataurl ):
-def filecat_subtopic( cursor, datatype, base_year ):
+def filecat_subtopic( qinput, cursor, datatype, base_year ):
 def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
-def aggregate_year( qinput, add_subclasses ):
-def execute_year( sql_query, eng_data )
+def aggregate_year( qinput, add_subclasses, value_numerical ):
+def execute_year( qinput, sql_query, eng_data )
 def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None)
 def cleanup_downloads( download_dir, time_limit ):
 def format_secs( seconds ):
@@ -224,7 +224,7 @@ def single_double_levels( path ):
 
 
 
-def json_generator( sql_names, json_dataname, data ):
+def json_generator( qinput, sql_names, json_dataname, data ):
     logging.info( "json_generator() json_dataname: %s, # of data items: %d" % ( json_dataname, len( data ) ) )
     logging.debug( "data: %s" % data )
     
@@ -236,7 +236,6 @@ def json_generator( sql_names, json_dataname, data ):
     path_list      = []
     
     try:
-        qinput = json.loads( request.data )
         logging.debug( "# of keys: %d" % len( qinput ) )
         for k in qinput:
             logging.debug( "k: %s, v: %s" % ( k, qinput[ k ] ) )
@@ -677,8 +676,8 @@ def topic_counts( schema ):
     return all_cnt_dict
 
 
-
-def load_topics():
+"""
+def load_topics( qinput ):
     logging.debug( "load_topics()" )
     
     #schema = "datasets"
@@ -700,7 +699,8 @@ def load_topics():
     cursor.close()
     connection.close()
     
-    entry_list_in = json_generator( sql_names, "data", sql_resp )
+    entry_list_in = json_generator( qinput, sql_names, "data", sql_resp )
+    
     entry_list_out = []
     for topic_dict in entry_list_in:
         logging.debug( topic_dict )
@@ -709,7 +709,7 @@ def load_topics():
         entry_list_out.append(topic_dict )
     
     return entry_list_out
-
+"""
 
 
 def dataset_filter( data, sql_names, classification ):
@@ -995,7 +995,8 @@ def loadjson( json_dataurl ):
     return dataframe
 
 
-def filecat_subtopic( cursor, datatype, base_year ):
+"""
+def filecat_subtopic( qinput, cursor, datatype, base_year ):
     logging.debug( "filecatalog_subtopic()" )
     
     query  = "SELECT * FROM russianrepository"
@@ -1006,11 +1007,11 @@ def filecat_subtopic( cursor, datatype, base_year ):
     sql_resp = cursor.fetchall()
     sql_names = [ desc[ 0 ] for desc in cursor.description ]
     
-    entry_list = json_generator( sql_names, "data", sql_resp )
+    entry_list = json_generator( qinput, sql_names, "data", sql_resp )
     logging.debug( entry_list )
     
     return entry_list
-
+"""
 
 
 def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
@@ -1153,7 +1154,7 @@ def aggregate_year( qinput, add_subclasses, value_numerical ):
     try:
         language = qinput.get( "language" )
         
-        logging.debug( "number of keys in request.data: %d" % len( qinput ) )
+        logging.debug( "number of keys in qinput: %d" % len( qinput ) )
         k = 0
         for key in qinput:
             value = qinput[ key ]
@@ -1171,7 +1172,7 @@ def aggregate_year( qinput, add_subclasses, value_numerical ):
             k += 1
     except:
         type_, value, tb = exc_info()
-        logging.error( "failed, no request.data: %s" % value )
+        logging.error( "aggregate_year failed: %s" % value )
         msg = "failed: %s" % value
         return str( { "msg": "%s" % msg } )
     
@@ -1382,7 +1383,7 @@ def aggregate_year( qinput, add_subclasses, value_numerical ):
 
 
 
-def execute_year( sql_query, eng_data ):
+def execute_year( qinput, sql_query, eng_data ):
     logging.debug( "execute_year()" )
     
     entry_list = []
@@ -1427,7 +1428,7 @@ def execute_year( sql_query, eng_data ):
             
             final_data.append( final_item )
         
-        entry_list = json_generator( sql_names, "data", final_data )
+        entry_list = json_generator( qinput, sql_names, "data", final_data )
         
     return entry_list
 
@@ -1445,7 +1446,7 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
     
     nlevels_use = 0
     #level_prefix = ''           # "histclass" or "class"
-    unit = '?'                  # unit string
+    #unit = '?'                  # unit string; may vary, no longer global unit string
     entry_list_asked = []       # entries requested
     entry_list_cnt = []         # entries with counts
     ter_codes = []              # region codes
@@ -1484,9 +1485,9 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
                 path_list.append( path )
                 nlevels = max( nlevels, len( path.keys() ) )
             
-            value_unit = entry[ "value_unit" ]
-            if len( value_unit ) > 0:
-                unit = value_unit
+            #value_unit = entry[ "value_unit" ]
+            #if len( value_unit ) > 0:
+            #    unit = value_unit
             
             total_str = entry[ "total" ]
             try:
@@ -1587,6 +1588,7 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
             values .append( value )
         
         ncounts = 0
+        unit = '?'
         for ter_code in ter_codes:
             logging.debug( "ter_code: %s" % ter_code )
             value = value_na
@@ -1601,6 +1603,8 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
                     if round( total ) == total:     # only 0's after .
                         total = int( total )        # suppress trailing .0...
                     value = total
+                    
+                    unit = entry[ "value_unit" ]
                     
                     # check for presence in non-number list
                     for entry_none in entry_list_none:
@@ -1630,7 +1634,7 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
         fmt = fmt[ :-1 ]    #  remove trailing comma
         columns_str = ','.join( columns )
         sql_insert = "INSERT INTO %s (%s) VALUES ( %s );" % ( table_name, columns_str, fmt )
-        logging.debug( sql_insert )
+        logging.info( "%d: %s" % ( p, sql_insert ) )
         
         cursor.execute( sql_insert, ( values ) )
 
@@ -1971,7 +1975,8 @@ def classes():
 @app.route( "/indicators", methods = [ "POST", "GET" ] )
 def indicators():
     logging.debug( "indicators()" )
-
+    qinput = simplejson.loads( request.data )
+    
     connection = get_connection()
     cursor = connection.cursor()
     
@@ -2007,7 +2012,7 @@ def indicators():
         final_data.append( final_item )
         logging.debug( str( final_data ) )
     
-    entry_list = json_generator( sql_names, "data", final_data )
+    entry_list = json_generator( qinput, sql_names, "data", final_data )
     
     language = request.args.get( "language" )
     download_key = request.args.get( "download_key" )
@@ -2024,18 +2029,11 @@ def indicators():
 @app.route( "/aggregation", methods = ["POST", "GET" ] )
 def aggregation():
     logging.info( "/aggregation" )
-    logging.debug( request.data )
+    qinput = simplejson.loads( request.data )
+    logging.debug( qinput )
     
     time0 = time()      # seconds since the epoch
     logging.debug( "start: %s" % datetime.datetime.now() )
-    
-    try:
-        qinput = simplejson.loads( request.data )
-        logging.debug( qinput )
-    except:
-        type_, value, tb = exc_info()
-        msg = "failed: %s" % value
-        return str( { "msg": "%s" % msg } )
     
     language = qinput.get( "language" )
     classification = qinput.get( "classification" )
@@ -2044,12 +2042,13 @@ def aggregation():
     
     path = qinput.get( "path" )
     add_subclasses, path_stripped, path_single, path_double = single_double_levels( path )
+    del qinput[ "path" ]
+    qinput[ "path" ] = path_stripped                    # replace
+    
     logging.debug( "(%d) path          : %s" % ( len( path ),          path ) )
     logging.debug( "(%d) path_stripped : %s" % ( len( path_stripped ), path_stripped ) )
     logging.debug( "(%d) path_single   : %s" % ( len( path_single ),   path_single ) )
     logging.debug( "(%d) path_double   : %s" % ( len( path_double ),   path_double ) )
-    
-    qinput[ "path" ] = path_stripped                    # replace
     
     #download_key = str( "%05.8f" % random.random() )    # used as base name for zip download
     download_key = str( uuid.uuid4() )
@@ -2082,14 +2081,14 @@ def aggregation():
         
         value_numerical = True          # only numbers
         sql_query, eng_data = aggregate_year( qinput, add_subclasses, value_numerical )
-        entry_list = execute_year( sql_query, eng_data )
+        entry_list = execute_year( qinput, sql_query, eng_data )
         
         sql_query_ntc, eng_data_ntc = aggregate_year( qinput_ntc, add_subclasses, value_numerical )
-        entry_list_ntc = execute_year( sql_query_ntc, eng_data_ntc )
+        entry_list_ntc = execute_year( qinput, sql_query_ntc, eng_data_ntc )
         
         value_numerical = False         # non-numbers
         sql_query_none, eng_data_none = aggregate_year( qinput, add_subclasses, value_numerical )
-        entry_list_none = execute_year( sql_query_none, eng_data_none )
+        entry_list_none = execute_year( qinput, sql_query_none, eng_data_none )
         
         params = {
             "language"       : language,
@@ -2136,11 +2135,11 @@ def aggregation():
             # no ter_code in qinput for modern
             value_numerical = True          # only numbers
             sql_query_ntc, eng_data_ntc = aggregate_year( qinput, add_subclasses, value_numerical )
-            entry_list_ntc = execute_year( sql_query_ntc, eng_data_ntc )
+            entry_list_ntc = execute_year( qinput, sql_query_ntc, eng_data_ntc )
             
             value_numerical = False         # non-numbers
             sql_query_none, eng_data_none = aggregate_year( qinput, add_subclasses, value_numerical )
-            entry_list_none = execute_year( sql_query_none, eng_data_none )
+            entry_list_none = execute_year( qinput, sql_query_none, eng_data_none )
             
             entry_list_sorted_year = reorder_entries( params, entry_list_ntc, entry_list_none )
             entry_list_sorted.extend( entry_list_sorted_year )
@@ -2266,9 +2265,9 @@ def filecatalogdata():
         logging.debug( "csv_filename: %s" % csv_filename )
         csv_pathname = os.path.join( csv_dir, csv_filename )
         logging.debug( "csv_pathname: %s" % csv_pathname )
-
+        
         # process csv file
-        to_xlsx = True
+        to_xlsx = False
         process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx )
         
         if to_xlsx:
@@ -2308,10 +2307,6 @@ def filecatalogget():
     zip_pathname = os.path.join( top_download_dir, zip_filename )
     logging.debug( "zip_pathname: %s" % zip_pathname )
 
-    #json_string = str( {} )
-    #return Response( json_string, mimetype = "application/json; charset=utf-8" )
-
-    #return send_file( zip_pathname )
     return send_file( zip_pathname, attachment_filename = zip_filename, as_attachment = True )
 
 
