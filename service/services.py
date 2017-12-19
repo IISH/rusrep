@@ -5,7 +5,7 @@ VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
-FL-18-Dec-2017 
+FL-19-Dec-2017 
 
 def get_configparser():
 def get_connection():
@@ -2267,7 +2267,7 @@ def filecatalogdata():
         logging.debug( "csv_pathname: %s" % csv_pathname )
         
         # process csv file
-        to_xlsx = False
+        to_xlsx = True
         process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx )
         
         if to_xlsx:
