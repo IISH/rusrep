@@ -11,6 +11,7 @@ def get_configparser():
 def get_connection():
 def class_collector( keywords ):
 def single_double_levels( path ):
+def path_levels = group_levels( path ):
 def json_generator( qinput, sql_names, json_dataname, data ):
 def json_cache( entry_list, language, json_dataname, download_key, qinput = {} ):
 def collect_docs( qinput, download_dir, download_key ):
@@ -221,6 +222,56 @@ def single_double_levels( path ):
     logging.debug( "new path: (%s) %s" % ( type( path_stripped ), str( path_stripped ) ) )
     
     return add_subclasses, path_stripped, path_single, path_double
+
+
+
+def group_levels( path_list ):
+    logging.debug( "group_levels()" )
+    """
+    Split the path into groups of the same 'length': 
+    Level 1, Level 1+2, Level 1+2+3, ...
+    """
+    
+    path_list1 = []
+    path_list2 = []
+    path_list3 = []
+    path_list4 = []
+    path_list5 = []
+    
+    for path in path_list:
+        keys = path.keys()
+        nkeys = len( path.keys() )
+        
+        subclasses = False
+        if "subclasses" in keys:
+            subclasses = True
+            del path[ "subclasses" ]
+        
+        if nkeys == 1:
+            path_list1.append( path )
+        elif nkeys == 2:
+            path_list2.append( path )
+        elif nkeys == 3:
+            path_list3.append( path )
+        elif nkeys == 4:
+            path_list4.append( path )
+        elif nkeys == 5:    # now 4, subclasses has been dropped
+            path_list5.append( path )
+            
+    
+    path_lists = []
+    if len( path_list1 ) > 0:
+        path_lists.append( { "nkeys" : 1, "subclasses" : False,  "path_list" : path_list1 } )
+    if len( path_list2 ) > 0:
+        path_lists.append( { "nkeys" : 2, "subclasses" : False,  "path_list" : path_list2 } )
+    if len( path_list3 ) > 0:
+        path_lists.append( { "nkeys" : 3, "subclasses" : False,  "path_list" : path_list3 } )
+    if len( path_list4 ) > 0:
+        path_lists.append( { "nkeys" : 4, "subclasses" : False,  "path_list" : path_list4 } )
+    if len( path_list5 ) > 0:
+        path_lists.append( { "nkeys" : 5, "subclasses" : False,  "path_list" : path_list5 } )
+    
+    return path_lists 
 
 
 
@@ -1446,7 +1497,7 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
     
     nlevels_use = 0
     #level_prefix = ''           # "histclass" or "class"
-    #unit = '?'                  # unit string; may vary, no longer global unit string
+    #unit = '?'                  # unit string; but may vary
     entry_list_asked = []       # entries requested
     entry_list_cnt = []         # entries with counts
     ter_codes = []              # region codes
@@ -1460,8 +1511,8 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
                 ter_codes.append( ter_code )
             
             value_unit = entry[ "value_unit" ]
-            if len( value_unit ) > 0:
-                unit = value_unit
+            #if len( value_unit ) > 0:
+            #    unit = value_unit
             
             total_str = entry[ "total" ]
             try:
@@ -1470,10 +1521,11 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
             except:
                 pass
             
-    else:
+    else:       # historical
         level_prefix = "histclass"
         nlevels = 0
-        path_list = []
+        #path_list = []          # lists of unique paths
+        path_unit_list = []     # lists of unique (paths + value_unit)
         ter_codes = params.get( "ter_codes" )       # ter_codes provided
         
         # only "historical" has entry_list
@@ -1481,13 +1533,19 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
         for entry in entry_list:
             logging.debug( "entry: %s" % entry )
             path = entry[ "path" ]
-            if path not in path_list:
-                path_list.append( path )
-                nlevels = max( nlevels, len( path.keys() ) )
             
-            #value_unit = entry[ "value_unit" ]
+            #if path not in path_list:
+            #    path_list.append( path )
+            #    nlevels = max( nlevels, len( path.keys() ) )
+            
+            value_unit = entry[ "value_unit" ]
             #if len( value_unit ) > 0:
             #    unit = value_unit
+            
+            path_unit = { "path" : path, "value_unit" : value_unit }
+            if path_unit not in path_unit_list:
+                path_unit_list.append( path_unit )
+                nlevels = max( nlevels, len( path.keys() ) )
             
             total_str = entry[ "total" ]
             try:
@@ -1501,32 +1559,45 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
     
     # both "historical" and "modern" have entry_list_ntc
     nlevels_ntc = 0
-    path_list_ntc = []
+    #path_list_ntc = []          # lists of unique paths
+    path_unit_list_ntc = []     # lists of unique (paths + value_unit)
     logging.debug( "# of entries in entry_list_ntc: %d" % len( entry_list_ntc ) )
     
     for entry in entry_list_ntc:
         logging.debug( "entry: %s" % entry )
         path = entry[ "path" ]
-        if path not in path_list_ntc:
-            path_list_ntc.append( path )
-            nlevels_ntc = max( nlevels_ntc, len( path.keys() ) )
         
+        #if path not in path_list_ntc:
+        #    path_list_ntc.append( path )
+        #    nlevels_ntc = max( nlevels_ntc, len( path.keys() ) )
+        
+        value_unit = entry[ "value_unit" ]
+        path_unit = { "path" : path, "value_unit" : value_unit }
+        if path_unit not in path_unit_list_ntc:
+            path_unit_list_ntc.append( path_unit )
+            nlevels_ntc = max( nlevels_ntc, len( path.keys() ) )
+    
     logging.info( "# of levels_ntc: %d" % nlevels_ntc )
-    nlevels_use = max( nlevels_use, nlevels_ntc )
+    
+    if classification == "modern":
+        nlevels_use = 10        # always use the max, don't care about possible empty columns
+    else:
+        nlevels_use = max( nlevels_use, nlevels_ntc )
     logging.info( "# of levels used: %d" % nlevels_use )
     
-    logging.info( "# of unique records in path_list_ntc result: %d" % len( path_list_ntc ) )
+    #logging.info( "# of unique records in path_list_ntc result: %d" % len( path_list_ntc ) )
+    logging.info( "# of unique records in path_unit_list_ntc result: %d" % len( path_unit_list_ntc ) )
     logging.info( "# of records in path result with count: %d" % len( entry_list_cnt ) )
     
-    nregions  = len( ter_codes )
+    nregions = len( ter_codes )
     logging.info( "# of regions requested: %d" % nregions )
     
     
     connection = get_connection()
     cursor = connection.cursor( cursor_factory = psycopg2.extras.DictCursor )
     
-    use_temp_table = True   # on production server
-    #use_temp_table = False
+    #use_temp_table = True   # on production server
+    use_temp_table = False
     
     sql_delete = None
     sql_create = ""
@@ -1542,7 +1613,7 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
     for column in range( 1, nlevels_use + 1 ):
         sql_create += "%s%d VARCHAR(1024)," % ( level_prefix, column )
     
-    sql_create += "unit VARCHAR(1024),"
+    sql_create += "value_unit VARCHAR(1024),"
     sql_create += "count VARCHAR(1024)"
     
     ntc = len( ter_codes )
@@ -1578,9 +1649,13 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
         value_na   = "нет данных"
         value_none = "агрегация на этом уровне невозможна"
     
-    num_path = len( path_list_ntc )
-    for p, path in enumerate( path_list_ntc ):
-        logging.debug( "%d-of-%d path: %s" % ( p+1, num_path, path ) )
+    #num_path = len( path_list_ntc )
+    #for p, path in enumerate( path_list_ntc ):
+    num_path = len( path_unit_list_ntc )
+    for pu, path_unit in enumerate( path_unit_list_ntc ):
+        path = path_unit[ "path" ]
+        value_unit = path_unit[ "value_unit" ]
+        logging.debug( "%d-of-%d unit: %s, path: %s" % ( pu+1, num_path, value_unit, path ) )
         columns = []
         values  = []
         for key, value in path.items():
@@ -1588,7 +1663,7 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
             values .append( value )
         
         ncounts = 0
-        unit = '?'
+        #unit = '?'
         for ter_code in ter_codes:
             logging.debug( "ter_code: %s" % ter_code )
             value = value_na
@@ -1596,20 +1671,19 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
             # search for path + ter_code in list with counts
             for entry in entry_list_cnt:
                 #logging.debug( "entry: %s" % entry )
-                if path == entry[ "path" ] and ter_code == entry[ "ter_code" ]:
+                if path == entry[ "path" ] and value_unit == entry[ "value_unit" ] and ter_code == entry[ "ter_code" ]:
                     ncounts += 1
                     total = entry[ "total" ]        # double from aggregate sql query
-                    logging.debug( "ncounts: %d, total: %s, ter_code: %s, path: %s" % ( ncounts, total, ter_code, path ) )
+                    logging.debug( "ncounts: %d, total: %s, value_unit: %s, ter_code: %s, path: %s" % ( ncounts, total, value_unit, ter_code, path ) )
                     if round( total ) == total:     # only 0's after .
                         total = int( total )        # suppress trailing .0...
                     value = total
-                    
-                    unit = entry[ "value_unit" ]
+                    #unit = entry[ "value_unit" ]
                     
                     # check for presence in non-number list
                     for entry_none in entry_list_none:
                         logging.debug( "entry_none: %s" % entry_none )
-                        if path == entry_none[ "path" ] and ter_code == entry_none[ "ter_code" ]:
+                        if path == entry_none[ "path" ] and value_unit == entry[ "value_unit" ] and ter_code == entry_none[ "ter_code" ]:
                             value = value_none
                             break
                     break
@@ -1620,8 +1694,8 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
         logging.debug( "columns: %s" % columns )
         logging.debug( "values:  %s" % values )
         
-        columns.append( "unit" )
-        values .append( unit )
+        columns.append( "value_unit" )
+        values .append( value_unit )
         
         columns.append( "count" )
         values .append( "%d/%d" % ( ncounts, nregions ) )
@@ -1634,7 +1708,7 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
         fmt = fmt[ :-1 ]    #  remove trailing comma
         columns_str = ','.join( columns )
         sql_insert = "INSERT INTO %s (%s) VALUES ( %s );" % ( table_name, columns_str, fmt )
-        logging.info( "%d: %s" % ( p, sql_insert ) )
+        logging.info( "%d: %s" % ( pu, sql_insert ) )
         
         cursor.execute( sql_insert, ( values ) )
 
@@ -1677,7 +1751,7 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
                 "datatype"   : params[ "datatype" ],
                 "base_year"  : params[ "base_year" ],
                 "ter_code"   : ter_code,
-                "value_unit" : unit,
+                #"value_unit" : unit,
                 "db_row"     : r
             }
             
@@ -1696,7 +1770,9 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
                 
                 if key == "count":
                     new_entry[ "count" ] = value
-            
+                if key == "value_unit":
+                    new_entry[ "value_unit" ] = value
+                
             new_entry[ "path" ] = path
             logging.debug( "new_entry: %s" % new_entry )
             entry_list_sorted.append( new_entry )
@@ -2042,6 +2118,7 @@ def aggregation():
     
     path = qinput.get( "path" )
     add_subclasses, path_stripped, path_single, path_double = single_double_levels( path )
+
     del qinput[ "path" ]
     qinput[ "path" ] = path_stripped                    # replace
     
@@ -2079,25 +2156,42 @@ def aggregation():
         ter_codes = qinput_ntc.pop( "ter_code", None )
         logging.info( "ter_code: %s" % ter_codes )
         
-        value_numerical = True          # only numbers
-        sql_query, eng_data = aggregate_year( qinput, add_subclasses, value_numerical )
-        entry_list = execute_year( qinput, sql_query, eng_data )
+        entry_list_sorted = []
         
-        sql_query_ntc, eng_data_ntc = aggregate_year( qinput_ntc, add_subclasses, value_numerical )
-        entry_list_ntc = execute_year( qinput, sql_query_ntc, eng_data_ntc )
-        
-        value_numerical = False         # non-numbers
-        sql_query_none, eng_data_none = aggregate_year( qinput, add_subclasses, value_numerical )
-        entry_list_none = execute_year( qinput, sql_query_none, eng_data_none )
-        
-        params = {
-            "language"       : language,
-            "classification" : classification,
-            "datatype"       : datatype,
-            "base_year"      : base_year,
-            "ter_codes"      : qinput.get( "ter_code", '' )
-        }
-        entry_list_sorted = reorder_entries( params, entry_list_ntc, entry_list_none, entry_list )
+        # split path in subgroups with the same key length
+        path_lists = group_levels( path )
+        logging.debug( "%d path_dicts in path_lists" % len( path_lists ) )
+        for pd, path_dict in enumerate( path_lists ):
+            nkeys = path_dict[ "nkeys" ]
+            add_subclasses = path_dict[ "subclasses" ]
+            path_list = path_dict[ "path_list" ]
+            logging.debug( "path_list %d-of-%d, nkeys: %s, subclasses: %s, levels: %d" % 
+                ( pd+1, len( path_lists ), nkeys, add_subclasses, len( path_list ) ) )
+            for p, path in enumerate( path_list ):
+                logging.debug( "path_dict %d-of-%d, path: %s" % ( p+1, len( path_list ), path ) )
+                
+            qinput[ "path" ] = path_list
+            value_numerical = True          # only numbers
+            sql_query, eng_data = aggregate_year( qinput, add_subclasses, value_numerical )
+            entry_list = execute_year( qinput, sql_query, eng_data )
+            
+            qinput_ntc[ "path" ] = path_list
+            sql_query_ntc, eng_data_ntc = aggregate_year( qinput_ntc, add_subclasses, value_numerical )
+            entry_list_ntc = execute_year( qinput, sql_query_ntc, eng_data_ntc )
+            
+            value_numerical = False         # non-numbers
+            sql_query_none, eng_data_none = aggregate_year( qinput, add_subclasses, value_numerical )
+            entry_list_none = execute_year( qinput, sql_query_none, eng_data_none )
+            
+            params = {
+                "language"       : language,
+                "classification" : classification,
+                "datatype"       : datatype,
+                "base_year"      : base_year,
+                "ter_codes"      : qinput.get( "ter_code", '' )
+            }
+            entry_list_sorted_levels = reorder_entries( params, entry_list_ntc, entry_list_none, entry_list )
+            entry_list_sorted.extend( entry_list_sorted_levels )
         
         #json_string, cache_except = json_cache( entry_list, language, "data", download_key, qinput )
         json_string, cache_except = json_cache( entry_list_sorted, language, "data", download_key, qinput )
