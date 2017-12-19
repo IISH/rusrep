@@ -18,7 +18,7 @@ FL-07-Jul-2017 sys.stderr.write() cannot write to cron.log as normal user
 FL-11-Jul-2017 pandas: do not parse numbers, but keep strings as they are
 FL-13-Aug-2017 Py2/Py3 cleanup
 FL-18-Dec-2017 Keep trailing input '\n' for header lines in translate_csv
-FL-18-Dec-2017 latest change
+FL-19-Dec-2017 latest change
 
 ToDo:
  - replace urllib by requests
@@ -1179,14 +1179,14 @@ def translate_csv( config_parser, handle_name ):
         
         not_found = set()
         nline = 0
-        for csv_line_raw in iter( file_rus ):
-            csv_line = csv_line_raw.strip()
+        for csv_line in iter( file_rus ):
+            csv_line = csv_line.strip()
             logging.debug( "csv_line: %s" % csv_line )
             eng_cols = []
             if nline == 0:
                 header = csv_line.split( '|' )
                 logging.debug( header )
-                file_eng.write( csv_line_raw )          # unchanged
+                file_eng.write( "%s\n" % csv_line )     # header is english, only data fields must be translated
             else:
                 rus_cols = csv_line.split( '|' )
                 ncolumns = len( rus_cols )
