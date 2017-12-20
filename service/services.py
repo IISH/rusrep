@@ -5,12 +5,12 @@ VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
-FL-19-Dec-2017 
+FL-20-Dec-2017 
 
 def get_configparser():
 def get_connection():
 def class_collector( keywords ):
-def single_double_levels( path ):
+def strip_subclasses( path ):
 def path_levels = group_levels( path ):
 def json_generator( qinput, sql_names, json_dataname, data ):
 def json_cache( entry_list, language, json_dataname, download_key, qinput = {} ):
@@ -170,28 +170,21 @@ def class_collector( keywords ):
 
 
 
-def single_double_levels( path ):
-    logging.debug( "single_double_levels()" )
+def strip_subclasses( path ):
+    logging.debug( "strip_subclasses()" )
     """
     FL-28-Nov-2017
     path dict entries may have a subclasses:True parameter, meaning that in the 
     GUI at level 4 the double checkbox was checked. If at least 1 entry with 
     subclasses:True is encountered, we return add_subclasses = True, otherwise 
     False. 
-    So mixing checkboxes at level 4 always has the effect that all ckecked 
-    boxes are taken be the double ones. In this way, a single SQL query suffices. 
-    Now that we use an intermediate temp table, we might as well use 2 queries: 
-    on for the subclasses:True entries, and the other for the remaning entries. 
-    And collecting both results in the temp table. 
     """
     
     logging.debug( "path: (%s) %s" % ( type( path ), str( path ) ) )
     
     path_stripped = []      # "subclasses" param stripped
-    path_single   = []      # single  checkbox path elements (query not extended)
-    path_double   = []      # dounble checkbox path elements (query to be extended)
     
-    add_subclasses = False   # becomes True if subclasses were removed from path_double
+    add_subclasses = False   # becomes True if subclasses were removed
     
     for old_entry in path:
         logging.debug( "old entry: %s" % old_entry )
@@ -214,14 +207,10 @@ def single_double_levels( path ):
             
         logging.debug( "new entry: %s" % stripped_entry )
         path_stripped.append( stripped_entry )
-        if add_subclasses:
-            path_double.append( old_entry )
-        else:
-            path_single.append( old_entry )
             
     logging.debug( "new path: (%s) %s" % ( type( path_stripped ), str( path_stripped ) ) )
     
-    return add_subclasses, path_stripped, path_single, path_double
+    return add_subclasses, path_stripped
 
 
 
@@ -269,14 +258,14 @@ def group_levels( path_list ):
     if len( path_list4 ) > 0:
         path_lists.append( { "nkeys" : 4, "subclasses" : False,  "path_list" : path_list4 } )
     if len( path_list5 ) > 0:
-        path_lists.append( { "nkeys" : 5, "subclasses" : False,  "path_list" : path_list5 } )
+        path_lists.append( { "nkeys" : 5, "subclasses" : True,   "path_list" : path_list5 } )
     
     return path_lists 
 
 
 
-def json_generator( qinput, sql_names, json_dataname, data ):
-    logging.info( "json_generator() json_dataname: %s, # of data items: %d" % ( json_dataname, len( data ) ) )
+def json_generator( qinput_, sql_names, json_dataname, data ):
+    logging.debug( "json_generator() json_dataname: %s, # of data items: %d" % ( json_dataname, len( data ) ) )
     logging.debug( "data: %s" % data )
     
     classification = "unknown"
@@ -285,6 +274,8 @@ def json_generator( qinput, sql_names, json_dataname, data ):
     datatype_      = "0_00"
     base_year      = ""
     path_list      = []
+    
+    qinput = copy.deepcopy( qinput_ )   # qinput changed (path emptied)
     
     try:
         logging.debug( "# of keys: %d" % len( qinput ) )
@@ -298,7 +289,7 @@ def json_generator( qinput, sql_names, json_dataname, data ):
         base_year      = qinput.get( "base_year" )
         
         path_list = qinput.get( "path" )
-        add_subclasses, path_stripped, path_single, path_double = single_double_levels( path_list )
+        add_subclasses, path_stripped = strip_subclasses( path_list )
         
         logging.debug( "classification : %s" % classification )
         logging.debug( "language       : %s" % language )
@@ -307,8 +298,6 @@ def json_generator( qinput, sql_names, json_dataname, data ):
         
         logging.debug( "(%d) path_list     : %s" % ( len( path_list ),     path_list ) )
         logging.debug( "(%d) path_stripped : %s" % ( len( path_stripped ), path_stripped ) )
-        logging.debug( "(%d) path_single   : %s" % ( len( path_single ),   path_single ) )
-        logging.debug( "(%d) path_double   : %s" % ( len( path_double ),   path_double ) )
     except:
         pass
 
@@ -1198,7 +1187,7 @@ def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
 
 
 
-def aggregate_year( qinput, add_subclasses, value_numerical ):
+def aggregate_year( qinput, add_subclasses, value_numerical = True ):
     logging.debug( "aggregate_year() add_subclasses: %s" % add_subclasses )
     logging.debug( "qinput %s" % str( qinput ) )
     
@@ -1529,7 +1518,7 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
         ter_codes = params.get( "ter_codes" )       # ter_codes provided
         
         # only "historical" has entry_list
-        logging.debug( "# of entries in entry_list: %d" % len( entry_list ) )
+        logging.debug( "# of entries in [historical] entry_list: %d" % len( entry_list ) )
         for entry in entry_list:
             logging.debug( "entry: %s" % entry )
             path = entry[ "path" ]
@@ -2116,18 +2105,17 @@ def aggregation():
     datatype = qinput.get( "datatype" )
     logging.debug( "language: %s, classification: %s, datatype: %s" % ( language, classification, datatype ) )
     
+    ter_codes = qinput.get( "ter_code", '' )
+    
     path = qinput.get( "path" )
-    add_subclasses, path_stripped, path_single, path_double = single_double_levels( path )
-
-    del qinput[ "path" ]
-    qinput[ "path" ] = path_stripped                    # replace
+    add_subclasses, path_stripped = strip_subclasses( path )
+    if add_subclasses:
+        del qinput[ "path" ]
+        qinput[ "path" ] = path_stripped                # replace without "subclasses"
     
     logging.debug( "(%d) path          : %s" % ( len( path ),          path ) )
     logging.debug( "(%d) path_stripped : %s" % ( len( path_stripped ), path_stripped ) )
-    logging.debug( "(%d) path_single   : %s" % ( len( path_single ),   path_single ) )
-    logging.debug( "(%d) path_double   : %s" % ( len( path_double ),   path_double ) )
     
-    #download_key = str( "%05.8f" % random.random() )    # used as base name for zip download
     download_key = str( uuid.uuid4() )
     
     # put some additional info in the key
@@ -2165,22 +2153,26 @@ def aggregation():
             nkeys = path_dict[ "nkeys" ]
             add_subclasses = path_dict[ "subclasses" ]
             path_list = path_dict[ "path_list" ]
+            
             logging.debug( "path_list %d-of-%d, nkeys: %s, subclasses: %s, levels: %d" % 
                 ( pd+1, len( path_lists ), nkeys, add_subclasses, len( path_list ) ) )
+            
             for p, path in enumerate( path_list ):
                 logging.debug( "path_dict %d-of-%d, path: %s" % ( p+1, len( path_list ), path ) )
-                
+            
+            logging.debug( "path_list: %s" % path_list )
             qinput[ "path" ] = path_list
-            value_numerical = True          # only numbers
-            sql_query, eng_data = aggregate_year( qinput, add_subclasses, value_numerical )
+            logging.debug( "path_list: %s" % qinput[ "path" ] )
+            sql_query, eng_data = aggregate_year( qinput, add_subclasses, value_numerical = True )  # only numbers
             entry_list = execute_year( qinput, sql_query, eng_data )
             
             qinput_ntc[ "path" ] = path_list
-            sql_query_ntc, eng_data_ntc = aggregate_year( qinput_ntc, add_subclasses, value_numerical )
+            logging.debug( "path_list: %s" % qinput_ntc[ "path" ] )
+            sql_query_ntc, eng_data_ntc = aggregate_year( qinput_ntc, add_subclasses, value_numerical = True )  # only numbers
             entry_list_ntc = execute_year( qinput, sql_query_ntc, eng_data_ntc )
             
-            value_numerical = False         # non-numbers
-            sql_query_none, eng_data_none = aggregate_year( qinput, add_subclasses, value_numerical )
+            logging.debug( "path_list: %s" % qinput[ "path" ] )
+            sql_query_none, eng_data_none = aggregate_year( qinput, add_subclasses, value_numerical = False)    # non-numbers
             entry_list_none = execute_year( qinput, sql_query_none, eng_data_none )
             
             params = {
@@ -2188,7 +2180,7 @@ def aggregation():
                 "classification" : classification,
                 "datatype"       : datatype,
                 "base_year"      : base_year,
-                "ter_codes"      : qinput.get( "ter_code", '' )
+                "ter_codes"      : ter_codes
             }
             entry_list_sorted_levels = reorder_entries( params, entry_list_ntc, entry_list_none, entry_list )
             entry_list_sorted.extend( entry_list_sorted_levels )
@@ -2227,12 +2219,10 @@ def aggregation():
             params[ "base_year" ] = base_year
             
             # no ter_code in qinput for modern
-            value_numerical = True          # only numbers
-            sql_query_ntc, eng_data_ntc = aggregate_year( qinput, add_subclasses, value_numerical )
+            sql_query_ntc, eng_data_ntc = aggregate_year( qinput, add_subclasses, value_numerical = True )      # only numbers
             entry_list_ntc = execute_year( qinput, sql_query_ntc, eng_data_ntc )
             
-            value_numerical = False         # non-numbers
-            sql_query_none, eng_data_none = aggregate_year( qinput, add_subclasses, value_numerical )
+            sql_query_none, eng_data_none = aggregate_year( qinput, add_subclasses, value_numerical = False )   # non-numbers
             entry_list_none = execute_year( qinput, sql_query_none, eng_data_none )
             
             entry_list_sorted_year = reorder_entries( params, entry_list_ntc, entry_list_none )
