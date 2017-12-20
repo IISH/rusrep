@@ -1585,6 +1585,38 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
     connection = get_connection()
     cursor = connection.cursor( cursor_factory = psycopg2.extras.DictCursor )
     
+    #use_temp_file = True   # not finished, csv file: each line complete and sorted as db columns!
+    use_temp_file = False
+    csvwriter = None
+    #delimiter = b'|'
+    delimiter = b','
+    quoting = csv.QUOTE_NONNUMERIC
+    #quoting = csv.QUOTE_MINIMAL
+    #quotechar = b'|'
+
+    if use_temp_file:
+        configparser = get_configparser()
+        tmp_dir = configparser.get( "config", "tmppath" )
+        csv_dir = os.path.join( tmp_dir, "download" )
+        csv_name = "temp.csv"
+        csv_path = os.path.join( csv_dir, csv_name )
+        
+        #if os.path.isfile( csv_path ):
+        csv_file = open( csv_path, "wb" )
+        csv_file.truncate()
+        
+        #csvwriter = csv.writer( csv_path, delimiter = delimiter, quotechar = quotechar, quoting = quoting )
+        csvwriter = csv.writer( csv_file, delimiter = delimiter, quoting = quoting )
+        
+        """
+        #csv_file.write( "%s\n" % csv_line )
+        csv_line = [ "column_1", "column_2", "column_2" ]
+        csvwriter.writerow( csv_line )
+        
+        csv_line = [ 'a b', 3.14, 'x y z ' ]
+        csvwriter.writerow( csv_line )
+        """
+    
     #use_temp_table = True   # on production server
     use_temp_table = False
     
@@ -1610,6 +1642,20 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
         sql_create += ",tc_%s VARCHAR(1024)" % ter_code
     
     sql_create += ")"
+    
+    """
+    # no header with copy_from
+    if use_temp_file:
+        csv_header = []
+        for column in range( 1, nlevels_use + 1 ):
+            csv_header.append( "%s%d" % ( level_prefix, column ) )
+        csv_header.append( "value_unit" )
+        csv_header.append( "count" )
+        for tc, ter_code in enumerate( ter_codes ):
+            csv_header.append( "tc_%s" % ter_code )
+        logging.info( csv_header )
+        csvwriter.writerow( csv_header )
+    """
     
     # on production server: use DROP
     if use_temp_table:
@@ -1638,8 +1684,8 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
         value_na   = "нет данных"
         value_none = "агрегация на этом уровне невозможна"
     
-    #num_path = len( path_list_ntc )
-    #for p, path in enumerate( path_list_ntc ):
+    levels_str = []
+    ter_codes_str = []
     num_path = len( path_unit_list_ntc )
     for pu, path_unit in enumerate( path_unit_list_ntc ):
         path = path_unit[ "path" ]
@@ -1650,6 +1696,8 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
         for key, value in path.items():
             columns.append( key )
             values .append( value )
+            if key not in levels_str:
+                levels_str.append( key )
         
         ncounts = 0
         #unit = '?'
@@ -1676,8 +1724,11 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
                             value = value_none
                             break
                     break
-            
-            columns.append( "tc_%s" % ter_code )
+        
+            ter_code_str = "tc_%s" % ter_code
+            if ter_code_str not in ter_codes_str:
+                ter_codes_str.append( ter_code_str )
+            columns.append( ter_code_str )
             values .append( value )
         
         logging.debug( "columns: %s" % columns )
@@ -1697,11 +1748,34 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
         fmt = fmt[ :-1 ]    #  remove trailing comma
         columns_str = ','.join( columns )
         sql_insert = "INSERT INTO %s (%s) VALUES ( %s );" % ( table_name, columns_str, fmt )
-        logging.info( "%d: %s" % ( pu, sql_insert ) )
+        logging.debug( "%d: %s" % ( pu, sql_insert ) )
         
-        cursor.execute( sql_insert, ( values ) )
+        if use_temp_file:
+            csvwriter.writerow( values )
+        else:
+            cursor.execute( sql_insert, ( values ) )
+        
+    if use_temp_file:
+        csv_file.close()
+        #sql_copy = "COPY %s FROM '%s' DELIMITER '%s' CSV HEADER;" % ( table_name, csv_path, delimiter )
+        #logging.debug( sql_copy )
+        #cursor.execute( sql_copy )
+        #cursor.copy_from( csv_file, table_name, columns = %s ) % columns
+        logging.debug( "levels_str: %s" % levels_str )
+        logging.debug( "ter_codes_str: %s" % ter_codes_str )
+        levels_str.sort()
+        ter_codes_str.sort()
+        logging.debug( "levels_str: %s" % levels_str )
+        logging.debug( "ter_codes_str: %s" % ter_codes_str )
+        columns_sort = list( levels_str )
+        columns_sort.append( "value_unit" )
+        columns_sort.append( "count" )
+        columns_sort.extend( ter_codes_str )
+        logging.debug( columns_sort )
+        csv_file = open( csv_path, "rb" )
+        cursor.copy_from( csv_file, table_name, columns = columns_sort )
+        csv_file.close()
 
-    
     # fetch result sorted
     order_by = ""
     #for l in range( 1, 1 + nlevels_ntc ):
