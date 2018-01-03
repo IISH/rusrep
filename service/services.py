@@ -5,7 +5,7 @@ VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
-FL-20-Dec-2017 
+FL-02-Jan-2018 
 
 def get_configparser():
 def get_connection():
@@ -1484,9 +1484,19 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
     language  = params.get( "language" )
     classification = params.get( "classification" )
     
+    # aggregation table settings
+    use_temp_table = True       # on production server
+    #use_temp_table = False     # 'manual' cleanup
+    
+    # on production server: use DROP
+    #on_commit =  " ON COMMIT PRESERVE ROWS"    # Default, No special action is taken at the ends of transactions
+    #on_commit =  " ON COMMIT DELETE ROWS"      # All rows in the temporary table will be deleted at the end of each transaction block
+    on_commit =  " ON COMMIT DROP"             # The temporary table will be dropped at the end of the current transaction block
+
+    skip_empty = True     # only return entries in response that have a specfied region count
+    #skip_empty = False    # return all region fields (may exhibit performance problem)
+
     nlevels_use = 0
-    #level_prefix = ''           # "histclass" or "class"
-    #unit = '?'                  # unit string; but may vary
     entry_list_asked = []       # entries requested
     entry_list_cnt = []         # entries with counts
     ter_codes = []              # region codes
@@ -1500,8 +1510,6 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
                 ter_codes.append( ter_code )
             
             value_unit = entry[ "value_unit" ]
-            #if len( value_unit ) > 0:
-            #    unit = value_unit
             
             total_str = entry[ "total" ]
             try:
@@ -1523,13 +1531,7 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
             logging.debug( "entry: %s" % entry )
             path = entry[ "path" ]
             
-            #if path not in path_list:
-            #    path_list.append( path )
-            #    nlevels = max( nlevels, len( path.keys() ) )
-            
             value_unit = entry[ "value_unit" ]
-            #if len( value_unit ) > 0:
-            #    unit = value_unit
             
             path_unit = { "path" : path, "value_unit" : value_unit }
             if path_unit not in path_unit_list:
@@ -1548,17 +1550,12 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
     
     # both "historical" and "modern" have entry_list_ntc
     nlevels_ntc = 0
-    #path_list_ntc = []          # lists of unique paths
     path_unit_list_ntc = []     # lists of unique (paths + value_unit)
     logging.debug( "# of entries in entry_list_ntc: %d" % len( entry_list_ntc ) )
     
     for entry in entry_list_ntc:
         logging.debug( "entry: %s" % entry )
         path = entry[ "path" ]
-        
-        #if path not in path_list_ntc:
-        #    path_list_ntc.append( path )
-        #    nlevels_ntc = max( nlevels_ntc, len( path.keys() ) )
         
         value_unit = entry[ "value_unit" ]
         path_unit = { "path" : path, "value_unit" : value_unit }
@@ -1585,50 +1582,15 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
     connection = get_connection()
     cursor = connection.cursor( cursor_factory = psycopg2.extras.DictCursor )
     
-    #use_temp_file = True   # not finished, csv file: each line complete and sorted as db columns!
-    use_temp_file = False
-    csvwriter = None
-    #delimiter = b'|'
-    delimiter = b','
-    quoting = csv.QUOTE_NONNUMERIC
-    #quoting = csv.QUOTE_MINIMAL
-    #quotechar = b'|'
-
-    if use_temp_file:
-        configparser = get_configparser()
-        tmp_dir = configparser.get( "config", "tmppath" )
-        csv_dir = os.path.join( tmp_dir, "download" )
-        csv_name = "temp.csv"
-        csv_path = os.path.join( csv_dir, csv_name )
-        
-        #if os.path.isfile( csv_path ):
-        csv_file = open( csv_path, "wb" )
-        csv_file.truncate()
-        
-        #csvwriter = csv.writer( csv_path, delimiter = delimiter, quotechar = quotechar, quoting = quoting )
-        csvwriter = csv.writer( csv_file, delimiter = delimiter, quoting = quoting )
-        
-        """
-        #csv_file.write( "%s\n" % csv_line )
-        csv_line = [ "column_1", "column_2", "column_2" ]
-        csvwriter.writerow( csv_line )
-        
-        csv_line = [ 'a b', 3.14, 'x y z ' ]
-        csvwriter.writerow( csv_line )
-        """
-    
-    #use_temp_table = True   # on production server
-    use_temp_table = False
-    
     sql_delete = None
     sql_create = ""
     
-    # TEMP TABLE: Both table definition and data are visible to the current TCP session only 
     table_name = "temp_aggregate"
-    if use_temp_table:
+    if use_temp_table:          # TEMP TABLEs are not visible to other sessions
         sql_create  = "CREATE TEMP TABLE %s (" % table_name 
-    else:
-        sql_delete = "DROP TABLE %s;" % table_name 
+    else:                       # debugging
+        sql_delete = "DROP TABLE %s;" % table_name
+        #sql_create = "CREATE UNLOGGED TABLE %s (" % table_name 
         sql_create = "CREATE TABLE %s (" % table_name 
     
     for column in range( 1, nlevels_use + 1 ):
@@ -1643,25 +1605,8 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
     
     sql_create += ")"
     
-    """
-    # no header with copy_from
-    if use_temp_file:
-        csv_header = []
-        for column in range( 1, nlevels_use + 1 ):
-            csv_header.append( "%s%d" % ( level_prefix, column ) )
-        csv_header.append( "value_unit" )
-        csv_header.append( "count" )
-        for tc, ter_code in enumerate( ter_codes ):
-            csv_header.append( "tc_%s" % ter_code )
-        logging.info( csv_header )
-        csvwriter.writerow( csv_header )
-    """
-    
-    # on production server: use DROP
     if use_temp_table:
-        #sql_create += " ON COMMIT PRESERVE ROWS"    # Default, No special action is taken at the ends of transactions
-        #sql_create += " ON COMMIT DELETE ROWS"      # All rows in the temporary table will be deleted at the end of each transaction block
-        sql_create += " ON COMMIT DROP"             # The temporary table will be dropped at the end of the current transaction block
+        sql_create += on_commit 
     sql_create += ";" 
         
     logging.info( "sql_create: %s" % sql_create )
@@ -1724,7 +1669,10 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
                             value = value_none
                             break
                     break
-        
+            
+            if skip_empty and value in [ value_na, '' ]:
+                continue        # do not return empty values in response
+            
             ter_code_str = "tc_%s" % ter_code
             if ter_code_str not in ter_codes_str:
                 ter_codes_str.append( ter_code_str )
@@ -1748,34 +1696,15 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
         fmt = fmt[ :-1 ]    #  remove trailing comma
         columns_str = ','.join( columns )
         sql_insert = "INSERT INTO %s (%s) VALUES ( %s );" % ( table_name, columns_str, fmt )
-        logging.debug( "%d: %s" % ( pu, sql_insert ) )
+        logging.debug( "sql_insert: %d: %s" % ( pu, sql_insert ) )
         
-        if use_temp_file:
-            csvwriter.writerow( values )
-        else:
+        try:
             cursor.execute( sql_insert, ( values ) )
-        
-    if use_temp_file:
-        csv_file.close()
-        #sql_copy = "COPY %s FROM '%s' DELIMITER '%s' CSV HEADER;" % ( table_name, csv_path, delimiter )
-        #logging.debug( sql_copy )
-        #cursor.execute( sql_copy )
-        #cursor.copy_from( csv_file, table_name, columns = %s ) % columns
-        logging.debug( "levels_str: %s" % levels_str )
-        logging.debug( "ter_codes_str: %s" % ter_codes_str )
-        levels_str.sort()
-        ter_codes_str.sort()
-        logging.debug( "levels_str: %s" % levels_str )
-        logging.debug( "ter_codes_str: %s" % ter_codes_str )
-        columns_sort = list( levels_str )
-        columns_sort.append( "value_unit" )
-        columns_sort.append( "count" )
-        columns_sort.extend( ter_codes_str )
-        logging.debug( columns_sort )
-        csv_file = open( csv_path, "rb" )
-        cursor.copy_from( csv_file, table_name, columns = columns_sort )
-        csv_file.close()
-
+        except:
+            logging.error( "insert into temp table %s failed:" % table_name )
+            type_, value, tb = sys.exc_info()
+            logging.error( "%s" % value )
+    
     # fetch result sorted
     order_by = ""
     #for l in range( 1, 1 + nlevels_ntc ):
@@ -1784,7 +1713,13 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
             order_by += ','
         order_by += "%s%d" % ( level_prefix, l )
     
-    sql_query = "SELECT * FROM %s ORDER BY %s;" % ( table_name, order_by )
+    try:
+        sql_query = "SELECT * FROM %s ORDER BY %s;" % ( table_name, order_by )
+    except:
+        logging.error( "select from temp table %s failed:" % table_name )
+        type_, value, tb = sys.exc_info()
+        logging.error( "%s" % value )
+        
     logging.info( sql_query )
     cursor.execute( sql_query )
     sql_resp = cursor.fetchall()
@@ -1822,6 +1757,12 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
             total = ''
             for key in record:
                 value = record[ key ]
+                if key == "count":
+                    new_entry[ "count" ] = value
+                if key == "value_unit":
+                    #new_entry[ "value_unit" ] = value_label
+                    new_entry[ "value_unit" ] = value
+                
                 if "class" in key:
                     if value is None:
                         path[ key ] = ''
@@ -1830,14 +1771,15 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
                 
                 if ter_code in key:
                     new_entry[ "total" ] = value
-                
-                if key == "count":
-                    new_entry[ "count" ] = value
-                if key == "value_unit":
-                    new_entry[ "value_unit" ] = value
-                
+            
             new_entry[ "path" ] = path
-            logging.debug( "new_entry: %s" % new_entry )
+            total = new_entry.get( "total" )
+            
+            if skip_empty and total is None or total == '':
+                continue        # do not return empty values in response
+            else:
+                logging.debug( "new_entry: %s" % new_entry )
+            
             entry_list_sorted.append( new_entry )
     
     logging.debug( "%d entries in list_sorted: \n%s" % ( len( entry_list_sorted ), entry_list_sorted ) )
