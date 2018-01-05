@@ -5,7 +5,7 @@ VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
-FL-02-Jan-2018 
+FL-05-Jan-2018 reordering optional
 
 def get_configparser():
 def get_connection():
@@ -74,6 +74,7 @@ import random
 import re
 import shutil
 import simplejson
+import sqlite3
 import time
 import uuid
 import urllib
@@ -2148,6 +2149,9 @@ def aggregation():
     if not os.path.exists( download_dir ):
         os.makedirs( download_dir )
     
+    #reorder = True     # in this way much toot slow, especially for datatypw 1.02
+    reorder = False
+    
     json_string = str( "{}" )
     
     if classification == "historical":
@@ -2191,16 +2195,21 @@ def aggregation():
             sql_query_none, eng_data_none = aggregate_year( qinput, add_subclasses, value_numerical = False)    # non-numbers
             entry_list_none = execute_year( qinput, sql_query_none, eng_data_none )
             
-            params = {
-                "language"       : language,
-                "classification" : classification,
-                "datatype"       : datatype,
-                "base_year"      : base_year,
-                "ter_codes"      : ter_codes
-            }
-            entry_list_sorted_levels = reorder_entries( params, entry_list_ntc, entry_list_none, entry_list )
-            entry_list_sorted.extend( entry_list_sorted_levels )
-        
+            if reorder:
+                params = {
+                    "language"       : language,
+                    "classification" : classification,
+                    "datatype"       : datatype,
+                    "base_year"      : base_year,
+                    "ter_codes"      : ter_codes
+                }
+                entry_list_sorted_levels = reorder_entries( params, entry_list_ntc, entry_list_none, entry_list )
+                entry_list_sorted.extend( entry_list_sorted_levels )
+            else:
+                entry_list_sorted.extend( entry_list )
+                entry_list_sorted.extend( entry_list_ntc )
+                entry_list_sorted.extend( entry_list_none )
+                
         #json_string, cache_except = json_cache( entry_list, language, "data", download_key, qinput )
         json_string, cache_except = json_cache( entry_list_sorted, language, "data", download_key, qinput )
         
@@ -2241,9 +2250,13 @@ def aggregation():
             sql_query_none, eng_data_none = aggregate_year( qinput, add_subclasses, value_numerical = False )   # non-numbers
             entry_list_none = execute_year( qinput, sql_query_none, eng_data_none )
             
-            entry_list_sorted_year = reorder_entries( params, entry_list_ntc, entry_list_none )
-            entry_list_sorted.extend( entry_list_sorted_year )
-        
+            if reorder:
+                entry_list_sorted_year = reorder_entries( params, entry_list_ntc, entry_list_none )
+                entry_list_sorted.extend( entry_list_sorted_year )
+            else:
+                entry_list_sorted.extend( entry_list_ntc )
+                entry_list_sorted.extend( entry_list_none )
+                
         #json_string, cache_except = json_cache( entry_list, language, "data", download_key, qinput )
         json_string, cache_except = json_cache( entry_list_sorted, language, "data", download_key, qinput )
         
