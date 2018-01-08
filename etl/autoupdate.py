@@ -18,7 +18,7 @@ FL-07-Jul-2017 sys.stderr.write() cannot write to cron.log as normal user
 FL-11-Jul-2017 pandas: do not parse numbers, but keep strings as they are
 FL-13-Aug-2017 Py2/Py3 cleanup
 FL-18-Dec-2017 Keep trailing input '\n' for header lines in translate_csv
-FL-19-Dec-2017 latest change
+FL-08-Jan-2018 Separate RU & EN tables
 
 ToDo:
  - replace urllib by requests
@@ -191,7 +191,7 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", co
     
     csv_dir = ""
     if dst_dir == "xlsx":
-        csv_dir = os.path.join( tmp_dir, "dataverse", "csv", handle_name )
+        csv_dir = os.path.join( tmp_dir, "dataverse", "csv-ru", handle_name )
     elif dst_dir == "vocab/xlsx":
         csv_dir = os.path.join( tmp_dir, "dataverse", "vocab/csv", handle_name )
     
@@ -266,7 +266,10 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", co
                         
                         root, ext = os.path.splitext( filename )
                         logging.info( "%s %s" % ( handle_name, root ) )
-                        csv_path  = "%s/%s.csv" % ( csv_dir, root )
+                        if dst_dir == "xlsx":                               # ru & en in separate files
+                            csv_path  = "%s/%s-ru.csv" % ( csv_dir, root )  # input csv
+                        elif dst_dir == "vocab/xlsx":                       # both ru & en in same file
+                            csv_path  = "%s/%s.csv" % ( csv_dir, root )     # input csv
                         logging.debug( "csv_path:  %s" % csv_path )
                         
                         #Xlsx2csv( filepath, **kwargs_xlsx2csv ).convert( csv_path )
@@ -515,7 +518,7 @@ def store_handle_docs( config_parser, handle_name ):
     logging.info( "store_handle_docs() %s" % handle_name )
     
     tmp_dir = config_parser.get( "config", "tmppath" )
-    csv_dir  = os.path.join( tmp_dir, "dataverse", "csv", handle_name )
+    csv_dir  = os.path.join( tmp_dir, "dataverse", "csv-ru", handle_name )
     dir_list = []
     if os.path.isdir( csv_dir ):
         dir_list = os.listdir( csv_dir )
@@ -1132,7 +1135,7 @@ def translate_csv( config_parser, handle_name ):
     vocab_modclasses = load_vocab( config_parser, "ERRHS_Vocabulary_modclasses.csv", vocab_modclasses, 0, 1 )
     
     tmp_dir = config_parser.get( "config", "tmppath" )
-    csv_dir = os.path.join( tmp_dir, "dataverse", "csv", handle_name )
+    csv_dir = os.path.join( tmp_dir, "dataverse", "csv-ru", handle_name )
     if os.path.exists( csv_dir ):
         logging.info( "csv_dir: %s" % csv_dir )
     else:
@@ -1311,12 +1314,12 @@ def format_secs( seconds ):
 
 
 if __name__ == "__main__":
-    DO_DOCUMENTATION = True     # documentation: dataverse  => local_disk
-    DO_VOCABULARY    = True     # vocabulary: dataverse  => mongodb
-    DO_RETRIEVE      = True     # ERRHS data: dataverse  => local_disk, xlsx -> csv
-    DO_POSTGRES      = True     # ERRHS data: local_disk => postgresql, csv -> table
-    DO_MONGODB       = True     # ERRHS data: postgresql => mongodb
+    DO_DOCUMENTATION = False     # documentation: dataverse  => local_disk
+    DO_VOCABULARY    = False     # vocabulary: dataverse  => mongodb
+    DO_RETRIEVE      = False     # ERRHS data: dataverse  => local_disk, xlsx -> csv
     DO_TRANSLATE     = True     # translate Russian csv files to English variants
+    DO_POSTGRES      = False     # ERRHS data: local_disk => postgresql, csv -> table
+    DO_MONGODB       = False     # ERRHS data: postgresql => mongodb
     
     #dv_format = ""
     dv_format = "original"  # does not work for ter_code (regions) vocab translations
@@ -1397,8 +1400,13 @@ if __name__ == "__main__":
         for handle_name in handle_names:
             retrieve_handle_docs( config_parser, handle_name, dv_format, copy_local, to_csv, remove_xlsx ) # dataverse  => local_disk
     
+    if DO_TRANSLATE:
+        logging.info( "-5- DO_TRANSLATE" )
+        for handle_name in handle_names:                            # csv/hdl_errhs_[type]/ERRHS_[datatype]_data_]year].csv
+            translate_csv( config_parser, handle_name )             # csv-en/hdl_errhs_[type]/ERRHS_[datatype]_data_]year]-en.csv
+    
     if DO_POSTGRES:
-        logging.info( "-5- DO_POSTGRES" )
+        logging.info( "-6- DO_POSTGRES" )
         logging.StreamHandler().flush()
         row_count( config_parser )
         clear_postgres( config_parser )
@@ -1412,13 +1420,8 @@ if __name__ == "__main__":
         #topic_counts( config_parser )                               # postgresql datasets.topics counts
     
     if DO_MONGODB:
-        logging.info( "-6- DO_MONGODB" )
+        logging.info( "-7- DO_MONGODB" )
         update_handle_docs( config_parser, mongo_client )           # postgresql => mongodb
-    
-    if DO_TRANSLATE:
-        logging.info( "-7- DO_TRANSLATE" )
-        for handle_name in handle_names:
-            translate_csv( config_parser, handle_name )
     
     logging.info( "total number of exceptions: %d" % Nexcept )
     
