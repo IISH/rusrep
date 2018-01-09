@@ -3,7 +3,7 @@
 
 """
 VT-06-Jul-2016 latest change by VT
-FL-20-Oct-2017
+FL-09-Jan-2018 language parameter
 """
 
 # future-0.16.0 imports for Python 2/3 compatibility
@@ -82,19 +82,19 @@ def vocabulary( host, apikey, ids, abs_ascii_dir ):
     return pd.concat( lexicon )
 
 
-def classupdate( cpath ):
+def classupdate( cpath, language ):
     logging.info( "%s classupdate()" % __file__ )
-    #cparser = ConfigParser.RawConfigParser()
-    cparser = configparser.RawConfigParser()
-    cparser.read( cpath )
+    config_parser = configparser.RawConfigParser()
+    config_parser.read( cpath )
     
-    host     = cparser.get( 'config', 'dbhost' )
-    dbname   = cparser.get( 'config', 'dbname' )
-    user     = cparser.get( 'config', 'dblogin' )
-    password = cparser.get( 'config', 'dbpassword' )
-    table    = "russianrepository"
+    dbtable_name = "dbtable" + '_' + language
+    dbtable  = config_parser.get( "config", dbtable_name )
+    dbhost   = config_parser.get( "config", "dbhost" )
+    dbname   = config_parser.get( "config", "dbname" )
+    user     = config_parser.get( "config", "dblogin" )
+    password = config_parser.get( "config", "dbpassword" )
     
-    conn_string = "host='%s' dbname='%s' user='%s' password='%s'" % ( host, dbname, user, password )
+    conn_string = "host='%s' dbname='%s' user='%s' password='%s'" % ( dbhost, dbname, user, password )
     logging.debug( "conn_string: %s" % conn_string )
 
     conn = psycopg2.connect( conn_string )
@@ -103,9 +103,9 @@ def classupdate( cpath ):
     finalclasses = []
     
     # historic data
-    logging.info( "fetching historic data from postgresql table %s..." % table )
+    logging.info( "fetching historic data from postgresql table %s..." % dbtable )
     historic_columns = "base_year, value_unit, value_label, datatype, histclass1, histclass2, histclass3, histclass4, histclass5, histclass6, histclass7, histclass8, histclass9, histclass10"
-    sql = "SELECT DISTINCT %s FROM %s" % ( historic_columns, table )
+    sql = "SELECT DISTINCT %s FROM %s" % ( historic_columns, dbtable )
     logging.info( "sql: %s" % sql )
 
     cursor.execute(sql)
@@ -155,9 +155,9 @@ def classupdate( cpath ):
         logging.info( "numbers of historic class records: %d, skipping %d without datatype" % ( len( data ), no_dtype ) )
     
     # modern data
-    logging.info( "fetching modern data from postgresql table %s..." % table )
+    logging.info( "fetching modern data from postgresql table %s..." % dbtable )
     modern_columns = "base_year, value_unit, value_label, datatype, class1, class2, class3, class4, class5, class6, class7, class8, class9, class10"
-    sql = "SELECT DISTINCT %s FROM %s" % ( modern_columns, table )
+    sql = "SELECT DISTINCT %s FROM %s" % ( modern_columns, dbtable )
     logging.info( "sql: %s" % sql )
     
     cursor.execute( sql )

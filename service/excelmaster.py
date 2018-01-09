@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # VT-07-Jul-2016 Latest change by VT
-# FL-13-Dec-2017 Latest change
+# FL-09-Jan-2018 Latest change
 
 import json
 import logging
@@ -483,8 +483,7 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
             db_row = chain.get( "db_row" )
             if db_row is not None:
                 row = db_row + legend_offset + 1    # +1: skip table header
-                
-            logging.debug( "db_row in chain: %d" % db_row )
+                logging.debug( "db_row in chain: %d" % db_row )
             
             for name in sorted( chain ):
                 logging.debug( "name: %s: " % name )
@@ -556,7 +555,8 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                 column += 1
             
             logging.debug( "add_to_counts: %d, row: %d, column: %d" % ( add_to_counts, counts_row, counts_column ) )
-            if '/' in counts_value:     # update total number of regions (for give base_year)
+            #if '/' in counts_value:     # update total number of regions (for given base_year)
+            if '/' in name:     # update total number of regions (for given base_year)
                 cell = ws.cell( row = counts_row, column = counts_column )
                 num_denom = counts_value.split( '/' )
                 cell.value = "%s/%d" % ( num_denom[ 0 ], num_regions )

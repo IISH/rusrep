@@ -5,7 +5,7 @@ VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
-FL-05-Jan-2018 reordering optional
+FL-09-Jan-2018 reordering optional
 
 def get_configparser():
 def get_connection():
@@ -16,7 +16,7 @@ def json_generator( qinput, sql_names, json_dataname, data ):
 def json_cache( entry_list, language, json_dataname, download_key, qinput = {} ):
 def collect_docs( qinput, download_dir, download_key ):
 def translate_vocabulary( vocab_filter, classification = None ):
-def load_years( cursor, datatype ):
+def load_years( cursor, datatype, language = "en" ):
 def sqlfilter( sql ):
 def sqlconstructor( sql ):
 def topic_counts():
@@ -104,6 +104,8 @@ sys.path.insert( 0, os.path.abspath( os.path.join( os.path.dirname( "__file__" )
 forbidden = [ "classification", "action", "language", "path" ]
 vocab_debug = False
 
+#translate = True
+translate = False   # read from English db for language = "en"
 
 def get_configparser():
     RUSSIANREPO_CONFIG_PATH = os.environ[ "RUSSIANREPO_CONFIG_PATH" ]
@@ -589,15 +591,19 @@ def translate_vocabulary( vocab_filter, classification = None ):
 
 
 
-def load_years( cursor, datatype ):
+def load_years( cursor, datatype, language = "en" ):
     """
     return a json dictionary with record counts from table russianrepository for the given datatype
     """
     logging.debug( "load_years()" )
     
-    configparser = get_configparser()
-    years = configparser.get( "config", "years" ).split( ',' )
-    sql = "SELECT base_year, COUNT(*) AS cnt FROM russianrepository"
+    config_parser = get_configparser()
+    years = config_parser.get( "config", "years" ).split( ',' )
+    
+    dbtable_name = "dbtable" + '_' + language
+    dbtable  = config_parser.get( "config", dbtable_name )
+    
+    sql = "SELECT base_year, COUNT(*) AS cnt FROM %s" % dbtable
     
     if datatype:
         sql = sql + " WHERE datatype = '%s'" % datatype 
@@ -850,15 +856,9 @@ def translate_item( item, eng_data ):
 
 
 
-def load_vocabulary( vocab_type ):
+def load_vocabulary( vocab_type, language, datatype, base_year ):
     logging.debug( "load_vocabulary() vocab_type: %s" % vocab_type )
     logging.debug( "request.args: %s" % str( request.args ) )
-    
-    language = request.args.get( "language" )
-    datatype = request.args.get( "datatype" )
-    
-    basisyear = request.args.get( "basisyear" )
-    base_year = request.args.get( "base_year" )
     
     vocab_filter = {}
     
@@ -867,8 +867,8 @@ def load_vocabulary( vocab_type ):
     
     elif vocab_type == "regions":
         vocab_name = "ERRHS_Vocabulary_regions"
-        if basisyear:
-            vocab_filter[ "basisyear" ] = basisyear
+        if base_year:
+            vocab_filter[ "basisyear" ] = base_year
     
     elif vocab_type == "historical":
         vocab_name = "ERRHS_Vocabulary_histclasses"
@@ -885,7 +885,7 @@ def load_vocabulary( vocab_type ):
     logging.debug( "vocab_filter: %s" % vocab_filter )
     
     eng_data = {}
-    if language == "en":
+    if translate and language == "en":
         eng_data = translate_vocabulary( vocab_filter )
         logging.debug( "translate_vocabulary eng_data items: %d" % len( eng_data ) )
         #logging.debug( "eng_data: %s" % eng_data )
@@ -907,8 +907,8 @@ def load_vocabulary( vocab_type ):
         params[ "vocabulary" ] = vocab_name
     elif vocab_type == "regions":
         params[ "vocabulary" ] = vocab_name
-        if basisyear:
-            params[ "basisyear" ] = basisyear
+        if base_year:
+            params[ "basisyear" ] = base_year
     else:
         params[ "vocabulary" ] = vocab_type
         if base_year:
@@ -923,7 +923,6 @@ def load_vocabulary( vocab_type ):
     logging.debug( "processing %d items in vocab %s" % ( vocab.count(), vocab_type ) )
     for item in vocab:
         logging.debug( "item: %s" % item )
-        #del item[ "basisyear" ]
         del item[ "_id" ]
         del item[ "vocabulary" ]
         topics  = {}
@@ -1192,9 +1191,9 @@ def aggregate_year( qinput, add_subclasses, value_numerical = True ):
     logging.debug( "aggregate_year() add_subclasses: %s" % add_subclasses )
     logging.debug( "qinput %s" % str( qinput ) )
     
+    language = qinput.get( "language" )
+    
     try:
-        language = qinput.get( "language" )
-        
         logging.debug( "number of keys in qinput: %d" % len( qinput ) )
         k = 0
         for key in qinput:
@@ -1223,7 +1222,7 @@ def aggregate_year( qinput, add_subclasses, value_numerical = True ):
     forbidden = [ "classification", "action", "language", "path" ]
     
     eng_data = {}
-    if qinput.get( "language" ) == "en":
+    if translate and language == "en":
         # translate input english term to russian sql terms
         vocab_filter = {}
         classification = qinput.get( "classification" )
@@ -1359,7 +1358,9 @@ def aggregate_year( qinput, add_subclasses, value_numerical = True ):
         sql_query  = sql_query[ :-2 ]
         logging.debug( "sql_query 2: %s" % sql_query )
         
-        sql_query += " FROM russianrepository WHERE %s" % sql[ "where" ]
+        #sql_query += " FROM russianrepository WHERE %s" % sql[ "where" ]
+        dbtable = "russianrepo_%s"  % language
+        sql_query += " FROM %s WHERE %s" % ( dbtable, sql[ "where" ] )
         sql_query  = sql_query[ :-4 ]
         logging.debug( "sql_query 3: %s" % sql_query )
     
@@ -2007,6 +2008,7 @@ def years():
     
     connection = get_connection()
     cursor = connection.cursor()
+    
     # json_string = dictionary with record counts from table russianrepository for the given datatype
     json_string = load_years( cursor, datatype )
     cursor.close()
@@ -2022,7 +2024,13 @@ def years():
 def regions():
     logging.debug( "/regions" )
     logging.debug( "regions() request.args: %s" % str( request.args ) )
-    data = load_vocabulary( "regions" )
+    
+    vocab_type = "regions"
+    language   = request.args.get( "language" )
+    datatype   = request.args.get( "datatype" )
+    base_year  = request.args.get( "basisyear" )
+    
+    data = load_vocabulary( vocab_type, language, datatype, base_year )
     
     logging.debug( "/regions return Response" )
     return Response( json.dumps( data ), mimetype = "application/json; charset=utf-8" )
@@ -2034,7 +2042,13 @@ def regions():
 def histclasses():
     logging.debug( "/histclasses" )
     logging.debug( "histclasses() request.args: %s" % str( request.args ) )
-    data = load_vocabulary( "historical" )
+    
+    vocab_type = "historical"
+    language   = request.args.get( "language" )
+    datatype   = request.args.get( "datatype" )
+    base_year  = request.args.get( "base_year" )
+    
+    data = load_vocabulary( vocab_type, language, datatype, base_year )
     
     logging.debug( "/histclasses return Response" )
     return Response( json.dumps( data ), mimetype = "application/json; charset=utf-8" )
@@ -2046,7 +2060,13 @@ def histclasses():
 def classes():
     logging.debug( "/classes" )
     logging.debug( "classes() request.args: %s" % str( request.args ) )
-    data = load_vocabulary( "modern" )
+    
+    vocab_type = "modern"
+    language   = request.args.get( "language" )
+    datatype   = request.args.get( "datatype" )
+    base_year  = request.args.get( "base_year" )
+    
+    data = load_vocabulary( vocab_type, language, datatype, base_year )
     
     logging.debug( "/classes return Response" )
     return Response( json.dumps( data ), mimetype = "application/json; charset=utf-8" )

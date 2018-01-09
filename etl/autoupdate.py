@@ -18,7 +18,7 @@ FL-07-Jul-2017 sys.stderr.write() cannot write to cron.log as normal user
 FL-11-Jul-2017 pandas: do not parse numbers, but keep strings as they are
 FL-13-Aug-2017 Py2/Py3 cleanup
 FL-18-Dec-2017 Keep trailing input '\n' for header lines in translate_csv
-FL-08-Jan-2018 Separate RU & EN tables
+FL-09-Jan-2018 Separate RU & EN tables
 
 ToDo:
  - replace urllib by requests
@@ -30,14 +30,14 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", co
 def update_documentation( config_parser, copy_local, remove_xlsx = False ):
 def update_vocabularies( config_parser, mongo_client, dv_format, copy_local = False, to_csv = False, remove_xlsx = False):
 def retrieve_handle_docs( config_parser, handle_name, dv_format = "", copy_local = False, to_csv = False, remove_xlsx = False ):
-def row_count( config_parser ):
-def clear_postgres( config_parser ):
-def store_handle_docs( config_parser, handle_name ):
+def row_count( config_parser, language ):
+def clear_postgres_tale( config_parser, language ):
+def store_handle_docs( config_parser, handle_name, language ):
 def test_csv_file( path_name ):
 def filter_csv( csv_dir, in_filename ):
 def update_handle_docs( config_parser, mongo_client ):
 def clear_mongo( mongo_client ):
-def topic_counts( config_parser ):
+def topic_counts( config_parser, language ):
 def translate_csv( config_parser, handle_name ):
 def format_secs( seconds ):
 """
@@ -439,7 +439,7 @@ def retrieve_handle_docs( config_parser, handle_name, dv_format = "", copy_local
 
 
 
-def row_count( config_parser ):
+def row_count( config_parser, language ):
     logging.debug( "row_count()" )
 
     configpath = RUSSIANREPO_CONFIG_PATH
@@ -453,11 +453,12 @@ def row_count( config_parser ):
 
     config_parser.read( configpath )
     
-    dbhost   = config_parser.get( 'config', 'dbhost' )
-    dbname   = config_parser.get( 'config', 'dbname' )
-    dbtable  = config_parser.get( 'config', 'dbtable' )
-    user     = config_parser.get( 'config', 'dblogin' )
-    password = config_parser.get( 'config', 'dbpassword' )
+    dbtable_name = "dbtable" + '_' + language
+    dbtable  = config_parser.get( "config", dbtable_name )
+    dbhost   = config_parser.get( "config", "dbhost" )
+    dbname   = config_parser.get( "config", "dbname" )
+    user     = config_parser.get( "config", "dblogin" )
+    password = config_parser.get( "config", "dbpassword" )
     
     connection_string = "host = '%s' dbname = '%s' user = '%s' password = '%s'" % ( dbhost, dbname, user, password )
     logging.debug( "connection_string: %s" % connection_string )
@@ -477,7 +478,7 @@ def row_count( config_parser ):
 
 
 
-def clear_postgres( config_parser ):
+def clear_postgres_table( config_parser, language ):
     logging.info( "clear_postgres()" )
 
     configpath = RUSSIANREPO_CONFIG_PATH
@@ -491,11 +492,12 @@ def clear_postgres( config_parser ):
 
     config_parser.read( configpath )
     
-    dbhost   = config_parser.get( 'config', 'dbhost' )
-    dbname   = config_parser.get( 'config', 'dbname' )
-    dbtable  = config_parser.get( 'config', 'dbtable' )
-    user     = config_parser.get( 'config', 'dblogin' )
-    password = config_parser.get( 'config', 'dbpassword' )
+    dbtable_name = "dbtable" + '_' + language
+    dbtable  = config_parser.get( "config", dbtable_name )
+    dbhost   = config_parser.get( "config", "dbhost" )
+    dbname   = config_parser.get( "config", "dbname" )
+    user     = config_parser.get( "config", "dblogin" )
+    password = config_parser.get( "config", "dbpassword" )
     
     connection_string = "host = '%s' dbname = '%s' user = '%s' password = '%s'" % ( dbhost, dbname, user, password )
     logging.info( "connection_string: %s" % connection_string )
@@ -513,12 +515,13 @@ def clear_postgres( config_parser ):
 
 
 
-def store_handle_docs( config_parser, handle_name ):
+def store_handle_docs( config_parser, handle_name, language ):
     logging.info( "" )
     logging.info( "store_handle_docs() %s" % handle_name )
     
     tmp_dir = config_parser.get( "config", "tmppath" )
-    csv_dir  = os.path.join( tmp_dir, "dataverse", "csv-ru", handle_name )
+    csv_dir_l = "csv-" +language
+    csv_dir  = os.path.join( tmp_dir, "dataverse", csv_dir_l, handle_name )
     dir_list = []
     if os.path.isdir( csv_dir ):
         dir_list = os.listdir( csv_dir )
@@ -536,11 +539,12 @@ def store_handle_docs( config_parser, handle_name ):
 
     config_parser.read( configpath )
     
-    dbhost   = config_parser.get( 'config', 'dbhost' )
-    dbname   = config_parser.get( 'config', 'dbname' )
-    dbtable  = config_parser.get( 'config', 'dbtable' )
-    user     = config_parser.get( 'config', 'dblogin' )
-    password = config_parser.get( 'config', 'dbpassword' )
+    dbtable_name = "dbtable" + '_' + language
+    dbtable  = config_parser.get( "config", dbtable_name )
+    dbhost   = config_parser.get( "config", "dbhost" )
+    dbname   = config_parser.get( "config", "dbname" )
+    user     = config_parser.get( "config", "dblogin" )
+    password = config_parser.get( "config", "dbpassword" )
     
     connection_string = "host = '%s' dbname = '%s' user = '%s' password = '%s'" % ( dbhost, dbname, user, password )
     logging.info( "connection_string: %s" % connection_string )
@@ -569,7 +573,7 @@ def store_handle_docs( config_parser, handle_name ):
             
             # debug strange record duplications
             pg_connection.commit()
-            row_count( config_parser )
+            row_count( config_parser, language )
             
         else:
             logging.info( "skip: %s" % filename )
@@ -927,14 +931,14 @@ def filter_csv( csv_dir, in_filename ):
 
 
 
-def update_handle_docs( config_parser, mongo_client ):
+def update_handle_docs( config_parser, mongo_client,language ):
     logging.info( "" )
     logging.info( "update_handle_docs()" )
     
     configpath = RUSSIANREPO_CONFIG_PATH
     logging.info( "using configparser: %s" % configpath )
     # classupdate() uses postgresql access parameters from cpath contents
-    classdata = classupdate( configpath )   # fetching historic and modern class data from postgresql table 
+    classdata = classupdate( configpath, language )     # fetching historic and modern class data from postgresql table 
     
     dbname = config_parser.get( "config", "vocabulary" )
     logging.info( "inserting historic and modern class data in mongodb '%s'" % dbname )
@@ -959,7 +963,7 @@ def clear_mongo( mongo_client ):
 
 
 
-def topic_counts( config_parser ):
+def topic_counts( config_parser, langage ):
     logging.info( "topic_counts()" )
     
     configpath = RUSSIANREPO_CONFIG_PATH
@@ -973,10 +977,12 @@ def topic_counts( config_parser ):
 
     config_parser.read( configpath )
     
-    dbhost   = config_parser.get( 'config', 'dbhost' )
-    dbname   = config_parser.get( 'config', 'dbname' )
-    user     = config_parser.get( 'config', 'dblogin' )
-    password = config_parser.get( 'config', 'dbpassword' )
+    dbtable_name = "dbtable" + '_' + language
+    dbtable  = config_parser.get( "config", dbtable_name )
+    dbhost   = config_parser.get( "config", "dbhost" )
+    dbname   = config_parser.get( "config", "dbname" )
+    user     = config_parser.get( "config", "dblogin" )
+    password = config_parser.get( "config", "dbpassword" )
     
     connection_string = "host = '%s' dbname = '%s' user = '%s' password = '%s'" % ( dbhost, dbname, user, password )
     logging.info( "connection_string: %s" % connection_string )
@@ -1314,12 +1320,12 @@ def format_secs( seconds ):
 
 
 if __name__ == "__main__":
-    DO_DOCUMENTATION = False     # documentation: dataverse  => local_disk
-    DO_VOCABULARY    = False     # vocabulary: dataverse  => mongodb
-    DO_RETRIEVE      = False     # ERRHS data: dataverse  => local_disk, xlsx -> csv
+    DO_DOCUMENTATION = True     # documentation: dataverse  => local_disk
+    DO_VOCABULARY    = True     # vocabulary: dataverse  => mongodb
+    DO_RETRIEVE      = True     # ERRHS data: dataverse  => local_disk, xlsx -> csv
     DO_TRANSLATE     = True     # translate Russian csv files to English variants
-    DO_POSTGRES      = False     # ERRHS data: local_disk => postgresql, csv -> table
-    DO_MONGODB       = False     # ERRHS data: postgresql => mongodb
+    DO_POSTGRES      = True     # ERRHS data: local_disk => postgresql, csv -> table
+    DO_MONGODB       = True     # ERRHS data: postgresql => mongodb
     
     #dv_format = ""
     dv_format = "original"  # does not work for ter_code (regions) vocab translations
@@ -1408,20 +1414,23 @@ if __name__ == "__main__":
     if DO_POSTGRES:
         logging.info( "-6- DO_POSTGRES" )
         logging.StreamHandler().flush()
-        row_count( config_parser )
-        clear_postgres( config_parser )
-        row_count( config_parser )
-        for handle_name in handle_names:
-            store_handle_docs( config_parser, handle_name )         # local_disk => postgresql
-            logging.StreamHandler().flush()
-            row_count( config_parser )
-    
-        # done on-the-fly in services/topic_counts()
-        #topic_counts( config_parser )                               # postgresql datasets.topics counts
+        for language in [ "ru", "en" ]:
+            row_count( config_parser, language )
+            clear_postgres_table( config_parser, language )
+            row_count( config_parser, language )
+            for handle_name in handle_names:
+                store_handle_docs( config_parser, handle_name, language )   # local_disk => postgresql
+                logging.StreamHandler().flush()
+                row_count( config_parser,language )
+        
+            # done on-the-fly in services/topic_counts()
+            #topic_counts( config_parser )                                  # postgresql datasets.topics counts
     
     if DO_MONGODB:
         logging.info( "-7- DO_MONGODB" )
-        update_handle_docs( config_parser, mongo_client )           # postgresql => mongodb
+        #for language in [ "ru", "en" ]:
+        for language in [ "en" ]:
+            update_handle_docs( config_parser, mongo_client, language )     # postgresql => mongodb
     
     logging.info( "total number of exceptions: %d" % Nexcept )
     
