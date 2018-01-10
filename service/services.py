@@ -12,7 +12,7 @@ def get_connection():
 def class_collector( keywords ):
 def strip_subclasses( path ):
 def path_levels = group_levels( path ):
-def json_generator( qinput, sql_names, json_dataname, data ):
+def json_generator( qinput, sql_names, json_dataname, data, key_set = None ):
 def json_cache( entry_list, language, json_dataname, download_key, qinput = {} ):
 def collect_docs( qinput, download_dir, download_key ):
 def translate_vocabulary( vocab_filter, classification = None ):
@@ -87,6 +87,7 @@ from datetime import date
 from io import BytesIO
 from flask import Flask, jsonify, Response, request, send_from_directory, send_file, session
 from jsonmerge import merge
+from operator import itemgetter
 from pymongo import MongoClient
 #from rdflib import Graph, Literal, term
 from socket import gethostname
@@ -151,21 +152,33 @@ def get_connection():
 
 
 
-def class_collector( keywords ):
+def class_collector( keywords, key_list ):
     logging.debug( "class_collector()" )
     logging.debug( "keywords: %s" % keywords )
+    logging.debug( "key_list: %s" % key_list )
     
+    nkeys = len( key_list )
     class_dict  = {}
     normal_dict = {}
     
     for item in keywords:
         logging.debug( "item: %s" % item )
         class_match = re.search( r'class', item )
+        
         if class_match:
             logging.debug( "class: %s" % item )
             class_dict[ item ] = keywords[ item ]
         else:
             normal_dict[ item ] = keywords[ item ]
+    
+    # key_list contains all path keys from the input query
+    # append items with empty path keys if they are 'missing'; 
+    # missing path elements disturb sorting
+    class_keys = class_dict.keys()
+    if len( class_keys ) < nkeys:
+        for key in key_list:
+            if not key in class_keys:
+                class_dict[ key ] = ''  # add 'missing' key with empty value
     
     logging.debug( "class_dict:  %s" % class_dict )
     logging.debug( "normal_dict: %s" % normal_dict )
@@ -186,12 +199,14 @@ def strip_subclasses( path ):
     logging.debug( "path: (%s) %s" % ( type( path ), str( path ) ) )
     
     path_stripped = []      # "subclasses" param stripped
+    key_set = set()
     
     add_subclasses = False   # becomes True if subclasses were removed
     
     for old_entry in path:
         logging.debug( "old entry: %s" % old_entry )
         stripped_entry = copy.deepcopy( old_entry )
+        #stripped_entry = collections.OrderedDict( sorted( stripped_entry.items() ) )
         
         for k in old_entry:
             v = old_entry[ k ]
@@ -210,10 +225,15 @@ def strip_subclasses( path ):
             
         logging.debug( "new entry: %s" % stripped_entry )
         path_stripped.append( stripped_entry )
-            
+        
+        keys = stripped_entry.keys()
+        for k in keys:
+            key_set.add( k )
+        
     logging.debug( "new path: (%s) %s" % ( type( path_stripped ), str( path_stripped ) ) )
+    logging.debug( "key_set: %s" % key_set )
     
-    return add_subclasses, path_stripped
+    return add_subclasses, path_stripped, key_set
 
 
 
@@ -267,9 +287,11 @@ def group_levels( path_list ):
 
 
 
-def json_generator( qinput_, sql_names, json_dataname, data ):
+def json_generator( qinput_, sql_names, json_dataname, data, qkey_set = None ):
     logging.debug( "json_generator() json_dataname: %s, # of data items: %d" % ( json_dataname, len( data ) ) )
     logging.debug( "data: %s" % data )
+    if qkey_set:
+        logging.debug( "qkey_set: %s" % qkey_set )
     
     classification = "unknown"
     language       = "EN"
@@ -292,7 +314,7 @@ def json_generator( qinput_, sql_names, json_dataname, data ):
         base_year      = qinput.get( "base_year" )
         
         path_list = qinput.get( "path" )
-        add_subclasses, path_stripped = strip_subclasses( path_list )
+        add_subclasses, path_stripped, key_set_dummy = strip_subclasses( path_list )
         
         logging.debug( "classification : %s" % classification )
         logging.debug( "language       : %s" % language )
@@ -310,9 +332,25 @@ def json_generator( qinput_, sql_names, json_dataname, data ):
     
     forbidden = { "data_active", 0, "datarecords", 1 }
     
-    entry_list = []
+    # collect all data class keys
     
+    dkey_set = set()
     len_data = len( data )
+    for idx, value_str in enumerate( data ):
+        logging.debug( "n: %d-of-%d, value_str: %s" % ( 1+idx, len_data, str( value_str ) ) )
+        for i in range( len( value_str ) ):
+            name  = sql_names[ i ]
+            value = value_str[ i ]
+            
+            if value == ". ":
+                #logging.debug( "i: %d, name: %s, value: %s" % ( i, thisname, value ) )
+                # ". " marks a trailing dot in histclass or class: skip
+                continue
+            else:
+                if "class" in name and len( value ) > 0:
+                    dkey_set.add( name )
+    
+    entry_list = []
     logging.debug( "# values in data: %d" % len_data )
     for idx, value_str in enumerate( data ):
         logging.debug( "n: %d-of-%d, value_str: %s" % ( 1+idx, len_data, str( value_str ) ) )
@@ -321,6 +359,7 @@ def json_generator( qinput_, sql_names, json_dataname, data ):
         for i in range( len( value_str ) ):
             name  = sql_names[ i ]
             value = value_str[ i ]
+            
             if value == ". ":
                 #logging.debug( "i: %d, name: %s, value: %s" % ( i, thisname, value ) )
                 # ". " marks a trailing dot in histclass or class: skip
@@ -347,7 +386,13 @@ def json_generator( qinput_, sql_names, json_dataname, data ):
                 elif language == "rus":
                     data_keys = "непригодный"
         
-        ( path, output ) = class_collector( data_keys )
+        if len( dkey_set ) > len( qkey_set ):
+            logging.debug( "MORE KEYS? %s" % dkey_set )
+            key_set = dkey_set
+        else:
+            key_set = qkey_set
+        
+        ( path, output ) = class_collector( data_keys, key_set )
         output[ "path" ] = path
         entry_list.append( output )
     
@@ -355,12 +400,14 @@ def json_generator( qinput_, sql_names, json_dataname, data ):
     logging.debug( "# of entries in entry_list: %d" % len( entry_list ) )
     for json_entry in entry_list:
         logging.debug( "json_entry: %s" % json_entry )
-        value_unit = json_entry.get( "value_unit" )
+        
+        # value_unit may vary, so we cannot it for entries reated by ourselves
+        #value_unit = json_entry.get( "value_unit" )
         
         # compare qinput paths with db returned paths; add missing paths (fill with NA values). 
         entry_path = json_entry.get( "path" )
         # path_list from qinput does not contain our added [hist]classes; 
-        # remove them from entry_path before comparison
+        # remove our additions to sql from entry_path before comparison
         entry_path_cpy = copy.deepcopy( entry_path )
         
         delete_list = []
@@ -389,7 +436,14 @@ def json_generator( qinput_, sql_names, json_dataname, data ):
             logging.debug( "path_entry: %s" % path_entry )
             new_entry = {}
             # also want to see "NA" entries in preview and download
-            new_entry[ "path" ]       = path_entry
+            
+            new_path = path_entry
+            entry_keys = path_entry.keys()
+            for key in key_set:
+                if not key in entry_keys:
+                    new_path[ key ] = ''    # add 'missing' key wth empty value
+            
+            new_entry[ "path" ]       = new_path
             new_entry[ "base_year" ]  = base_year
             new_entry[ "value_unit" ] = value_unit
             new_entry[ "datatype" ]   = datatype
@@ -1425,7 +1479,7 @@ def aggregate_year( qinput, add_subclasses, value_numerical = True ):
 
 
 
-def execute_year( qinput, sql_query, eng_data ):
+def execute_year( qinput, sql_query, eng_data, key_set ):
     logging.debug( "execute_year()" )
     
     entry_list = []
@@ -1459,8 +1513,10 @@ def execute_year( qinput, sql_query, eng_data ):
                 value = item[ i ]
                 if value == ". ":
                     #logging.debug( "i: %d, name: %s, value: %s" % ( i, thisname, value ) )
-                    # ". " marks a trailing dot in histclass or class: skip
-                    pass
+                    pass           # ". " marks a trailing dot in histclass or class: skip
+                    
+                    # No: do not set empty value, that sometimes gives complete empty indicator columns
+                    #value = ''      # keep as empty element: otherwise sorting by path is disrupted, i.e. not what we want
                 
                 if value in eng_data:
                     value = value.encode( "utf-8" )
@@ -1468,9 +1524,10 @@ def execute_year( qinput, sql_query, eng_data ):
                 if thisname not in forbidden:
                     final_item.append( value )
             
+            logging.debug( "final_item: %s" % final_item )
             final_data.append( final_item )
         
-        entry_list = json_generator( qinput, sql_names, "data", final_data )
+        entry_list = json_generator( qinput, sql_names, "data", final_data, key_set )
         
     return entry_list
 
@@ -2145,7 +2202,7 @@ def aggregation():
     ter_codes = qinput.get( "ter_code", '' )
     
     path = qinput.get( "path" )
-    add_subclasses, path_stripped = strip_subclasses( path )
+    add_subclasses, path_stripped, key_set = strip_subclasses( path )
     if add_subclasses:
         del qinput[ "path" ]
         qinput[ "path" ] = path_stripped                # replace without "subclasses"
@@ -2184,6 +2241,10 @@ def aggregation():
         ter_codes = qinput_ntc.pop( "ter_code", None )
         logging.info( "ter_code: %s" % ter_codes )
         
+        entry_list = []
+        entry_list_ntc = []
+        entry_list_none = []
+        entry_list_collect = []
         entry_list_sorted = []
         
         # split path in subgroups with the same key length
@@ -2204,17 +2265,17 @@ def aggregation():
             qinput[ "path" ] = path_list
             logging.debug( "path_list: %s" % qinput[ "path" ] )
             sql_query, eng_data = aggregate_year( qinput, add_subclasses, value_numerical = True )  # only numbers
-            entry_list = execute_year( qinput, sql_query, eng_data )
-            
+            entry_list = execute_year( qinput, sql_query, eng_data, key_set )
+            """
             qinput_ntc[ "path" ] = path_list
             logging.debug( "path_list: %s" % qinput_ntc[ "path" ] )
             sql_query_ntc, eng_data_ntc = aggregate_year( qinput_ntc, add_subclasses, value_numerical = True )  # only numbers
-            entry_list_ntc = execute_year( qinput, sql_query_ntc, eng_data_ntc )
+            entry_list_ntc = execute_year( qinput, sql_query_ntc, eng_data_ntc, key_set )
             
             logging.debug( "path_list: %s" % qinput[ "path" ] )
             sql_query_none, eng_data_none = aggregate_year( qinput, add_subclasses, value_numerical = False)    # non-numbers
-            entry_list_none = execute_year( qinput, sql_query_none, eng_data_none )
-            
+            entry_list_none = execute_year( qinput, sql_query_none, eng_data_none, key_set )
+            """
             if reorder:
                 params = {
                     "language"       : language,
@@ -2223,13 +2284,20 @@ def aggregation():
                     "base_year"      : base_year,
                     "ter_codes"      : ter_codes
                 }
-                entry_list_sorted_levels = reorder_entries( params, entry_list_ntc, entry_list_none, entry_list )
-                entry_list_sorted.extend( entry_list_sorted_levels )
+                entry_list_collect_levels = reorder_entries( params, entry_list_ntc, entry_list_none, entry_list )
             else:
-                entry_list_sorted.extend( entry_list )
-                entry_list_sorted.extend( entry_list_ntc )
-                entry_list_sorted.extend( entry_list_none )
-                
+                entry_list_collect.extend( entry_list )
+                entry_list_collect.extend( entry_list_ntc )
+                entry_list_collect.extend( entry_list_none )
+        
+        #itemkeys = 
+        #entry_list_sorted = sorted( entry_list_sorted, key = itemgetter( "path['histclass1']", "path['histclass2']", "path['histclass3']" ) )
+        #entry_list_sorted = sorted( entry_list_sorted, key = itemgetter( path['histclass1'] ) )
+        #entry_list_sorted = sorted( entry_list_sorted, key = itemgetter( 'path:histclass1' ) )
+        #entry_list_sorted = sorted( entry_list_sorted, key = lambda x: x[1] )
+        
+        entry_list_sorted = sorted( entry_list_collect, key = itemgetter( 'path' ) )
+        
         #json_string, cache_except = json_cache( entry_list, language, "data", download_key, qinput )
         json_string, cache_except = json_cache( entry_list_sorted, language, "data", download_key, qinput )
         
@@ -2265,10 +2333,10 @@ def aggregation():
             
             # no ter_code in qinput for modern
             sql_query_ntc, eng_data_ntc = aggregate_year( qinput, add_subclasses, value_numerical = True )      # only numbers
-            entry_list_ntc = execute_year( qinput, sql_query_ntc, eng_data_ntc )
+            entry_list_ntc = execute_year( qinput, sql_query_ntc, eng_data_ntc, key_set )
             
             sql_query_none, eng_data_none = aggregate_year( qinput, add_subclasses, value_numerical = False )   # non-numbers
-            entry_list_none = execute_year( qinput, sql_query_none, eng_data_none )
+            entry_list_none = execute_year( qinput, sql_query_none, eng_data_none, key_set )
             
             if reorder:
                 entry_list_sorted_year = reorder_entries( params, entry_list_ntc, entry_list_none )
