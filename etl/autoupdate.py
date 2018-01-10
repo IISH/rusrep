@@ -18,7 +18,7 @@ FL-07-Jul-2017 sys.stderr.write() cannot write to cron.log as normal user
 FL-11-Jul-2017 pandas: do not parse numbers, but keep strings as they are
 FL-13-Aug-2017 Py2/Py3 cleanup
 FL-18-Dec-2017 Keep trailing input '\n' for header lines in translate_csv
-FL-09-Jan-2018 Separate RU & EN tables
+FL-10-Jan-2018 Separate RU & EN tables
 
 ToDo:
  - replace urllib by requests
@@ -64,6 +64,7 @@ import shutil
 
 from bidict import bidict
 from pymongo import MongoClient
+from sys import exc_info
 from time import ctime, time
 
 sys.path.insert( 0, os.path.abspath( os.path.join(os.path.dirname( "__file__" ), './' ) ) )
@@ -467,14 +468,20 @@ def row_count( config_parser, language ):
     cursor = pg_connection.cursor()
     sql = "SELECT COUNT(*) FROM %s;" % dbtable
     logging.info( sql )
-    cursor.execute( sql )
-    data = cursor.fetchall()
-    count = data[0][0]
-    logging.info( "row count: %d" % count )
     
-    pg_connection.commit()
-    cursor.close()
-    pg_connection.close()
+    try:
+        cursor.execute( sql )
+        data = cursor.fetchall()
+        count = data[0][0]
+        logging.info( "row count: %d" % count )
+        
+        pg_connection.commit()
+        cursor.close()
+        pg_connection.close()
+    except:
+        logging.error( "row_count() failed:" )
+        type_, value, tb = sys.exc_info()
+        logging.error( "%s" % value )
 
 
 
@@ -1176,8 +1183,10 @@ def translate_csv( config_parser, handle_name ):
         
         logging.info( csv_path )
         basename, ext = os.path.splitext( csv_name )
+        if basename.endswith( "-ru" ):
+            basename = basename[ :-3 ]
         eng_name = basename + "-en" +  ext
-        #logging.info( eng_name )
+        logging.info( eng_name )
         eng_path = os.path.join( eng_dir, eng_name )
         logging.info( eng_path )
         
@@ -1320,12 +1329,12 @@ def format_secs( seconds ):
 
 
 if __name__ == "__main__":
-    DO_DOCUMENTATION = True     # documentation: dataverse  => local_disk
-    DO_VOCABULARY    = True     # vocabulary: dataverse  => mongodb
-    DO_RETRIEVE      = True     # ERRHS data: dataverse  => local_disk, xlsx -> csv
-    DO_TRANSLATE     = True     # translate Russian csv files to English variants
-    DO_POSTGRES      = True     # ERRHS data: local_disk => postgresql, csv -> table
-    DO_MONGODB       = True     # ERRHS data: postgresql => mongodb
+    DO_RETRIEVE_DOC   = True     # documentation: dataverse  => local_disk
+    DO_RETRIEVE_VOCAB = True     # vocabulary: dataverse  => mongodb
+    DO_RETRIEVE_ERRHS = True     # ERRHS data: dataverse  => local_disk, xlsx -> csv
+    DO_TRANSLATE_CSV  = True     # translate Russian csv files to English variants
+    DO_POSTGRES_DB    = True     # ERRHS data: local_disk => postgresql, csv -> table
+    DO_MONGO_DB       = True     # ERRHS data: postgresql => mongodb
     
     #dv_format = ""
     dv_format = "original"  # does not work for ter_code (regions) vocab translations
@@ -1366,17 +1375,17 @@ if __name__ == "__main__":
     config_parser.read( RUSSIANREPO_CONFIG_PATH )
     mongo_client  = MongoClient()
     
-    if DO_VOCABULARY or DO_MONGODB:
-        logging.info( "-1- DO_VOCABULARY or DO_MONGODB" )
+    if DO_RETRIEVE_VOCAB or DO_MONGO_DB:
+        logging.info( "-1- DO_RETRIEVE_VOCAB or DO_MONGO_DB" )
         clear_mongo( mongo_client )
     
-    if DO_DOCUMENTATION:
-        logging.info( "-2- DO_DOCUMENTATION" )
+    if DO_RETRIEVE_DOC:
+        logging.info( "-2- DO_RETRIEVE_DOC" )
         copy_local  = True      # for zipped downloads
         update_documentation( config_parser, copy_local )
     
-    if DO_VOCABULARY:
-        logging.info( "-3- DO_VOCABULARY" )
+    if DO_RETRIEVE_VOCAB:
+        logging.info( "-3- DO_RETRIEVE_VOCAB" )
         # Downloaded vocabulary documents are not used to update the vocabularies, 
         # they are processed on the fly, and put in MongoDB
         copy_local = True      # to inspect
@@ -1398,21 +1407,21 @@ if __name__ == "__main__":
     #"""
     #handle_names = [ "hdl_errhs_land" ]
     
-    if DO_RETRIEVE:
-        logging.info( "-4- DO_RETRIEVE" )
+    if DO_RETRIEVE_ERRHS:
+        logging.info( "-4- DO_RETRIEVE_ERRHS" )
         copy_local  = True
         to_csv      = True
         remove_xlsx = False
         for handle_name in handle_names:
             retrieve_handle_docs( config_parser, handle_name, dv_format, copy_local, to_csv, remove_xlsx ) # dataverse  => local_disk
     
-    if DO_TRANSLATE:
-        logging.info( "-5- DO_TRANSLATE" )
+    if DO_TRANSLATE_CSV:
+        logging.info( "-5- DO_TRANSLATE_CSV" )
         for handle_name in handle_names:                            # csv/hdl_errhs_[type]/ERRHS_[datatype]_data_]year].csv
             translate_csv( config_parser, handle_name )             # csv-en/hdl_errhs_[type]/ERRHS_[datatype]_data_]year]-en.csv
     
-    if DO_POSTGRES:
-        logging.info( "-6- DO_POSTGRES" )
+    if DO_POSTGRES_DB:
+        logging.info( "-6- DO_POSTGRES_DB" )
         logging.StreamHandler().flush()
         for language in [ "ru", "en" ]:
             row_count( config_parser, language )
@@ -1426,10 +1435,10 @@ if __name__ == "__main__":
             # done on-the-fly in services/topic_counts()
             #topic_counts( config_parser )                                  # postgresql datasets.topics counts
     
-    if DO_MONGODB:
-        logging.info( "-7- DO_MONGODB" )
-        #for language in [ "ru", "en" ]:
-        for language in [ "en" ]:
+    if DO_MONGO_DB:
+        logging.info( "-7- DO_MONGO_DB" )
+        #for language in [ "en" ]:
+        for language in [ "ru", "en" ]:
             update_handle_docs( config_parser, mongo_client, language )     # postgresql => mongodb
     
     logging.info( "total number of exceptions: %d" % Nexcept )
