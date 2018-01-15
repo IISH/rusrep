@@ -1388,7 +1388,7 @@ if __name__ == "__main__":
         logging.info( "-3- DO_RETRIEVE_VOCAB" )
         # Downloaded vocabulary documents are not used to update the vocabularies, 
         # they are processed on the fly, and put in MongoDB
-        copy_local = True      # to inspect
+        copy_local = True       # to inspect
         if dv_format == "":
             to_csv = False      # we get .tab
         else:

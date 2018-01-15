@@ -105,8 +105,8 @@ sys.path.insert( 0, os.path.abspath( os.path.join( os.path.dirname( "__file__" )
 forbidden = [ "classification", "action", "language", "path" ]
 vocab_debug = False
 
-#translate = True
-translate = False   # read from English db for language = "en"
+#do_translate = True
+do_translate = False   # read from English db for language = "en"
 
 def get_configparser():
     RUSSIANREPO_CONFIG_PATH = os.environ[ "RUSSIANREPO_CONFIG_PATH" ]
@@ -611,7 +611,7 @@ def translate_vocabulary( vocab_filter, classification = None ):
     
     data = {}
     for i, item in enumerate( vocab ):
-        #logging.debug( "%d: %s" % ( i, item ) )
+        logging.debug( "%d: %s" % ( i, item ) )
         if "RUS" in item:
             try:
                 item[ "RUS" ] = item[ "RUS" ].encode( "utf-8" )
@@ -911,8 +911,8 @@ def translate_item( item, eng_data ):
 
 
 def load_vocabulary( vocab_type, language, datatype, base_year ):
-    logging.debug( "load_vocabulary() vocab_type: %s" % vocab_type )
-    logging.debug( "request.args: %s" % str( request.args ) )
+    logging.debug( "load_vocabulary() vocab_type: %s, language: %s, datatype: %s, base_year: %s" % 
+        ( vocab_type, language, datatype, base_year ) )
     
     vocab_filter = {}
     
@@ -939,7 +939,8 @@ def load_vocabulary( vocab_type, language, datatype, base_year ):
     logging.debug( "vocab_filter: %s" % vocab_filter )
     
     eng_data = {}
-    if translate and language == "en":
+    #if do_translate and language == "en":
+    if language == "en":
         eng_data = translate_vocabulary( vocab_filter )
         logging.debug( "translate_vocabulary eng_data items: %d" % len( eng_data ) )
         #logging.debug( "eng_data: %s" % eng_data )
@@ -1276,7 +1277,7 @@ def aggregate_year( qinput, add_subclasses, value_numerical = True ):
     forbidden = [ "classification", "action", "language", "path" ]
     
     eng_data = {}
-    if translate and language == "en":
+    if do_translate and language == "en":
         # translate input english term to russian sql terms
         vocab_filter = {}
         classification = qinput.get( "classification" )
@@ -2131,6 +2132,7 @@ def classes():
 
 
 # Indicators - Is this used by the GUI?
+"""
 @app.route( "/indicators", methods = [ "POST", "GET" ] )
 def indicators():
     logging.debug( "indicators()" )
@@ -2181,7 +2183,7 @@ def indicators():
     logging.debug( json_string )
     
     return Response( json_string, mimetype = "application/json; charset=utf-8" )
-
+"""
 
 
 # Aggregation - Preview User selection post and gets data to build preview in GUI step 5 
