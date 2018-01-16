@@ -232,6 +232,7 @@ def strip_subclasses( path ):
         
     logging.debug( "new path: (%s) %s" % ( type( path_stripped ), str( path_stripped ) ) )
     logging.debug( "key_set: %s" % key_set )
+    logging.debug( "strip_subclasses() return" )
     
     return add_subclasses, path_stripped, key_set
 
@@ -334,6 +335,7 @@ def json_generator( qinput_, sql_names, json_dataname, data, qkey_set = None ):
     
     # collect all data class keys
     
+    key_set = set()
     dkey_set = set()
     len_data = len( data )
     for idx, value_str in enumerate( data ):
@@ -387,10 +389,10 @@ def json_generator( qinput_, sql_names, json_dataname, data, qkey_set = None ):
                     data_keys = "непригодный"
         
         if len( dkey_set ) > len( qkey_set ):
-            logging.debug( "MORE KEYS? %s" % dkey_set )
             key_set = dkey_set
         else:
             key_set = qkey_set
+        logging.debug( "qkey_set: %s, dkey_set: %s" % ( qkey_set, dkey_set ) )
         
         ( path, output ) = class_collector( data_keys, key_set )
         output[ "path" ] = path
@@ -887,8 +889,8 @@ def load_vocabulary( vocab_type, language, datatype, base_year ):
     logging.debug( "vocab_filter: %s" % vocab_filter )
     
     eng_data = {}
-    #if do_translate and language == "en":
-    if language == "en":
+    if do_translate and language == "en":
+    #if language == "en":
         eng_data = translate_vocabulary( vocab_filter )
         logging.debug( "translate_vocabulary eng_data items: %d" % len( eng_data ) )
         logging.debug( "eng_data: %s" % eng_data )
@@ -918,6 +920,10 @@ def load_vocabulary( vocab_type, language, datatype, base_year ):
     
     client = MongoClient()
     db_name = "vocabulary"
+    if "classes" in vocab_name:
+        db_name +=  ( '_' + language )
+    logging.debug( "db_name: %s" % db_name )
+    
     db = client.get_database( db_name )     # get the vocabulary db
     vocab = db.data.find( params )          # apply the filter parameters
     
@@ -2297,13 +2303,7 @@ def aggregation():
                 entry_list_collect.extend( entry_list_ntc )
                 entry_list_collect.extend( entry_list_none )
         
-        #itemkeys = 
-        #entry_list_sorted = sorted( entry_list_sorted, key = itemgetter( "path['histclass1']", "path['histclass2']", "path['histclass3']" ) )
-        #entry_list_sorted = sorted( entry_list_sorted, key = itemgetter( path['histclass1'] ) )
-        #entry_list_sorted = sorted( entry_list_sorted, key = itemgetter( 'path:histclass1' ) )
-        #entry_list_sorted = sorted( entry_list_sorted, key = lambda x: x[1] )
-        
-        entry_list_sorted = sorted( entry_list_collect, key = itemgetter( 'path' ) )
+        entry_list_sorted = sort_entries( entry_list_collect )
         
         #json_string, cache_except = json_cache( entry_list, language, "data", download_key, qinput )
         json_string, cache_except = json_cache( entry_list_sorted, language, "data", download_key, qinput )
@@ -2368,6 +2368,42 @@ def aggregation():
     logging.info( "aggregation took %s" % str_elapsed )
     
     return Response( json_string, mimetype = "application/json; charset=utf-8" )
+
+
+
+def sort_entries( entry_list_collect ):
+    entry_list = []
+    entry_list_sorted = []
+    
+    # sorting with sorted() + path key only gives the desired result if all items 
+    # have the same (number of) keys. So add missing keys with empty values as needed. 
+    path_keys = []
+    for item in entry_list_collect:
+        path = item.get( "path" )
+        if len( path.keys() ) > len( path_keys ):
+            path_keys = path.keys()
+    
+    len_path_keys = len( path_keys )
+    for item in entry_list_collect:
+        path = item.get( "path" )
+        if len( path.keys() ) < len_path_keys:
+            for key in path_keys:
+                if not path.get( key ):
+                    path[ key ] = ''
+            item[ "path" ]  = path
+        entry_list.append( item )
+    
+    #itemkeys = 
+    #entry_list_sorted = sorted( entry_list_sorted, key = itemgetter( "path['histclass1']", "path['histclass2']", "path['histclass3']" ) )
+    #entry_list_sorted = sorted( entry_list_sorted, key = itemgetter( path['histclass1'] ) )
+    #entry_list_sorted = sorted( entry_list_sorted, key = itemgetter( 'path:histclass1' ) )
+    #entry_list_sorted = sorted( entry_list_sorted, key = lambda x: x[1] )
+        
+    entry_list_sorted = sorted( entry_list, key = itemgetter( 'path' ) )
+        
+    
+    
+    return entry_list_sorted
 
 
 
