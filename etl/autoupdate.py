@@ -937,7 +937,7 @@ def filter_csv( csv_dir, in_filename ):
 
 
 
-def update_handle_docs( config_parser, mongo_client,language ):
+def update_handle_docs( config_parser, mongo_client, language ):
     logging.info( "" )
     logging.info( "update_handle_docs()" )
     
@@ -962,9 +962,19 @@ def clear_mongo( mongo_client ):
     logging.info( "clear_mongo()" )
     
     dbname_vocab = config_parser.get( "config", "vocabulary" )
-    db_vocab = mongo_client.get_database( dbname_vocab )
     logging.info( "delete all documents from collection 'data' in mongodb db '%s'" % dbname_vocab )
+    db_vocab = mongo_client.get_database( dbname_vocab )
     # drop the documents from collection 'data'; same as: db.drop_collection( coll_name )
+    db_vocab.data.drop()
+    
+    dbname_vocab_ru = dbname_vocab + "_ru"
+    logging.info( "delete all documents from collection 'data' in mongodb db '%s'" % dbname_vocab_ru )
+    db_vocab = mongo_client.get_database( dbname_vocab_ru )
+    db_vocab.data.drop()
+    
+    dbname_vocab_en = dbname_vocab + "_en"
+    logging.info( "delete all documents from collection 'data' in mongodb db '%s'" % dbname_vocab_en )
+    db_vocab = mongo_client.get_database( dbname_vocab_en )
     db_vocab.data.drop()
     
     logging.info( "clearing mongodb cache" )
@@ -1434,7 +1444,7 @@ if __name__ == "__main__":
                 store_handle_docs( config_parser, handle_name, language )   # local_disk => postgresql
                 logging.StreamHandler().flush()
                 row_count( config_parser,language )
-        
+            
             # done on-the-fly in services/topic_counts()
             #topic_counts( config_parser )                                  # postgresql datasets.topics counts
     
