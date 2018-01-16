@@ -5,7 +5,7 @@ VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
-FL-09-Jan-2018 reordering optional
+FL-16-Jan-2018 reordering optional
 
 def get_configparser():
 def get_connection():
@@ -15,7 +15,6 @@ def path_levels = group_levels( path ):
 def json_generator( qinput, sql_names, json_dataname, data, key_set = None ):
 def json_cache( entry_list, language, json_dataname, download_key, qinput = {} ):
 def collect_docs( qinput, download_dir, download_key ):
-def translate_vocabulary( vocab_filter, classification = None ):
 def load_years( cursor, datatype, language = "en" ):
 def sqlfilter( sql ):
 def sqlconstructor( sql ):
@@ -25,6 +24,7 @@ def dataset_filter( data, sql_names, classification ):
 def zap_empty_classes( item ):
 def translate_item( item, eng_data ):
 def load_vocabulary( vocab_type ):
+def translate_vocabulary( vocab_filter, classification = None ):
 def get_sql_where( name, value ):
 def loadjson( json_dataurl ):
 def filecat_subtopic( qinput, cursor, datatype, base_year ):
@@ -593,58 +593,6 @@ def collect_docs( qinput, download_dir, download_key ):
 
 
 
-def translate_vocabulary( vocab_filter, classification = None ):
-    logging.debug( "translate_vocabulary()" )
-    logging.debug( "vocab_filter: %s" % str( vocab_filter ) )
-    
-    client = MongoClient()
-    dbname = "vocabulary"
-    db = client.get_database( dbname )
-    
-    if classification == "modern":
-        del vocab_filter[ "YEAR" ]  # single "modern" classification for all years
-    
-    if vocab_filter:
-        vocab = db.data.find( vocab_filter )
-    else:
-        vocab = db.data.find()
-    
-    data = {}
-    for i, item in enumerate( vocab ):
-        logging.debug( "%d: %s" % ( i, item ) )
-        if "RUS" in item:
-            try:
-                item[ "RUS" ] = item[ "RUS" ].encode( "utf-8" )
-                item[ "EN" ]  = item[ "EN" ] .encode( "utf-8" )
-                
-                if item[ "RUS" ].startswith( '"' ) and item[ "RUS" ].endswith( '"' ):
-                    item[ "RUS" ] = string[ 1:-1 ]
-                if item[ "EN" ].startswith( '"' ) and item[ "EN" ].endswith( '"' ):
-                    item[ "EN" ] = string[ 1:-1 ]
-                
-                item[ "RUS" ] = re.sub( r'"', '', item[ "RUS" ] )
-                item[ "EN" ]  = re.sub( r'"', '', item[ "EN" ] )
-                
-                # 2-way key/values; E->R & R->E
-                data[ item[ "RUS" ] ] = item[ "EN" ]
-                data[ item[ "EN" ] ]  = item[ "RUS" ] 
-                
-                if vocab_debug:
-                    logging.debug( "%d EN: |%s| RUS: |%s|" % ( i, item[ "EN" ], item[ "RUS" ] ) )
-            except:
-                type_, value, tb = exc_info()
-                logging.error( "translate_vocabulary failed: %s" % value )
-    
-    if vocab_debug:
-        for k, key in enumerate( data ):
-            logging.debug( "%d: key: %s, value: %s" % ( k, key, data[ key ] ) )
-    
-    logging.debug( "translate_vocabulary: return %d items" % len( data ) )
-    
-    return data
-
-
-
 def load_years( cursor, datatype, language = "en" ):
     """
     return a json dictionary with record counts from table russianrepository for the given datatype
@@ -943,19 +891,15 @@ def load_vocabulary( vocab_type, language, datatype, base_year ):
     if language == "en":
         eng_data = translate_vocabulary( vocab_filter )
         logging.debug( "translate_vocabulary eng_data items: %d" % len( eng_data ) )
-        #logging.debug( "eng_data: %s" % eng_data )
+        logging.debug( "eng_data: %s" % eng_data )
         
         units = translate_vocabulary( { "vocabulary": "ERRHS_Vocabulary_units" } )
         logging.debug( "translate_vocabulary units items: %d" % len( units ) )
-        #logging.debug( "units: %s" % units )
+        logging.debug( "units: %s" % units )
         
         for item in units:
             eng_data[ item ] = units[ item ]
             #logging.debug( "%s => %s" % ( item, units[ item ] ) )
-    
-    client = MongoClient()
-    db_name = "vocabulary"
-    db = client.get_database( db_name )
     
     params = {}
     if vocab_type == "topics":
@@ -971,7 +915,11 @@ def load_vocabulary( vocab_type, language, datatype, base_year ):
         params[ "datatype" ] = datatype
     
     logging.debug( "params: %s" % params )
-    vocab = db.data.find( params )
+    
+    client = MongoClient()
+    db_name = "vocabulary"
+    db = client.get_database( db_name )     # get the vocabulary db
+    vocab = db.data.find( params )          # apply the filter parameters
     
     data = []
     uid = 0
@@ -1053,6 +1001,58 @@ def load_vocabulary( vocab_type, language, datatype, base_year ):
     logging.debug( "load_vocabulary() return %s json_hash" % vocab_type )
     logging.debug( json_hash )
     return json_hash
+
+
+
+def translate_vocabulary( vocab_filter, classification = None ):
+    logging.debug( "translate_vocabulary()" )
+    logging.debug( "vocab_filter: %s" % str( vocab_filter ) )
+    
+    client = MongoClient()
+    dbname = "vocabulary"
+    db = client.get_database( dbname )
+    
+    if classification == "modern":
+        del vocab_filter[ "YEAR" ]  # single "modern" classification for all years
+    
+    if vocab_filter:
+        vocab = db.data.find( vocab_filter )
+    else:
+        vocab = db.data.find()
+    
+    data = {}
+    for i, item in enumerate( vocab ):
+        logging.debug( "%d: %s" % ( i, item ) )
+        if "RUS" in item:
+            try:
+                item[ "RUS" ] = item[ "RUS" ].encode( "utf-8" )
+                item[ "EN" ]  = item[ "EN" ] .encode( "utf-8" )
+                
+                if item[ "RUS" ].startswith( '"' ) and item[ "RUS" ].endswith( '"' ):
+                    item[ "RUS" ] = string[ 1:-1 ]
+                if item[ "EN" ].startswith( '"' ) and item[ "EN" ].endswith( '"' ):
+                    item[ "EN" ] = string[ 1:-1 ]
+                
+                item[ "RUS" ] = re.sub( r'"', '', item[ "RUS" ] )
+                item[ "EN" ]  = re.sub( r'"', '', item[ "EN" ] )
+                
+                # 2-way key/values; E->R & R->E
+                data[ item[ "RUS" ] ] = item[ "EN" ]
+                data[ item[ "EN" ] ]  = item[ "RUS" ] 
+                
+                if vocab_debug:
+                    logging.debug( "%d EN: |%s| RUS: |%s|" % ( i, item[ "EN" ], item[ "RUS" ] ) )
+            except:
+                type_, value, tb = exc_info()
+                logging.error( "translate_vocabulary failed: %s" % value )
+    
+    if vocab_debug:
+        for k, key in enumerate( data ):
+            logging.debug( "%d: key: %s, value: %s" % ( k, key, data[ key ] ) )
+    
+    logging.debug( "translate_vocabulary: return %d items" % len( data ) )
+    
+    return data
 
 
 
@@ -2044,8 +2044,13 @@ def documentation():
 def topics():
     logging.debug( "/topics" )
     logging.debug( "topics() request.args: %s" % str( request.args ) )
-    # uses a vocabulary file from dataverse
-    data = load_vocabulary( "topics" )
+    
+    language  = request.args.get( "language" )
+    datatype  = request.args.get( "datatype" )
+    base_year = request.args.get( "basisyear" )
+    
+    vocab_type = "topics"
+    data = load_vocabulary( vocab_type, language, datatype, base_year )
     
     logging.debug( "/topics return Response" )
     return Response( json.dumps( data ), mimetype = "application/json; charset=utf-8" )
@@ -2083,11 +2088,11 @@ def regions():
     logging.debug( "/regions" )
     logging.debug( "regions() request.args: %s" % str( request.args ) )
     
-    vocab_type = "regions"
-    language   = request.args.get( "language" )
-    datatype   = request.args.get( "datatype" )
-    base_year  = request.args.get( "basisyear" )
+    language  = request.args.get( "language" )
+    datatype  = request.args.get( "datatype" )
+    base_year = request.args.get( "basisyear" )
     
+    vocab_type = "regions"
     data = load_vocabulary( vocab_type, language, datatype, base_year )
     
     logging.debug( "/regions return Response" )
@@ -2101,11 +2106,11 @@ def histclasses():
     logging.debug( "/histclasses" )
     logging.debug( "histclasses() request.args: %s" % str( request.args ) )
     
-    vocab_type = "historical"
-    language   = request.args.get( "language" )
-    datatype   = request.args.get( "datatype" )
-    base_year  = request.args.get( "base_year" )
+    language  = request.args.get( "language" )
+    datatype  = request.args.get( "datatype" )
+    base_year = request.args.get( "base_year" )
     
+    vocab_type = "historical"
     data = load_vocabulary( vocab_type, language, datatype, base_year )
     
     logging.debug( "/histclasses return Response" )
@@ -2119,11 +2124,11 @@ def classes():
     logging.debug( "/classes" )
     logging.debug( "classes() request.args: %s" % str( request.args ) )
     
-    vocab_type = "modern"
-    language   = request.args.get( "language" )
-    datatype   = request.args.get( "datatype" )
-    base_year  = request.args.get( "base_year" )
+    language  = request.args.get( "language" )
+    datatype  = request.args.get( "datatype" )
+    base_year = request.args.get( "base_year" )
     
+    vocab_type = "modern"
     data = load_vocabulary( vocab_type, language, datatype, base_year )
     
     logging.debug( "/classes return Response" )
