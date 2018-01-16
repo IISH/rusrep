@@ -18,7 +18,7 @@ FL-07-Jul-2017 sys.stderr.write() cannot write to cron.log as normal user
 FL-11-Jul-2017 pandas: do not parse numbers, but keep strings as they are
 FL-13-Aug-2017 Py2/Py3 cleanup
 FL-18-Dec-2017 Keep trailing input '\n' for header lines in translate_csv
-FL-10-Jan-2018 Separate RU & EN tables
+FL-16-Jan-2018 Separate RU & EN tables
 
 ToDo:
  - replace urllib by requests
@@ -336,7 +336,7 @@ def update_vocabularies( config_parser, mongo_client, dv_format, copy_local = Fa
     """
     update_vocabularies():
     -1- retrieves ERRHS_Vocabulary_*.tab files from dataverse
-    -2- with copy_local=True stores them locally
+    -2- with copy_local = True stores them locally
     -3- stores the new data in MogoDB db = "vocabulary", collection = 'data'
     """
     
@@ -378,13 +378,12 @@ def update_vocabularies( config_parser, mongo_client, dv_format, copy_local = Fa
     # the vocabulary files may already have been downloadeded by documents_by_handle();
     # with ".tab" extension vocabulary() retrieves them again from dataverse, 
     # with ".csv" extension vocabulary() retrieves them locally, 
-    # and --together with some filtering-- 
-    # appends them to a bigvocabulary
+    # and --together with some filtering-- appends them to a big_vocabulary
     tmp_dir = config_parser.get( "config", "tmppath" )
     abs_ascii_dir = os.path.join( tmp_dir, "dataverse", ascii_dir, handle_name )
-    bigvocabulary = vocabulary( dv_host, apikey, ids, abs_ascii_dir )    # type: <class 'pandas.core.frame.DataFrame'>
-    #print bigvocabulary.to_json( orient = 'records' )
-    vocab_json = json.loads( bigvocabulary.to_json( orient = 'records' ) )  # type: <type 'list'>
+    big_vocabulary = vocabulary( dv_host, apikey, ids, abs_ascii_dir )    # type: <class 'pandas.core.frame.DataFrame'>
+    #print big_vocabulary.to_json( orient = 'records' )
+    vocab_json = json.loads( big_vocabulary.to_json( orient = 'records' ) )  # type: <type 'list'>
     
     """
     vocab_json0 = vocab_json[ 0 ]
@@ -945,9 +944,13 @@ def update_handle_docs( config_parser, mongo_client,language ):
     configpath = RUSSIANREPO_CONFIG_PATH
     logging.info( "using configparser: %s" % configpath )
     # classupdate() uses postgresql access parameters from cpath contents
-    classdata = classupdate( configpath, language )     # fetching historic and modern class data from postgresql table 
+    # fetching historic and modern class data from postgresql table, 
+    # either from the 'ru' or from the 'en' table
+    classdata = classupdate( configpath, language )
     
+    # for the class data, use language dependent mongo collections
     dbname = config_parser.get( "config", "vocabulary" )
+    dbname += ( '_' + language )
     logging.info( "inserting historic and modern class data in mongodb '%s'" % dbname )
     
     db = mongo_client.get_database( dbname )
@@ -1386,8 +1389,8 @@ if __name__ == "__main__":
     
     if DO_RETRIEVE_VOCAB:
         logging.info( "-3- DO_RETRIEVE_VOCAB" )
-        # Downloaded vocabulary documents are not used to update the vocabularies, 
-        # they are processed on the fly, and put in MongoDB
+        # Downloaded vocabulary documents are not first stored in postgreSQL, 
+        # they are processed on the fly, and directly put in MongoDB vocabulary
         copy_local = True       # to inspect
         if dv_format == "":
             to_csv = False      # we get .tab
@@ -1416,9 +1419,9 @@ if __name__ == "__main__":
             retrieve_handle_docs( config_parser, handle_name, dv_format, copy_local, to_csv, remove_xlsx ) # dataverse  => local_disk
     
     if DO_TRANSLATE_CSV:
-        logging.info( "-5- DO_TRANSLATE_CSV" )
-        for handle_name in handle_names:                            # csv/hdl_errhs_[type]/ERRHS_[datatype]_data_]year].csv
-            translate_csv( config_parser, handle_name )             # csv-en/hdl_errhs_[type]/ERRHS_[datatype]_data_]year]-en.csv
+        logging.info( "-5- DO_TRANSLATE_CSV" )                      # ru => en
+        for handle_name in handle_names:                            # csv-ru/hdl_errhs_[type]/ERRHS_[datatype]_data_[year]-ru.csv
+            translate_csv( config_parser, handle_name )             # csv-en/hdl_errhs_[type]/ERRHS_[datatype]_data_[year]-en.csv
     
     if DO_POSTGRES_DB:
         logging.info( "-6- DO_POSTGRES_DB" )
@@ -1437,7 +1440,6 @@ if __name__ == "__main__":
     
     if DO_MONGO_DB:
         logging.info( "-7- DO_MONGO_DB" )
-        #for language in [ "en" ]:
         for language in [ "ru", "en" ]:
             update_handle_docs( config_parser, mongo_client, language )     # postgresql => mongodb
     
