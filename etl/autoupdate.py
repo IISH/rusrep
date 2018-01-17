@@ -17,7 +17,8 @@ FL-03-Jul-2017 Translate data files to english
 FL-07-Jul-2017 sys.stderr.write() cannot write to cron.log as normal user
 FL-11-Jul-2017 pandas: do not parse numbers, but keep strings as they are
 FL-13-Aug-2017 Py2/Py3 cleanup
-FL-20-Oct-2017 latest change
+FL-18-Dec-2017 Keep trailing input '\n' for header lines in translate_csv
+FL-16-Jan-2018 Separate RU & EN tables
 
 ToDo:
  - replace urllib by requests
@@ -29,14 +30,14 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", co
 def update_documentation( config_parser, copy_local, remove_xlsx = False ):
 def update_vocabularies( config_parser, mongo_client, dv_format, copy_local = False, to_csv = False, remove_xlsx = False):
 def retrieve_handle_docs( config_parser, handle_name, dv_format = "", copy_local = False, to_csv = False, remove_xlsx = False ):
-def row_count( config_parser ):
-def clear_postgres( config_parser ):
-def store_handle_docs( config_parser, handle_name ):
+def row_count( config_parser, language ):
+def clear_postgres_tale( config_parser, language ):
+def store_handle_docs( config_parser, handle_name, language ):
 def test_csv_file( path_name ):
 def filter_csv( csv_dir, in_filename ):
 def update_handle_docs( config_parser, mongo_client ):
 def clear_mongo( mongo_client ):
-def topic_counts( config_parser ):
+def topic_counts( config_parser, language ):
 def translate_csv( config_parser, handle_name ):
 def format_secs( seconds ):
 """
@@ -63,6 +64,7 @@ import shutil
 
 from bidict import bidict
 from pymongo import MongoClient
+from sys import exc_info
 from time import ctime, time
 
 sys.path.insert( 0, os.path.abspath( os.path.join(os.path.dirname( "__file__" ), './' ) ) )
@@ -190,7 +192,7 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", co
     
     csv_dir = ""
     if dst_dir == "xlsx":
-        csv_dir = os.path.join( tmp_dir, "dataverse", "csv", handle_name )
+        csv_dir = os.path.join( tmp_dir, "dataverse", "csv-ru", handle_name )
     elif dst_dir == "vocab/xlsx":
         csv_dir = os.path.join( tmp_dir, "dataverse", "vocab/csv", handle_name )
     
@@ -265,7 +267,10 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", co
                         
                         root, ext = os.path.splitext( filename )
                         logging.info( "%s %s" % ( handle_name, root ) )
-                        csv_path  = "%s/%s.csv" % ( csv_dir, root )
+                        if dst_dir == "xlsx":                               # ru & en in separate files
+                            csv_path  = "%s/%s-ru.csv" % ( csv_dir, root )  # input csv
+                        elif dst_dir == "vocab/xlsx":                       # both ru & en in same file
+                            csv_path  = "%s/%s.csv" % ( csv_dir, root )     # input csv
                         logging.debug( "csv_path:  %s" % csv_path )
                         
                         #Xlsx2csv( filepath, **kwargs_xlsx2csv ).convert( csv_path )
@@ -331,7 +336,7 @@ def update_vocabularies( config_parser, mongo_client, dv_format, copy_local = Fa
     """
     update_vocabularies():
     -1- retrieves ERRHS_Vocabulary_*.tab files from dataverse
-    -2- with copy_local=True stores them locally
+    -2- with copy_local = True stores them locally
     -3- stores the new data in MogoDB db = "vocabulary", collection = 'data'
     """
     
@@ -373,13 +378,12 @@ def update_vocabularies( config_parser, mongo_client, dv_format, copy_local = Fa
     # the vocabulary files may already have been downloadeded by documents_by_handle();
     # with ".tab" extension vocabulary() retrieves them again from dataverse, 
     # with ".csv" extension vocabulary() retrieves them locally, 
-    # and --together with some filtering-- 
-    # appends them to a bigvocabulary
+    # and --together with some filtering-- appends them to a big_vocabulary
     tmp_dir = config_parser.get( "config", "tmppath" )
     abs_ascii_dir = os.path.join( tmp_dir, "dataverse", ascii_dir, handle_name )
-    bigvocabulary = vocabulary( dv_host, apikey, ids, abs_ascii_dir )    # type: <class 'pandas.core.frame.DataFrame'>
-    #print bigvocabulary.to_json( orient = 'records' )
-    vocab_json = json.loads( bigvocabulary.to_json( orient = 'records' ) )  # type: <type 'list'>
+    big_vocabulary = vocabulary( dv_host, apikey, ids, abs_ascii_dir )    # type: <class 'pandas.core.frame.DataFrame'>
+    #print big_vocabulary.to_json( orient = 'records' )
+    vocab_json = json.loads( big_vocabulary.to_json( orient = 'records' ) )  # type: <type 'list'>
     
     """
     vocab_json0 = vocab_json[ 0 ]
@@ -435,7 +439,7 @@ def retrieve_handle_docs( config_parser, handle_name, dv_format = "", copy_local
 
 
 
-def row_count( config_parser ):
+def row_count( config_parser, language ):
     logging.debug( "row_count()" )
 
     configpath = RUSSIANREPO_CONFIG_PATH
@@ -449,11 +453,12 @@ def row_count( config_parser ):
 
     config_parser.read( configpath )
     
-    dbhost   = config_parser.get( 'config', 'dbhost' )
-    dbname   = config_parser.get( 'config', 'dbname' )
-    dbtable  = config_parser.get( 'config', 'dbtable' )
-    user     = config_parser.get( 'config', 'dblogin' )
-    password = config_parser.get( 'config', 'dbpassword' )
+    dbtable_name = "dbtable" + '_' + language
+    dbtable  = config_parser.get( "config", dbtable_name )
+    dbhost   = config_parser.get( "config", "dbhost" )
+    dbname   = config_parser.get( "config", "dbname" )
+    user     = config_parser.get( "config", "dblogin" )
+    password = config_parser.get( "config", "dbpassword" )
     
     connection_string = "host = '%s' dbname = '%s' user = '%s' password = '%s'" % ( dbhost, dbname, user, password )
     logging.debug( "connection_string: %s" % connection_string )
@@ -462,18 +467,24 @@ def row_count( config_parser ):
     cursor = pg_connection.cursor()
     sql = "SELECT COUNT(*) FROM %s;" % dbtable
     logging.info( sql )
-    cursor.execute( sql )
-    data = cursor.fetchall()
-    count = data[0][0]
-    logging.info( "row count: %d" % count )
     
-    pg_connection.commit()
-    cursor.close()
-    pg_connection.close()
+    try:
+        cursor.execute( sql )
+        data = cursor.fetchall()
+        count = data[0][0]
+        logging.info( "row count: %d" % count )
+        
+        pg_connection.commit()
+        cursor.close()
+        pg_connection.close()
+    except:
+        logging.error( "row_count() failed:" )
+        type_, value, tb = sys.exc_info()
+        logging.error( "%s" % value )
 
 
 
-def clear_postgres( config_parser ):
+def clear_postgres_table( config_parser, language ):
     logging.info( "clear_postgres()" )
 
     configpath = RUSSIANREPO_CONFIG_PATH
@@ -487,11 +498,12 @@ def clear_postgres( config_parser ):
 
     config_parser.read( configpath )
     
-    dbhost   = config_parser.get( 'config', 'dbhost' )
-    dbname   = config_parser.get( 'config', 'dbname' )
-    dbtable  = config_parser.get( 'config', 'dbtable' )
-    user     = config_parser.get( 'config', 'dblogin' )
-    password = config_parser.get( 'config', 'dbpassword' )
+    dbtable_name = "dbtable" + '_' + language
+    dbtable  = config_parser.get( "config", dbtable_name )
+    dbhost   = config_parser.get( "config", "dbhost" )
+    dbname   = config_parser.get( "config", "dbname" )
+    user     = config_parser.get( "config", "dblogin" )
+    password = config_parser.get( "config", "dbpassword" )
     
     connection_string = "host = '%s' dbname = '%s' user = '%s' password = '%s'" % ( dbhost, dbname, user, password )
     logging.info( "connection_string: %s" % connection_string )
@@ -509,12 +521,13 @@ def clear_postgres( config_parser ):
 
 
 
-def store_handle_docs( config_parser, handle_name ):
+def store_handle_docs( config_parser, handle_name, language ):
     logging.info( "" )
     logging.info( "store_handle_docs() %s" % handle_name )
     
     tmp_dir = config_parser.get( "config", "tmppath" )
-    csv_dir  = os.path.join( tmp_dir, "dataverse", "csv", handle_name )
+    csv_dir_l = "csv-" +language
+    csv_dir  = os.path.join( tmp_dir, "dataverse", csv_dir_l, handle_name )
     dir_list = []
     if os.path.isdir( csv_dir ):
         dir_list = os.listdir( csv_dir )
@@ -532,11 +545,12 @@ def store_handle_docs( config_parser, handle_name ):
 
     config_parser.read( configpath )
     
-    dbhost   = config_parser.get( 'config', 'dbhost' )
-    dbname   = config_parser.get( 'config', 'dbname' )
-    dbtable  = config_parser.get( 'config', 'dbtable' )
-    user     = config_parser.get( 'config', 'dblogin' )
-    password = config_parser.get( 'config', 'dbpassword' )
+    dbtable_name = "dbtable" + '_' + language
+    dbtable  = config_parser.get( "config", dbtable_name )
+    dbhost   = config_parser.get( "config", "dbhost" )
+    dbname   = config_parser.get( "config", "dbname" )
+    user     = config_parser.get( "config", "dblogin" )
+    password = config_parser.get( "config", "dbpassword" )
     
     connection_string = "host = '%s' dbname = '%s' user = '%s' password = '%s'" % ( dbhost, dbname, user, password )
     logging.info( "connection_string: %s" % connection_string )
@@ -565,7 +579,7 @@ def store_handle_docs( config_parser, handle_name ):
             
             # debug strange record duplications
             pg_connection.commit()
-            row_count( config_parser )
+            row_count( config_parser, language )
             
         else:
             logging.info( "skip: %s" % filename )
@@ -923,16 +937,20 @@ def filter_csv( csv_dir, in_filename ):
 
 
 
-def update_handle_docs( config_parser, mongo_client ):
+def update_handle_docs( config_parser, mongo_client, language ):
     logging.info( "" )
     logging.info( "update_handle_docs()" )
     
     configpath = RUSSIANREPO_CONFIG_PATH
     logging.info( "using configparser: %s" % configpath )
     # classupdate() uses postgresql access parameters from cpath contents
-    classdata = classupdate( configpath )   # fetching historic and modern class data from postgresql table 
+    # fetching historic and modern class data from postgresql table, 
+    # either from the 'ru' or from the 'en' table
+    classdata = classupdate( configpath, language )
     
+    # for the class data, use language dependent mongo collections
     dbname = config_parser.get( "config", "vocabulary" )
+    dbname += ( '_' + language )
     logging.info( "inserting historic and modern class data in mongodb '%s'" % dbname )
     
     db = mongo_client.get_database( dbname )
@@ -944,9 +962,19 @@ def clear_mongo( mongo_client ):
     logging.info( "clear_mongo()" )
     
     dbname_vocab = config_parser.get( "config", "vocabulary" )
-    db_vocab = mongo_client.get_database( dbname_vocab )
     logging.info( "delete all documents from collection 'data' in mongodb db '%s'" % dbname_vocab )
+    db_vocab = mongo_client.get_database( dbname_vocab )
     # drop the documents from collection 'data'; same as: db.drop_collection( coll_name )
+    db_vocab.data.drop()
+    
+    dbname_vocab_ru = dbname_vocab + "_ru"
+    logging.info( "delete all documents from collection 'data' in mongodb db '%s'" % dbname_vocab_ru )
+    db_vocab = mongo_client.get_database( dbname_vocab_ru )
+    db_vocab.data.drop()
+    
+    dbname_vocab_en = dbname_vocab + "_en"
+    logging.info( "delete all documents from collection 'data' in mongodb db '%s'" % dbname_vocab_en )
+    db_vocab = mongo_client.get_database( dbname_vocab_en )
     db_vocab.data.drop()
     
     logging.info( "clearing mongodb cache" )
@@ -955,7 +983,7 @@ def clear_mongo( mongo_client ):
 
 
 
-def topic_counts( config_parser ):
+def topic_counts( config_parser, langage ):
     logging.info( "topic_counts()" )
     
     configpath = RUSSIANREPO_CONFIG_PATH
@@ -969,10 +997,12 @@ def topic_counts( config_parser ):
 
     config_parser.read( configpath )
     
-    dbhost   = config_parser.get( 'config', 'dbhost' )
-    dbname   = config_parser.get( 'config', 'dbname' )
-    user     = config_parser.get( 'config', 'dblogin' )
-    password = config_parser.get( 'config', 'dbpassword' )
+    dbtable_name = "dbtable" + '_' + language
+    dbtable  = config_parser.get( "config", dbtable_name )
+    dbhost   = config_parser.get( "config", "dbhost" )
+    dbname   = config_parser.get( "config", "dbname" )
+    user     = config_parser.get( "config", "dblogin" )
+    password = config_parser.get( "config", "dbpassword" )
     
     connection_string = "host = '%s' dbname = '%s' user = '%s' password = '%s'" % ( dbhost, dbname, user, password )
     logging.info( "connection_string: %s" % connection_string )
@@ -1131,7 +1161,7 @@ def translate_csv( config_parser, handle_name ):
     vocab_modclasses = load_vocab( config_parser, "ERRHS_Vocabulary_modclasses.csv", vocab_modclasses, 0, 1 )
     
     tmp_dir = config_parser.get( "config", "tmppath" )
-    csv_dir = os.path.join( tmp_dir, "dataverse", "csv", handle_name )
+    csv_dir = os.path.join( tmp_dir, "dataverse", "csv-ru", handle_name )
     if os.path.exists( csv_dir ):
         logging.info( "csv_dir: %s" % csv_dir )
     else:
@@ -1166,8 +1196,10 @@ def translate_csv( config_parser, handle_name ):
         
         logging.info( csv_path )
         basename, ext = os.path.splitext( csv_name )
+        if basename.endswith( "-ru" ):
+            basename = basename[ :-3 ]
         eng_name = basename + "-en" +  ext
-        #logging.info( eng_name )
+        logging.info( eng_name )
         eng_path = os.path.join( eng_dir, eng_name )
         logging.info( eng_path )
         
@@ -1185,7 +1217,7 @@ def translate_csv( config_parser, handle_name ):
             if nline == 0:
                 header = csv_line.split( '|' )
                 logging.debug( header )
-                file_eng.write( csv_line )      # unchanged
+                file_eng.write( "%s\n" % csv_line )     # header is english, only data fields must be translated
             else:
                 rus_cols = csv_line.split( '|' )
                 ncolumns = len( rus_cols )
@@ -1310,12 +1342,12 @@ def format_secs( seconds ):
 
 
 if __name__ == "__main__":
-    DO_DOCUMENTATION = True     # documentation: dataverse  => local_disk
-    DO_VOCABULARY    = True     # vocabulary: dataverse  => mongodb
-    DO_RETRIEVE      = True     # ERRHS data: dataverse  => local_disk, xlsx -> csv
-    DO_POSTGRES      = True     # ERRHS data: local_disk => postgresql, csv -> table
-    DO_MONGODB       = True     # ERRHS data: postgresql => mongodb
-    DO_TRANSLATE     = True     # translate Russian csv files to English variants
+    DO_RETRIEVE_DOC   = True     # documentation: dataverse  => local_disk
+    DO_RETRIEVE_VOCAB = True     # vocabulary: dataverse  => mongodb
+    DO_RETRIEVE_ERRHS = True     # ERRHS data: dataverse  => local_disk, xlsx -> csv
+    DO_TRANSLATE_CSV  = True     # translate Russian csv files to English variants
+    DO_POSTGRES_DB    = True     # ERRHS data: local_disk => postgresql, csv -> table
+    DO_MONGO_DB       = True     # ERRHS data: postgresql => mongodb
     
     #dv_format = ""
     dv_format = "original"  # does not work for ter_code (regions) vocab translations
@@ -1356,20 +1388,20 @@ if __name__ == "__main__":
     config_parser.read( RUSSIANREPO_CONFIG_PATH )
     mongo_client  = MongoClient()
     
-    if DO_VOCABULARY or DO_MONGODB:
-        logging.info( "-1- DO_VOCABULARY or DO_MONGODB" )
+    if DO_RETRIEVE_VOCAB or DO_MONGO_DB:
+        logging.info( "-1- DO_RETRIEVE_VOCAB or DO_MONGO_DB" )
         clear_mongo( mongo_client )
     
-    if DO_DOCUMENTATION:
-        logging.info( "-2- DO_DOCUMENTATION" )
+    if DO_RETRIEVE_DOC:
+        logging.info( "-2- DO_RETRIEVE_DOC" )
         copy_local  = True      # for zipped downloads
         update_documentation( config_parser, copy_local )
     
-    if DO_VOCABULARY:
-        logging.info( "-3- DO_VOCABULARY" )
-        # Downloaded vocabulary documents are not used to update the vocabularies, 
-        # they are processed on the fly, and put in MongoDB
-        copy_local = True      # to inspect
+    if DO_RETRIEVE_VOCAB:
+        logging.info( "-3- DO_RETRIEVE_VOCAB" )
+        # Downloaded vocabulary documents are not first stored in postgreSQL, 
+        # they are processed on the fly, and directly put in MongoDB vocabulary
+        copy_local = True       # to inspect
         if dv_format == "":
             to_csv = False      # we get .tab
         else:
@@ -1388,36 +1420,38 @@ if __name__ == "__main__":
     #"""
     #handle_names = [ "hdl_errhs_land" ]
     
-    if DO_RETRIEVE:
-        logging.info( "-4- DO_RETRIEVE" )
+    if DO_RETRIEVE_ERRHS:
+        logging.info( "-4- DO_RETRIEVE_ERRHS" )
         copy_local  = True
         to_csv      = True
         remove_xlsx = False
         for handle_name in handle_names:
             retrieve_handle_docs( config_parser, handle_name, dv_format, copy_local, to_csv, remove_xlsx ) # dataverse  => local_disk
     
-    if DO_POSTGRES:
-        logging.info( "-5- DO_POSTGRES" )
+    if DO_TRANSLATE_CSV:
+        logging.info( "-5- DO_TRANSLATE_CSV" )                      # ru => en
+        for handle_name in handle_names:                            # csv-ru/hdl_errhs_[type]/ERRHS_[datatype]_data_[year]-ru.csv
+            translate_csv( config_parser, handle_name )             # csv-en/hdl_errhs_[type]/ERRHS_[datatype]_data_[year]-en.csv
+    
+    if DO_POSTGRES_DB:
+        logging.info( "-6- DO_POSTGRES_DB" )
         logging.StreamHandler().flush()
-        row_count( config_parser )
-        clear_postgres( config_parser )
-        row_count( config_parser )
-        for handle_name in handle_names:
-            store_handle_docs( config_parser, handle_name )         # local_disk => postgresql
-            logging.StreamHandler().flush()
-            row_count( config_parser )
+        for language in [ "ru", "en" ]:
+            row_count( config_parser, language )
+            clear_postgres_table( config_parser, language )
+            row_count( config_parser, language )
+            for handle_name in handle_names:
+                store_handle_docs( config_parser, handle_name, language )   # local_disk => postgresql
+                logging.StreamHandler().flush()
+                row_count( config_parser,language )
+            
+            # done on-the-fly in services/topic_counts()
+            #topic_counts( config_parser )                                  # postgresql datasets.topics counts
     
-        # done on-the-fly in services/topic_counts()
-        #topic_counts( config_parser )                               # postgresql datasets.topics counts
-    
-    if DO_MONGODB:
-        logging.info( "-6- DO_MONGODB" )
-        update_handle_docs( config_parser, mongo_client )           # postgresql => mongodb
-    
-    if DO_TRANSLATE:
-        logging.info( "-7- DO_TRANSLATE" )
-        for handle_name in handle_names:
-            translate_csv( config_parser, handle_name )
+    if DO_MONGO_DB:
+        logging.info( "-7- DO_MONGO_DB" )
+        for language in [ "ru", "en" ]:
+            update_handle_docs( config_parser, mongo_client, language )     # postgresql => mongodb
     
     logging.info( "total number of exceptions: %d" % Nexcept )
     
