@@ -2289,6 +2289,10 @@ def aggregation():
             sql_query_none, eng_data_none = aggregate_year( qinput, add_subclasses, value_numerical = False)    # non-numbers
             entry_list_none = execute_year( qinput, sql_query_none, eng_data_none, key_set )
             
+            logging.debug( "entry_list:      %d items" % len( entry_list ) )
+            logging.debug( "entry_list_ntc:  %d items" % len( entry_list_ntc ) )
+            logging.debug( "entry_list_none: %d items" % len( entry_list_none ) )
+            
             if reorder:
                 params = {
                     "language"       : language,
@@ -2302,8 +2306,15 @@ def aggregation():
                 entry_list_collect.extend( entry_list )
                 entry_list_collect.extend( entry_list_ntc )
                 entry_list_collect.extend( entry_list_none )
-            
-        entry_list_sorted = sort_entries( entry_list_collect )
+                
+        logging.debug( "entry_list_collect: %d items" % len( entry_list_collect ) )
+        
+        entry_list_nodups = remove_dups( entry_list_collect )   # remove duplicate dicts
+        logging.debug( "entry_list_nodups: %d items" % len( entry_list_nodups ) )
+        
+        entry_list_sorted = sort_entries( entry_list_nodups )   # sort by path, value_unit
+        logging.debug( "entry_list_sorted: %d items" % len( entry_list_sorted ) )
+        
         json_string, cache_except = json_cache( entry_list_sorted, language, "data", download_key, qinput )
         
         if cache_except is not None:
@@ -2350,8 +2361,12 @@ def aggregation():
                 entry_list_collect.extend( entry_list_ntc )
                 entry_list_collect.extend( entry_list_none )
             
-            
-        entry_list_sorted = sort_entries( entry_list_collect )
+        entry_list_nodups = remove_dups( entry_list_collect )
+        logging.debug( "entry_list_nodups: %d items" % len( entry_list_nodups ) )
+        
+        entry_list_sorted = sort_entries( entry_list_nodups )
+        logging.debug( "entry_list_sorted: %d items" % len( entry_list_sorted ) )
+        
         json_string, cache_except = json_cache( entry_list_sorted, language, "data", download_key, qinput )
         
         if cache_except is not None:
@@ -2370,20 +2385,33 @@ def aggregation():
 
 
 
-def sort_entries( entry_list_collect ):
+def remove_dups( entry_list_collect ):
+    # remove duplicates
+    #list( set( entry_list_collect ) )      # fails: dicts not hashable
+    
+    # [i for n, i in enumerate(d) if i not in d[n + 1:]]    # list comprehension
+    # Here since we can use dict comparison, we only keep the elements that are not in the rest of the 
+    # initial list (this notion is only accessible through the index n, hence the use of enumerate).
+    entry_list_nodups = [ i for n, i in enumerate( entry_list_collect ) if i not in entry_list_collect[ n + 1: ] ]
+    
+    return entry_list_nodups
+
+
+
+def sort_entries( entry_list_nodups ):
     entry_list = []
     entry_list_sorted = []
     
     # sorting with sorted() + path key only gives the desired result if all items 
     # have the same (number of) keys. So add missing keys with empty values as needed. 
     path_keys = []
-    for item in entry_list_collect:
+    for item in entry_list_nodups:
         path = item.get( "path" )
         if len( path.keys() ) > len( path_keys ):
             path_keys = path.keys()
     
     len_path_keys = len( path_keys )
-    for item in entry_list_collect:
+    for item in entry_list_nodups:
         path = item.get( "path" )
         if len( path.keys() ) < len_path_keys:
             for key in path_keys:
@@ -2392,17 +2420,8 @@ def sort_entries( entry_list_collect ):
             item[ "path" ] = path
         entry_list.append( item )
     
-    #itemkeys = 
-    #entry_list_sorted = sorted( entry_list_sorted, key = itemgetter( "path['histclass1']", "path['histclass2']", "path['histclass3']" ) )
-    #entry_list_sorted = sorted( entry_list_sorted, key = itemgetter( path['histclass1'] ) )
-    #entry_list_sorted = sorted( entry_list_sorted, key = itemgetter( 'path:histclass1' ) )
-    #entry_list_sorted = sorted( entry_list_sorted, key = lambda x: x[1] )
-    
-    # varying value_unit string not sorted?
-    # how to use sorted() with multiple keys?
-    entry_list_sorted = sorted( entry_list, key = itemgetter( 'path' ) )
-        
-    
+    # sometimes the value_unit string is not constant, so first sort by path, next by value_unit
+    entry_list_sorted = sorted( entry_list, key = itemgetter( 'path', 'value_unit' ) )  
     
     return entry_list_sorted
 
