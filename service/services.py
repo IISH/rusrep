@@ -5,7 +5,7 @@ VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
-FL-16-Jan-2018 reordering optional
+FL-17-Jan-2018 reordering optional
 
 def get_configparser():
 def get_connection():
@@ -2258,11 +2258,11 @@ def aggregation():
         entry_list_ntc = []
         entry_list_none = []
         entry_list_collect = []
-        entry_list_sorted = []
         
         # split path in subgroups with the same key length
         path_lists = group_levels( path )
         logging.debug( "%d path_dicts in path_lists" % len( path_lists ) )
+        
         for pd, path_dict in enumerate( path_lists ):
             nkeys = path_dict[ "nkeys" ]
             add_subclasses = path_dict[ "subclasses" ]
@@ -2279,7 +2279,7 @@ def aggregation():
             logging.debug( "path_list: %s" % qinput[ "path" ] )
             sql_query, eng_data = aggregate_year( qinput, add_subclasses, value_numerical = True )  # only numbers
             entry_list = execute_year( qinput, sql_query, eng_data, key_set )
-            """
+            
             qinput_ntc[ "path" ] = path_list
             logging.debug( "path_list: %s" % qinput_ntc[ "path" ] )
             sql_query_ntc, eng_data_ntc = aggregate_year( qinput_ntc, add_subclasses, value_numerical = True )  # only numbers
@@ -2288,7 +2288,7 @@ def aggregation():
             logging.debug( "path_list: %s" % qinput[ "path" ] )
             sql_query_none, eng_data_none = aggregate_year( qinput, add_subclasses, value_numerical = False)    # non-numbers
             entry_list_none = execute_year( qinput, sql_query_none, eng_data_none, key_set )
-            """
+            
             if reorder:
                 params = {
                     "language"       : language,
@@ -2297,15 +2297,13 @@ def aggregation():
                     "base_year"      : base_year,
                     "ter_codes"      : ter_codes
                 }
-                entry_list_collect_levels = reorder_entries( params, entry_list_ntc, entry_list_none, entry_list )
+                entry_list_collect.extend( reorder_entries( params, entry_list_ntc, entry_list_none, entry_list ) )
             else:
                 entry_list_collect.extend( entry_list )
                 entry_list_collect.extend( entry_list_ntc )
                 entry_list_collect.extend( entry_list_none )
-        
+            
         entry_list_sorted = sort_entries( entry_list_collect )
-        
-        #json_string, cache_except = json_cache( entry_list, language, "data", download_key, qinput )
         json_string, cache_except = json_cache( entry_list_sorted, language, "data", download_key, qinput )
         
         if cache_except is not None:
@@ -2328,7 +2326,7 @@ def aggregation():
             "classification" : classification,
             "path"           : path
         }
-        entry_list_sorted = []
+        entry_list_collect = []
         
         # modern classification does not provide a base_year; 
         # loop over base_years, and accumulate results.
@@ -2347,12 +2345,13 @@ def aggregation():
             
             if reorder:
                 entry_list_sorted_year = reorder_entries( params, entry_list_ntc, entry_list_none )
-                entry_list_sorted.extend( entry_list_sorted_year )
+                entry_list_collect.extend( entry_list_sorted_year )
             else:
-                entry_list_sorted.extend( entry_list_ntc )
-                entry_list_sorted.extend( entry_list_none )
-                
-        #json_string, cache_except = json_cache( entry_list, language, "data", download_key, qinput )
+                entry_list_collect.extend( entry_list_ntc )
+                entry_list_collect.extend( entry_list_none )
+            
+            
+        entry_list_sorted = sort_entries( entry_list_collect )
         json_string, cache_except = json_cache( entry_list_sorted, language, "data", download_key, qinput )
         
         if cache_except is not None:
@@ -2390,7 +2389,7 @@ def sort_entries( entry_list_collect ):
             for key in path_keys:
                 if not path.get( key ):
                     path[ key ] = ''
-            item[ "path" ]  = path
+            item[ "path" ] = path
         entry_list.append( item )
     
     #itemkeys = 
@@ -2398,7 +2397,9 @@ def sort_entries( entry_list_collect ):
     #entry_list_sorted = sorted( entry_list_sorted, key = itemgetter( path['histclass1'] ) )
     #entry_list_sorted = sorted( entry_list_sorted, key = itemgetter( 'path:histclass1' ) )
     #entry_list_sorted = sorted( entry_list_sorted, key = lambda x: x[1] )
-        
+    
+    # varying value_unit string not sorted?
+    # how to use sorted() with multiple keys?
     entry_list_sorted = sorted( entry_list, key = itemgetter( 'path' ) )
         
     
