@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # VT-07-Jul-2016 Latest change by VT
-# FL-09-Jan-2018 Latest change
+# FL-22-Jan-2018 Latest change
 
 import json
 import logging
@@ -13,6 +13,7 @@ import sys
 
 from datetime import date
 from icu import Locale, Collator
+from operator import itemgetter
 import pandas as pd
 from pymongo import MongoClient
 from sys import exc_info
@@ -282,7 +283,7 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
 
     elif hist_mod == 'm':
         nsheets = 5
-        base_years = [ 1795, 1858, 1897, 1959, 2002 ]
+        base_years = [ "1795", "1858", "1897", "1959", "2002" ]
         ws_0 = wb.get_active_sheet()
         ws_0.title = "1795"
         ws_1 = wb.create_sheet( "1858", 1 )
@@ -364,14 +365,30 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         # empty level strings are not in the data, but we need same # of colums 
         # for all rows; find the maximum number of levels
         header_chain = set()
+        class_chain  = set()
+        lex_lands_list0 = []
         for itemchain in lex_lands:
             chain = json.loads( itemchain )
+            lex_lands_list0.append( chain )
+            
             for name in sorted( chain ):
                 header_chain.add( name )
+                if "class" in name:
+                    class_chain.add( name )
+        
+        lex_lands_list = []
+        for chain in lex_lands_list0:
+            for class_ in class_chain:
+                if not chain.get( class_ ):
+                    item[ class_ ] = ''
+            lex_lands_list.append( chain )
+            logging.debug( "chain: %s" % str( chain ) )
         
         max_columns = len( header_chain )
         logging.debug( "# of names in header_chain: %d" % len( header_chain ) )
-        logging.debug( "names in chain: %s" % str( header_chain ) )
+        logging.debug( "header names in chain: %s" % str( header_chain ) )
+        logging.debug( "# of names in class_chain: %d" % len( header_chain ) )
+        logging.debug( "class names in chain: %s" % str( class_chain ) )
         
         nlevels = 0
         for name in header_chain:
@@ -385,12 +402,24 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         logging.debug( "# of itemchains in lex_lands: %d" % len( lex_lands ) )
         logging.debug( "lex_lands old: %s" % str( lex_lands ) )
         
+        classes = list( class_chain )
+        classes.sort()
+        logging.debug( "class names in list: %s" % str( classes ) )
+        
+        logging.debug( "# of items in lex_lands_list: %d" % len( lex_lands_list ) )
+        #for i, item in enumerate( lex_lands_list ):
+        #    logging.debug( "%d: item: %s" % ( i, str( sorted( item, key = itemgetter( *classes ) ) ) ) )
+        
+        # unpack classes as individual variables
+        lex_lands_sorted = sorted( lex_lands_list, key = itemgetter( *classes ) )
+        
         ndatarows = 0
         nitemchain = 0
-        for itemchain in lex_lands:
-            logging.debug( "itemchain %d: %s, %s" % ( nitemchain, itemchain, type( itemchain ) ) )
+        #for itemchain in lex_lands:
+        for chain in lex_lands_sorted:
+            #logging.debug( "itemchain %d: %s, %s" % ( nitemchain, itemchain, type( itemchain ) ) )
             nitemchain += 1
-            chain = json.loads( itemchain )
+            #chain = json.loads( itemchain )
             logging.debug( "chain: %s" %  str( chain ) )
             
             column = 1
