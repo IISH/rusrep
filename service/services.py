@@ -334,7 +334,6 @@ def json_generator( qinput_, sql_names, json_dataname, data, qkey_set = None ):
     forbidden = { "data_active", 0, "datarecords", 1 }
     
     # collect all data class keys
-    
     key_set = set()
     dkey_set = set()
     len_data = len( data )
@@ -345,7 +344,7 @@ def json_generator( qinput_, sql_names, json_dataname, data, qkey_set = None ):
             value = value_str[ i ]
             
             if value == ". ":
-                #logging.debug( "i: %d, name: %s, value: %s" % ( i, thisname, value ) )
+                #logging.debug( "i: %d, name: %s, value: %s" % ( i, name, value ) )
                 # ". " marks a trailing dot in histclass or class: skip
                 continue
             else:
@@ -363,7 +362,7 @@ def json_generator( qinput_, sql_names, json_dataname, data, qkey_set = None ):
             value = value_str[ i ]
             
             if value == ". ":
-                #logging.debug( "i: %d, name: %s, value: %s" % ( i, thisname, value ) )
+                #logging.debug( "i: %d, name: %s, value: %s" % ( i, name, value ) )
                 # ". " marks a trailing dot in histclass or class: skip
                 continue
             else:
@@ -1516,10 +1515,10 @@ def execute_year( qinput, sql_query, eng_data, key_set ):
         for idx, item in enumerate( sql_resp ):
             logging.debug( "%d: %s" % ( idx, item ) )
             final_item = []
-            for i, thisname in enumerate( sql_names ):
+            for i, column_name in enumerate( sql_names ):
                 value = item[ i ]
                 if value == ". ":
-                    #logging.debug( "i: %d, name: %s, value: %s" % ( i, thisname, value ) )
+                    #logging.debug( "i: %d, name: %s, value: %s" % ( i, column_name, value ) )
                     pass           # ". " marks a trailing dot in histclass or class: skip
                     
                     # No: do not set empty value, that sometimes gives complete empty indicator columns
@@ -1528,7 +1527,9 @@ def execute_year( qinput, sql_query, eng_data, key_set ):
                 if value in eng_data:
                     value = value.encode( "utf-8" )
                     value = eng_data[ value ]
-                if thisname not in forbidden:
+                if column_name not in forbidden:
+                    if column_name == "base_year":
+                        value = str( value )        # switch to strings
                     final_item.append( value )
             
             logging.debug( "final_item: %s" % final_item )
@@ -2168,17 +2169,17 @@ def indicators():
     
     for item in sl_resp:
         final_item = []
-        for i, thisname in enumerate( sql_names ):
+        for i, column_name in enumerate( sql_names ):
             value = item[ i ]
             if value == ". ":
-                #logging.debug( "i: %d, name: %s, value: %s" % ( i, thisname, value ) )
+                #logging.debug( "i: %d, name: %s, value: %s" % ( i, column_name, value ) )
                 # ". " marks a trailing dot in histclass or class: skip
                 pass
             
             if value in eng_data:
                 value = value.encode( "utf-8" )
                 value = eng_data[ value ]
-            if thisname not in forbidden:
+            if column_name not in forbidden:
                 final_item.append( value )
         
         final_data.append( final_item )
@@ -2239,7 +2240,7 @@ def aggregation():
     if not os.path.exists( download_dir ):
         os.makedirs( download_dir )
     
-    #reorder = True     # in this way much toot slow, especially for datatypw 1.02
+    #reorder = True     # reordering is much too slow, especially for datatype 1.02 (much data)
     reorder = False
     
     json_string = str( "{}" )
@@ -2305,8 +2306,10 @@ def aggregation():
             else:
                 entry_list_collect.extend( entry_list )
                 entry_list_collect.extend( entry_list_ntc )
-                entry_list_collect.extend( entry_list_none )
                 
+                # only add entries with new paths
+                entry_list_collect = add_unique_nones( entry_list_collect, entry_list_none )
+        
         logging.debug( "entry_list_collect: %d items" % len( entry_list_collect ) )
         
         entry_list_nodups = remove_dups( entry_list_collect )   # remove duplicate dicts
@@ -2359,7 +2362,9 @@ def aggregation():
                 entry_list_collect.extend( entry_list_sorted_year )
             else:
                 entry_list_collect.extend( entry_list_ntc )
-                entry_list_collect.extend( entry_list_none )
+                
+                # only add entries with new paths
+                entry_list_collect = add_unique_nones( entry_list_collect, entry_list_none )
             
         entry_list_nodups = remove_dups( entry_list_collect )
         logging.debug( "entry_list_nodups: %d items" % len( entry_list_nodups ) )
@@ -2382,6 +2387,31 @@ def aggregation():
     logging.info( "aggregation took %s" % str_elapsed )
     
     return Response( json_string, mimetype = "application/json; charset=utf-8" )
+
+
+
+def add_unique_nones( entry_list_collect, entry_list_none ):
+    # collect unique paths in entry_list_collect
+    paths = []
+    for item in entry_list_collect:
+        path = item.get( "path" )
+        if path not in paths:
+            paths.append( path )
+    #logging.debug( "paths: %s" % paths )
+    
+    #nadded   = 0
+    #nskipped = 0
+    for item in entry_list_none:
+        path = item[ "path" ]
+        if path not in paths:
+            entry_list_collect.append( item )
+            #nadded += 1
+            #logging.debug( "adding: %s" % paths )
+        #else:
+        #    nskipped += 1
+    #logging.debug( "nadded: %d, nskipped: %d" % ( nadded, nskipped ) )
+    
+    return entry_list_collect
 
 
 
@@ -2412,12 +2442,18 @@ def sort_entries( entry_list_nodups ):
     
     len_path_keys = len( path_keys )
     for item in entry_list_nodups:
+        # in the db table the base_year column are integers, 
+        # but somewhere we got a mix of strings and integers ?
+        #item[ "base_year" ] = str (item[ "base_year" ] )
+        # we now switch to base_year strings after the sql response in execute_year()
+        
         path = item.get( "path" )
         if len( path.keys() ) < len_path_keys:
             for key in path_keys:
                 if not path.get( key ):
                     path[ key ] = ''
             item[ "path" ] = path
+        
         entry_list.append( item )
     
     # sometimes the value_unit string is not constant, so first sort by path, next by value_unit
