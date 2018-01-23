@@ -496,12 +496,12 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
             logging.debug( "# of names in chain: %d" % len( chain ) )
             logging.debug( "names in chain: %s" % str( chain ) )
             try:
-                base_year_chain = int( chain.get( "base_year" ) )
+                base_year_chain = chain.get( "base_year" )
             except:
-                base_year_chain = 0
+                base_year_chain = '0'
             
             if base_year != base_year_chain:
-                logging.debug( "skip: base_year %d not equal to base_year_chain %d" % ( base_year, base_year_chain ) )
+                logging.debug( "skip: base_year %s not equal to base_year_chain %s" % ( base_year, base_year_chain ) )
                 continue
             else:
                 byear_counts[ str( base_year ) ] = 1 + byear_counts[ str( base_year ) ]

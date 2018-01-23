@@ -5,7 +5,7 @@ VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
-FL-17-Jan-2018 reordering optional
+FL-23-Jan-2018 reordering optional
 
 def get_configparser():
 def get_connection():
@@ -30,7 +30,10 @@ def loadjson( json_dataurl ):
 def filecat_subtopic( qinput, cursor, datatype, base_year ):
 def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
 def aggregate_year( qinput, add_subclasses, value_numerical ):
-def execute_year( qinput, sql_query, eng_data )
+def execute_year( qinput, sql_query, eng_data ):
+def add_unique_items( entry_list_collect, entry_list_none ):
+def remove_dups( entry_list_collect ):
+def sort_entries( entry_list_nodups ):
 def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None)
 def cleanup_downloads( download_dir, time_limit ):
 def format_secs( seconds ):
@@ -1488,56 +1491,169 @@ def aggregate_year( qinput, add_subclasses, value_numerical = True ):
 def execute_year( qinput, sql_query, eng_data, key_set ):
     logging.debug( "execute_year()" )
     
+    time0 = time()      # seconds since the epoch
+    logging.debug( "query execute start: %s" % datetime.datetime.now() )
+    
     entry_list = []
     
-    if sql_query:
-        time0 = time()      # seconds since the epoch
-        logging.debug( "query execute start: %s" % datetime.datetime.now() )
-        
-        connection = get_connection()
-        cursor = connection.cursor()
-        cursor.execute( sql_query )
-        logging.debug( "query execute stop: %s" % datetime.datetime.now() )
-        str_elapsed = format_secs( time() - time0 )
-        logging.info( "execute_year() sql_query execute took %s" % str_elapsed )
-        
-        sql_names = [ desc[ 0 ] for desc in cursor.description ]
-        logging.debug( "%d sql_names:" % len( sql_names ) )
-        logging.debug( sql_names )
-        
-        sql_resp = cursor.fetchall()
-        logging.debug( "result # of data records: %d" % len( sql_resp ) )
-        
-        cursor.close()
-        connection.close()
-        
-        final_data = []
-        for idx, item in enumerate( sql_resp ):
-            logging.debug( "%d: %s" % ( idx, item ) )
-            final_item = []
-            for i, column_name in enumerate( sql_names ):
-                value = item[ i ]
-                if value == ". ":
-                    #logging.debug( "i: %d, name: %s, value: %s" % ( i, column_name, value ) )
-                    pass           # ". " marks a trailing dot in histclass or class: skip
-                    
-                    # No: do not set empty value, that sometimes gives complete empty indicator columns
-                    #value = ''      # keep as empty element: otherwise sorting by path is disrupted, i.e. not what we want
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute( sql_query )
+    
+    logging.debug( "query execute stop: %s" % datetime.datetime.now() )
+    str_elapsed = format_secs( time() - time0 )
+    logging.debug( "execute_year() sql_query execute took %s" % str_elapsed )
+    
+    sql_names = [ desc[ 0 ] for desc in cursor.description ]
+    logging.debug( "%d sql_names:" % len( sql_names ) )
+    logging.debug( sql_names )
+    
+    sql_resp = cursor.fetchall()
+    logging.debug( "result # of data records: %d" % len( sql_resp ) )
+    
+    cursor.close()
+    connection.close()
+    
+    final_data = []
+    for idx, item in enumerate( sql_resp ):
+        logging.debug( "%d: %s" % ( idx, item ) )
+        final_item = []
+        for i, column_name in enumerate( sql_names ):
+            value = item[ i ]
+            if value == ". ":
+                #logging.debug( "i: %d, name: %s, value: %s" % ( i, column_name, value ) )
+                pass           # ". " marks a trailing dot in histclass or class: skip
                 
-                if value in eng_data:
-                    value = value.encode( "utf-8" )
-                    value = eng_data[ value ]
-                if column_name not in forbidden:
-                    if column_name == "base_year":
-                        value = str( value )        # switch to strings
-                    final_item.append( value )
+                # No: do not set empty value, that sometimes gives complete empty indicator columns
+                #value = ''      # keep as empty element: otherwise sorting by path is disrupted, i.e. not what we want
             
-            logging.debug( "final_item: %s" % final_item )
-            final_data.append( final_item )
+            if value in eng_data:
+                value = value.encode( "utf-8" )
+                value = eng_data[ value ]
+            if column_name not in forbidden:
+                if column_name == "base_year":
+                    value = str( value )        # switch to strings
+                final_item.append( value )
         
-        entry_list = json_generator( qinput, sql_names, "data", final_data, key_set )
-        
+        logging.debug( "final_item: %s" % final_item )
+        final_data.append( final_item )
+    
+    entry_list = json_generator( qinput, sql_names, "data", final_data, key_set )
+    
+    str_elapsed = format_secs( time() - time0 )
+    logging.info( "execute_year() took %s" % str_elapsed )
+    
     return entry_list
+
+
+
+def add_unique_items( entry_list_collect, entry_list_extra ):
+    # collect unique paths in entry_list_collect
+    paths = []
+    for item in entry_list_collect:
+        path = item.get( "path" )
+        if path not in paths:
+            paths.append( path )
+    #logging.debug( "paths: %s" % paths )
+    
+    #nadded   = 0
+    #nskipped = 0
+    for item in entry_list_extra:
+        path = item[ "path" ]
+        if path not in paths:
+            entry_list_collect.append( item )
+            #nadded += 1
+            #logging.debug( "adding: %s" % paths )
+        #else:
+        #    nskipped += 1
+    #logging.debug( "nadded: %d, nskipped: %d" % ( nadded, nskipped ) )
+    
+    return entry_list_collect
+
+
+
+def remove_dups( entry_list_collect ):
+    logging.info( "remove_dups()" )
+    time0 = time()      # seconds since the epoch
+    
+    # remove duplicates
+    #list( set( entry_list_collect ) )      # fails: dicts not hashable
+    
+    # [i for n, i in enumerate(d) if i not in d[n + 1:]]    # list comprehension
+    # Here since we can use dict comparison, we only keep the elements that are not in the rest of the 
+    # initial list (this notion is only accessible through the index n, hence the use of enumerate).
+    entry_list_nodups = [ i for n, i in enumerate( entry_list_collect ) if i not in entry_list_collect[ n + 1: ] ]
+    
+    logging.info( "remove_dups() %d items removed" % ( len( entry_list_collect ) - len( entry_list_nodups ) ) )
+    
+    str_elapsed = format_secs( time() - time0 )
+    logging.info( "remove_dups() took %s" % str_elapsed )
+    
+    return entry_list_nodups
+
+
+
+def sort_entries( datatype, entry_list ):
+    logging.debug( "sort_entries()" )
+    time0 = time()      # seconds since the epoch
+        
+    # sorting with sorted() + path key only gives the desired result if all items 
+    # have the same (number of) keys. So add missing keys with empty values as needed. 
+    path_keys = []
+    for item in entry_list:
+        path = item.get( "path" )
+        if len( path.keys() ) > len( path_keys ):
+            path_keys = path.keys()
+    len_path_keys = len( path_keys )
+    
+    entry_list1 = []
+    for item in entry_list:
+        itm = copy.deepcopy( item )
+        path = itm.get( "path" )
+        if len( path.keys() ) < len_path_keys:
+            for key in path_keys:
+                if not path.get( key ):
+                    path[ key ] = ''
+            itm[ "path" ] = path
+        
+        entry_list1.append( itm )
+    
+    entry_list2 = entry_list1
+    # apparently, we loose the prefixed spaces somewhere down the line
+    """
+    entry_list2 = []
+    if datatype != "1.02":
+        entry_list2 = entry_list1
+    else:
+        # prefix level1 with leading space as needed (for sorting)
+        for item in entry_list1:
+            itm = copy.deepcopy( item )
+            path = itm.get( "path" )
+            for key, value in path.iteritems():
+                if "class1" in key:
+                    try:
+                        ivalue = int( value )
+                        if ivalue < 10:
+                            #v = '_' + value      # wrong sort
+                            v = '0' + value     # this works, but is not wanted
+                            #v = ' ' + value    # we loose the space somewhere
+                            path[ key ] = v
+                            #logging.debug( path )
+                            break
+                    except:
+                        pass
+            
+            logging.info( itm )
+            entry_list2.append( itm )
+    """
+    
+    # sometimes the value_unit string is not constant, so first sort by path, next by value_unit
+    entry_list_sorted = sorted( entry_list2, key = itemgetter( 'path', 'value_unit' ) )  
+    
+    str_elapsed = format_secs( time() - time0 )
+    logging.info( "sort_entries() took %s" % str_elapsed )
+    
+    return entry_list_sorted
 
 
 
@@ -2199,14 +2315,16 @@ def indicators():
 
 
 # Aggregation - Preview User selection post and gets data to build preview in GUI step 5 
-@app.route( "/aggregation", methods = ["POST", "GET" ] )
+#@app.route( "/aggregation", methods = ["GET", "POST" ] )
+@app.route( "/aggregation", methods = ["POST" ] )
 def aggregation():
+    logging.info( "" )
     logging.info( "/aggregation" )
+    time0 = time()      # seconds since the epoch
+    logging.info( "aggregation start: %s" % datetime.datetime.now() )
+    
     qinput = simplejson.loads( request.data )
     logging.debug( qinput )
-    
-    time0 = time()      # seconds since the epoch
-    logging.debug( "start: %s" % datetime.datetime.now() )
     
     language = qinput.get( "language" )
     classification = qinput.get( "classification" )
@@ -2255,16 +2373,16 @@ def aggregation():
         ter_codes = qinput_ntc.pop( "ter_code", None )
         logging.info( "ter_code: %s" % ter_codes )
         
-        entry_list = []
-        entry_list_ntc = []
-        entry_list_none = []
-        entry_list_collect = []
+        entry_list_total = []
         
         # split path in subgroups with the same key length
         path_lists = group_levels( path )
-        logging.debug( "%d path_dicts in path_lists" % len( path_lists ) )
+        nlists = len( path_lists )
+        logging.info( "%d path_dicts in path_lists" % nlists )
         
         for pd, path_dict in enumerate( path_lists ):
+            logging.info( "path_list %d-of-%d" % ( pd+1, nlists ) )
+            
             nkeys = path_dict[ "nkeys" ]
             add_subclasses = path_dict[ "subclasses" ]
             path_list = path_dict[ "path_list" ]
@@ -2276,46 +2394,38 @@ def aggregation():
                 logging.debug( "path_dict %d-of-%d, path: %s" % ( p+1, len( path_list ), path ) )
             
             logging.debug( "path_list: %s" % path_list )
+            
             qinput[ "path" ] = path_list
-            logging.debug( "path_list: %s" % qinput[ "path" ] )
+            logging.info( "path_list: %s" % qinput[ "path" ] )
             sql_query, eng_data = aggregate_year( qinput, add_subclasses, value_numerical = True )  # only numbers
             entry_list = execute_year( qinput, sql_query, eng_data, key_set )
+            logging.info( "entry_list: %d items" % len( entry_list ) )
             
-            qinput_ntc[ "path" ] = path_list
-            logging.debug( "path_list: %s" % qinput_ntc[ "path" ] )
-            sql_query_ntc, eng_data_ntc = aggregate_year( qinput_ntc, add_subclasses, value_numerical = True )  # only numbers
-            entry_list_ntc = execute_year( qinput, sql_query_ntc, eng_data_ntc, key_set )
+            entry_list_ntc = []
+            if datatype != "1.02":      # not needed for 1.02 (and much data)
+                qinput_ntc[ "path" ] = path_list
+                logging.info( "path_list: %s" % qinput_ntc[ "path" ] )
+                sql_query_ntc, eng_data_ntc = aggregate_year( qinput_ntc, add_subclasses, value_numerical = True )  # only numbers
+                entry_list_ntc = execute_year( qinput, sql_query_ntc, eng_data_ntc, key_set )
+                logging.info( "entry_list_ntc: %d items" % len( entry_list_ntc ) )
             
-            logging.debug( "path_list: %s" % qinput[ "path" ] )
+            logging.info( "path_list: %s" % qinput[ "path" ] )
             sql_query_none, eng_data_none = aggregate_year( qinput, add_subclasses, value_numerical = False)    # non-numbers
             entry_list_none = execute_year( qinput, sql_query_none, eng_data_none, key_set )
+            logging.info( "entry_list_none: %d items" % len( entry_list_none ) )
             
-            logging.debug( "entry_list:      %d items" % len( entry_list ) )
-            logging.debug( "entry_list_ntc:  %d items" % len( entry_list_ntc ) )
-            logging.debug( "entry_list_none: %d items" % len( entry_list_none ) )
+            logging.info( "add_unique_ntcs()" )
+            entry_list_path = add_unique_items( entry_list, entry_list_ntc )
             
-            if reorder:
-                params = {
-                    "language"       : language,
-                    "classification" : classification,
-                    "datatype"       : datatype,
-                    "base_year"      : base_year,
-                    "ter_codes"      : ter_codes
-                }
-                entry_list_collect.extend( reorder_entries( params, entry_list_ntc, entry_list_none, entry_list ) )
-            else:
-                entry_list_collect.extend( entry_list )
-                entry_list_collect.extend( entry_list_ntc )
-                
-                # only add entries with new paths
-                entry_list_collect = add_unique_nones( entry_list_collect, entry_list_none )
+            # only add entries with new paths
+            logging.info( "add_unique_nones()" )
+            entry_list_collect = add_unique_items( entry_list_path, entry_list_none )
+            logging.info( "entry_list_collect: %d items" % len( entry_list_collect ) )
+            
+            entry_list_total.extend( entry_list_collect )
+            logging.info( "entry_list_total: %d items" % len( entry_list_total ) )
         
-        logging.debug( "entry_list_collect: %d items" % len( entry_list_collect ) )
-        
-        entry_list_nodups = remove_dups( entry_list_collect )   # remove duplicate dicts
-        logging.debug( "entry_list_nodups: %d items" % len( entry_list_nodups ) )
-        
-        entry_list_sorted = sort_entries( entry_list_nodups )   # sort by path, value_unit
+        entry_list_sorted = sort_entries( datatype, entry_list_total )   # sort by path, value_unit
         logging.debug( "entry_list_sorted: %d items" % len( entry_list_sorted ) )
         
         json_string, cache_except = json_cache( entry_list_sorted, language, "data", download_key, qinput )
@@ -2340,7 +2450,8 @@ def aggregation():
             "classification" : classification,
             "path"           : path
         }
-        entry_list_collect = []
+        
+        entry_list_total = []
         
         # modern classification does not provide a base_year; 
         # loop over base_years, and accumulate results.
@@ -2353,23 +2464,20 @@ def aggregation():
             # no ter_code in qinput for modern
             sql_query_ntc, eng_data_ntc = aggregate_year( qinput, add_subclasses, value_numerical = True )      # only numbers
             entry_list_ntc = execute_year( qinput, sql_query_ntc, eng_data_ntc, key_set )
+            logging.info( "entry_list_ntc: %d items" % len( entry_list_ntc ) )
             
             sql_query_none, eng_data_none = aggregate_year( qinput, add_subclasses, value_numerical = False )   # non-numbers
             entry_list_none = execute_year( qinput, sql_query_none, eng_data_none, key_set )
-            
-            if reorder:
-                entry_list_sorted_year = reorder_entries( params, entry_list_ntc, entry_list_none )
-                entry_list_collect.extend( entry_list_sorted_year )
-            else:
-                entry_list_collect.extend( entry_list_ntc )
+            logging.info( "entry_list_none: %d items" % len( entry_list_none ) )
                 
-                # only add entries with new paths
-                entry_list_collect = add_unique_nones( entry_list_collect, entry_list_none )
+            # only add entries with new paths
+            entry_list_year = add_unique_items( entry_list_ntc, entry_list_none )
+            logging.info( "entry_list_year: %d items" % len( entry_list_year ) )
             
-        entry_list_nodups = remove_dups( entry_list_collect )
-        logging.debug( "entry_list_nodups: %d items" % len( entry_list_nodups ) )
+            entry_list_total.extend( entry_list_year )
+            logging.info( "entry_list_total: %d items" % len( entry_list_total ) )
         
-        entry_list_sorted = sort_entries( entry_list_nodups )
+        entry_list_sorted = sort_entries( datatype, entry_list_total )
         logging.debug( "entry_list_sorted: %d items" % len( entry_list_sorted ) )
         
         json_string, cache_except = json_cache( entry_list_sorted, language, "data", download_key, qinput )
@@ -2387,79 +2495,6 @@ def aggregation():
     logging.info( "aggregation took %s" % str_elapsed )
     
     return Response( json_string, mimetype = "application/json; charset=utf-8" )
-
-
-
-def add_unique_nones( entry_list_collect, entry_list_none ):
-    # collect unique paths in entry_list_collect
-    paths = []
-    for item in entry_list_collect:
-        path = item.get( "path" )
-        if path not in paths:
-            paths.append( path )
-    #logging.debug( "paths: %s" % paths )
-    
-    #nadded   = 0
-    #nskipped = 0
-    for item in entry_list_none:
-        path = item[ "path" ]
-        if path not in paths:
-            entry_list_collect.append( item )
-            #nadded += 1
-            #logging.debug( "adding: %s" % paths )
-        #else:
-        #    nskipped += 1
-    #logging.debug( "nadded: %d, nskipped: %d" % ( nadded, nskipped ) )
-    
-    return entry_list_collect
-
-
-
-def remove_dups( entry_list_collect ):
-    # remove duplicates
-    #list( set( entry_list_collect ) )      # fails: dicts not hashable
-    
-    # [i for n, i in enumerate(d) if i not in d[n + 1:]]    # list comprehension
-    # Here since we can use dict comparison, we only keep the elements that are not in the rest of the 
-    # initial list (this notion is only accessible through the index n, hence the use of enumerate).
-    entry_list_nodups = [ i for n, i in enumerate( entry_list_collect ) if i not in entry_list_collect[ n + 1: ] ]
-    
-    return entry_list_nodups
-
-
-
-def sort_entries( entry_list_nodups ):
-    entry_list = []
-    entry_list_sorted = []
-    
-    # sorting with sorted() + path key only gives the desired result if all items 
-    # have the same (number of) keys. So add missing keys with empty values as needed. 
-    path_keys = []
-    for item in entry_list_nodups:
-        path = item.get( "path" )
-        if len( path.keys() ) > len( path_keys ):
-            path_keys = path.keys()
-    
-    len_path_keys = len( path_keys )
-    for item in entry_list_nodups:
-        # in the db table the base_year column are integers, 
-        # but somewhere we got a mix of strings and integers ?
-        #item[ "base_year" ] = str (item[ "base_year" ] )
-        # we now switch to base_year strings after the sql response in execute_year()
-        
-        path = item.get( "path" )
-        if len( path.keys() ) < len_path_keys:
-            for key in path_keys:
-                if not path.get( key ):
-                    path[ key ] = ''
-            item[ "path" ] = path
-        
-        entry_list.append( item )
-    
-    # sometimes the value_unit string is not constant, so first sort by path, next by value_unit
-    entry_list_sorted = sorted( entry_list, key = itemgetter( 'path', 'value_unit' ) )  
-    
-    return entry_list_sorted
 
 
 
