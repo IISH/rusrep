@@ -25,7 +25,8 @@ from openpyxl.utils import get_column_letter
 def preprocessor( datafilter ):
     logging.debug( "preprocessor() datafilter: %s" % datafilter )
     
-    qinput    = {}
+    #qinput    = {}
+    params    = {}
     lex_lands = {}
     lands     = {}
     lang      = ""
@@ -60,10 +61,14 @@ def preprocessor( datafilter ):
             del rowitem[ 'key' ]
             del rowitem[ '_id' ]
             
-            if "qinput" in rowitem:
-                qinput = rowitem[ "qinput" ]
-                logging.debug( "qinput: %s" % str( qinput ) )
-                del rowitem[ "qinput" ]
+            #if "qinput" in rowitem:
+            #    qinput = rowitem[ "qinput" ]
+            #    logging.debug( "qinput: %s" % str( qinput ) )
+            #    del rowitem[ "qinput" ]
+            if "params" in rowitem:
+                params = rowitem[ "params" ]
+                logging.debug( "params: %s" % str( params ) )
+                del rowitem[ "params" ]
             
             if "language" in rowitem:
                 lang = rowitem[ "language" ]
@@ -196,11 +201,12 @@ def preprocessor( datafilter ):
     logging.debug( "preprocessor (%d) vocab_regs_terms: %s" % ( len( vocab_regs_terms ), str( vocab_regs_terms ) ) )
     logging.debug( "preprocessor (%d) sheet_header: %s"     % ( len( sheet_header ),     str( sheet_header ) ) )
     
-    return ( lex_lands, vocab_regs_terms, sheet_header, topic_name, qinput )
+    #return ( lex_lands, vocab_regs_terms, sheet_header, topic_name, qinput )
+    return ( lex_lands, vocab_regs_terms, sheet_header, topic_name, params )
 
 
 
-def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header, topic_name, qinput ):
+def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header, topic_name, params ):
     logging.debug( "aggregate_dataset() key: %s" % key )
     
     xlsx_pathname = ""
@@ -254,19 +260,19 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
     
     db_vocabulary = clientcache.get_database( 'vocabulary' )   # vocabulary
     
-    logging.debug( "qinput: %s, %s" % ( qinput, type( qinput ) ) )
-    for k in qinput:
-        logging.debug( "key: %s, value: %s" % ( k, qinput[ k ] ) )
+    logging.debug( "params: %s, %s" % ( params, type( params ) ) )
+    for k in params:
+        logging.debug( "key: %s, value: %s" % ( k, params[ k ] ) )
     
     try:
-        ter_code_list = qinput[ "ter_code" ]
+        ter_code_list = params[ "ter_codes" ]
     except:
         ter_code_list = []
     
     logging.debug( "ter_code_list: %s, %s" % ( str( ter_code_list ), type( ter_code_list ) ) )
     
     try:
-        level_paths = qinput[ "path" ]
+        level_paths = params[ "path" ]
     except:
         level_paths = []
     
@@ -322,7 +328,7 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         # load regions for base_year
         regions_filter = {}
         regions_filter[ "vocabulary" ] = "ERRHS_Vocabulary_regions"
-        regions_filter[ 'basisyear' ] = str( base_year )            # regions depend on base_year
+        regions_filter[ 'basisyear' ] = base_year               # regions depend on base_year
         vocab_regions = db_vocabulary.data.find( regions_filter )
         
         # get region names from ter_codes
@@ -357,6 +363,7 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
             regions[ ter_name ] = ter_code
             reg_names.append( ter_name ) 
         
+        # sort the region names alphabetically
         locale = Locale( 'ru' )  # 'el' is the locale code for Greek
         collator = Collator.createInstance( locale )
         sorted_regions = sorted( reg_names, cmp = collator.compare )

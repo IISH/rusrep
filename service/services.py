@@ -5,16 +5,16 @@ VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
-FL-23-Jan-2018 reordering optional
+FL-24-Jan-2018 reordering optional
 
 def get_configparser():
 def get_connection():
 def class_collector( keywords ):
 def strip_subclasses( path ):
 def path_levels = group_levels( path ):
-def json_generator( qinput, sql_names, json_dataname, data, key_set = None ):
-def json_cache( entry_list, language, json_dataname, download_key, qinput = {} ):
-def collect_docs( qinput, download_dir, download_key ):
+def json_generator( params, sql_names, json_dataname, data, key_set = None ):
+def json_cache( entry_list, language, json_dataname, download_key, params = {} ):
+def collect_docs( params, download_dir, download_key ):
 def load_years( cursor, datatype, language = "en" ):
 def sqlfilter( sql ):
 def sqlconstructor( sql ):
@@ -29,8 +29,8 @@ def get_sql_where( name, value ):
 def loadjson( json_dataurl ):
 def filecat_subtopic( qinput, cursor, datatype, base_year ):
 def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
-def aggregate_year( qinput, add_subclasses, value_numerical ):
-def execute_year( qinput, sql_query, eng_data ):
+def aggregate_year( params, add_subclasses, value_numerical ):
+def execute_year( params, sql_query, eng_data ):
 def add_unique_items( entry_list_collect, entry_list_none ):
 def remove_dups( entry_list_collect ):
 def sort_entries( entry_list_nodups ):
@@ -46,7 +46,7 @@ def format_secs( seconds ):
 @app.route( "/histclasses" )                                    def histclasses():
 @app.route( "/classes" )                                        def classes():
 @app.route( "/indicators", methods = [ "POST", "GET" ] )        def indicators():
-@app.route( "/aggregation", methods = ["POST", "GET" ] )        def aggregation():
+@app.route( "/aggregation", methods = ["POST" ] )               def aggregation():
 @app.route( "/filecatalogdata", methods = [ 'POST', 'GET' ]  )  def filecatalogdata():
 @app.route( "/filecatalogget", methods = [ 'POST', 'GET' ] )    def filecatalogget():
 @app.route( "/download" )                                       def download():
@@ -109,7 +109,7 @@ forbidden = [ "classification", "action", "language", "path" ]
 vocab_debug = False
 
 #do_translate = True
-do_translate = False   # read from English db for language = "en"
+#do_translate = False   # read from English db for language = "en"
 
 def get_configparser():
     RUSSIANREPO_CONFIG_PATH = os.environ[ "RUSSIANREPO_CONFIG_PATH" ]
@@ -232,7 +232,7 @@ def strip_subclasses( path ):
         keys = stripped_entry.keys()
         for k in keys:
             key_set.add( k )
-        
+    
     logging.debug( "new path: (%s) %s" % ( type( path_stripped ), str( path_stripped ) ) )
     logging.debug( "key_set: %s" % key_set )
     logging.debug( "strip_subclasses() return" )
@@ -291,48 +291,38 @@ def group_levels( path_list ):
 
 
 
-def json_generator( qinput_, sql_names, json_dataname, data, qkey_set = None ):
-    logging.debug( "json_generator() json_dataname: %s, # of data items: %d" % ( json_dataname, len( data ) ) )
+def json_generator( params, sql_names, json_dataname, data, qkey_set = None ):
+    logging.info( "json_generator() json_dataname: %s, # of data items: %d" % ( json_dataname, len( data ) ) )
     logging.debug( "data: %s" % data )
-    if qkey_set:
-        logging.debug( "qkey_set: %s" % qkey_set )
     
-    classification = "unknown"
-    language       = "EN"
-    datatype       = ""
-    datatype_      = "0_00"
-    base_year      = ""
-    path_list      = []
+    #if qkey_set:
+     #   logging.debug( "qkey_set: %s" % qkey_set )
     
-    qinput = copy.deepcopy( qinput_ )   # qinput changed (path emptied)
+    #qinput = copy.deepcopy( params )   # qinput changed (path emptied)
     
-    try:
-        logging.debug( "# of keys: %d" % len( qinput ) )
-        for k in qinput:
-            logging.debug( "k: %s, v: %s" % ( k, qinput[ k ] ) )
-        
-        classification = qinput.get( "classification" )
-        language       = qinput.get( "language" )
-        datatype       = qinput.get( "datatype" )
-        datatype_      = datatype[ 0 ] + "_00"
-        base_year      = qinput.get( "base_year" )
-        
-        path_list = qinput.get( "path" )
-        add_subclasses, path_stripped, key_set_dummy = strip_subclasses( path_list )
-        
-        logging.debug( "classification : %s" % classification )
-        logging.debug( "language       : %s" % language )
-        logging.debug( "datatype       : %s" % datatype )
-        logging.debug( "base_year      : %s" % base_year )
-        
-        logging.debug( "(%d) path_list     : %s" % ( len( path_list ),     path_list ) )
-        logging.debug( "(%d) path_stripped : %s" % ( len( path_stripped ), path_stripped ) )
-    except:
-        pass
-
-    logging.debug( "# entries in path_list: %d" % len( path_list ) )
-    for path_entry in path_list:
-        logging.debug( path_entry )
+    #logging.debug( "# of keys: %d" % len( qinput ) )
+    #for k in qinput:
+    #    logging.debug( "k: %s, v: %s" % ( k, qinput[ k ] ) )
+    
+    #add_subclasses, path_list, key_set_dummy = strip_subclasses( qpath_list )
+    
+    language       = params.get( "language" )
+    classification = params.get( "classification" )
+    datatype       = params.get( "datatype" )
+    datatype_      = datatype[ 0 ] + "_00"
+    base_year      = params.get( "base_year" )
+    path_list      = params.get( "path" )
+    add_subclasses = params.get( "add_subclasses" )
+    
+    logging.info( "language       : %s" % language )
+    logging.info( "classification : %s" % classification )
+    logging.info( "datatype       : %s" % datatype )
+    logging.info( "base_year      : %s" % base_year )
+    logging.info( "add_subclasses : %s" % add_subclasses )
+    
+    logging.info( "# entries in path_list: %d" % len( path_list ) )
+    for pe, path_entry in enumerate( path_list ):
+        logging.info( "%d %s" % ( pe+1, path_entry ) )
     
     forbidden = { "data_active", 0, "datarecords", 1 }
     
@@ -460,7 +450,7 @@ def json_generator( qinput_, sql_names, json_dataname, data, qkey_set = None ):
 
 
 
-def json_cache( entry_list, language, json_dataname, download_key, qinput = {} ):
+def json_cache( entry_list, language, json_dataname, download_key, params = {} ):
     # cache entry_list in mongodb with download_key as key
     logging.info( "json_cache() # entries in list: %d" %  len( entry_list ) )
     
@@ -485,8 +475,8 @@ def json_cache( entry_list, language, json_dataname, download_key, qinput = {} )
         del this_data[ "url" ]
         this_data[ "key" ] = download_key
         this_data[ "language" ] = language
-        if qinput is not None:
-            this_data[ "qinput" ] = qinput
+        if params is not None:
+            this_data[ "params" ] = params
         
         logging.debug( "dbcache.data.insert with key: %s" % download_key )
         clientcache = MongoClient()
@@ -516,8 +506,8 @@ def collect_docs( qinput, download_dir, download_key ):
     language       = qinput.get( "language" )
     datatype       = qinput.get( "datatype" )
     
-    if language is None:
-        language = "en"
+    #if language is None:
+    #    language = "en"
     
     logging.debug( "classification: %s, language: %s, datatype: %s" % ( classification, language, datatype ) )
     
@@ -891,6 +881,8 @@ def load_vocabulary( vocab_type, language, datatype, base_year ):
     logging.debug( "vocab_filter: %s" % vocab_filter )
     
     eng_data = {}
+    
+    """
     if do_translate and language == "en":
     #if language == "en":
         eng_data = translate_vocabulary( vocab_filter )
@@ -904,6 +896,7 @@ def load_vocabulary( vocab_type, language, datatype, base_year ):
         for item in units:
             eng_data[ item ] = units[ item ]
             #logging.debug( "%s => %s" % ( item, units[ item ] ) )
+    """
     
     params = {}
     if vocab_type == "topics":
@@ -1250,12 +1243,11 @@ def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
 
 
 
-def aggregate_year( qinput, add_subclasses, value_numerical = True ):
+def aggregate_year( params, add_subclasses, value_numerical = True ):
     logging.debug( "aggregate_year() add_subclasses: %s" % add_subclasses )
-    logging.debug( "qinput %s" % str( qinput ) )
+    logging.debug( "params %s" % str( params ) )
     
-    language = qinput.get( "language" )
-    
+    """
     try:
         logging.debug( "number of keys in qinput: %d" % len( qinput ) )
         k = 0
@@ -1278,22 +1270,26 @@ def aggregate_year( qinput, add_subclasses, value_numerical = True ):
         logging.error( "aggregate_year failed: %s" % value )
         msg = "failed: %s" % value
         return str( { "msg": "%s" % msg } )
+    """
     
-    classification = qinput[ "classification" ]
-    logging.debug( "classification: %s" % classification )
+    language       = params.get( "language" )
+    datatype       = params.get( "datatype" ) 
+    classification = params.get( "classification" )
+    base_year      = params.get( "base_year" )
     
-    forbidden = [ "classification", "action", "language", "path" ]
+    #forbidden = [ "classification", "action", "language", "path" ]
+    forbidden = [ "classification", "action", "language", "path", "ter_codes", "add_subclasses" ]
     
     eng_data = {}
+    
+    """
     if do_translate and language == "en":
         # translate input english term to russian sql terms
         vocab_filter = {}
-        classification = qinput.get( "classification" )
-        base_year = qinput.get( "base_year" )
+    
         if base_year and classification == "historical":
             vocab_filter[ "YEAR" ] = base_year
         
-        datatype = qinput.get( "datatype" )
         if datatype:
             if classification == "historical":
                 vocab_filter[ "DATATYPE" ] = datatype
@@ -1312,6 +1308,7 @@ def aggregate_year( qinput, add_subclasses, value_numerical = True ):
         #logging.debug( "units: %s" % str( units ) )
         for item in units:
             eng_data[ item ] = units[ item ]
+    """
     
     sql = {}
     
@@ -1323,65 +1320,66 @@ def aggregate_year( qinput, add_subclasses, value_numerical = True ):
     sql[ "group_by" ]  = ''
     sql[ "order_by" ]  = ''
     
-    if qinput:
-        for name in qinput:
-            if not name in forbidden:
-                value = str( qinput[ name ] )
-                logging.debug( "name: %s, value: %s" % ( name, value ) )
-                if value in eng_data:
-                    value = eng_data[ value ]
-                    logging.debug( "eng_data name: %s, value: %s" % ( name, value ) )
-                    
-                sql[ "where" ] += "%s AND " % get_sql_where( name, value )
-                sql[ "condition" ] += "%s, " % name
-                known_fields[ name ] = value
+    for name in params:
+        logging.info( "name: %s" % name )
+        if not name in forbidden:
+            value = params[ name ]
+            logging.info( "value: %s" % value )
             
-            elif name == "path":
-                full_path = qinput[ name ]
-                top_sql = "AND ("
-                for path in full_path:
-                    sql_local = {}
-                    clear_path = {}
+            if value in eng_data:
+                value = eng_data[ value ]
+                logging.debug( "eng_data name: %s, value: %s" % ( name, value ) )
+                
+            sql[ "where" ] += "%s AND " % get_sql_where( name, value )
+            sql[ "condition" ] += "%s, " % name
+            known_fields[ name ] = value
+        
+        elif name == "path":
+            full_path = params[ name ]
+            top_sql = "AND ("
+            for path in full_path:
+                sql_local = {}
+                clear_path = {}
+                
+                for xkey in path:
+                    value = path[ xkey ]
+                    # need to retain '.' in classes, but not in summing
+                    if value == '.':
+                        value = 0
                     
-                    for xkey in path:
-                        value = path[ xkey ]
-                        # need to retain '.' in classes, but not in summing
-                        if value == '.':
-                            value = 0
-                        
-                        clear_path[ xkey ] = value
-                        
-                    for xkey in clear_path:
-                        value = path[ xkey ]
-                        #value = str( value )    # ≥5000 : \xe2\x89\xa55000 => u'\\u22655000
-                        value = value.encode( "utf-8" ) # otherwise, "≥5000 inhabitants" is not found in eng_data
-                        
-                        logging.debug( "clear_path xkey: %s, value: %s" % ( xkey, value ) )
-                        
-                        if value in eng_data:
-                            logging.debug( "xkey: %s, value: %s" % ( xkey, value ) )
-                            value = eng_data[ value ]
-                            logging.debug( "xkey: %s, value: %s" % ( xkey, value ) )
-                        else:
-                            logging.debug( "not found: value: %s" % value )
-                            #logging.warning( "not found: value: %s" % value )
-                            
-                        sql_local[ xkey ] = "(%s='%s' OR %s='. '), " % ( xkey, value, xkey )
-                        
-                        if not known_fields.has_key( xkey ):
-                            known_fields[ xkey ] = value
-                            sql[ "condition" ] += "%s, " % xkey
+                    clear_path[ xkey ] = value
                     
-                    if sql_local:
-                        sql[ "internal" ] += " ("
-                        for key in sql_local:
-                            sql_local[ key ] = sql_local[ key ][ :-2 ]
-                            sql[ "internal" ] += "%s AND " % sql_local[ key ]
-                            logging.debug( "key: %s, value: %s" % ( key, sql_local[ key ] ) )
-                            
-                        sql[ "internal" ] = sql[ "internal" ][ :-4 ]
-                        sql[ "internal" ] += ") OR"
-    
+                for xkey in clear_path:
+                    value = path[ xkey ]
+                    #value = str( value )    # ≥5000 : \xe2\x89\xa55000 => u'\\u22655000
+                    value = value.encode( "utf-8" ) # otherwise, "≥5000 inhabitants" is not found in eng_data
+                    
+                    logging.debug( "clear_path xkey: %s, value: %s" % ( xkey, value ) )
+                    
+                    if value in eng_data:
+                        logging.debug( "xkey: %s, value: %s" % ( xkey, value ) )
+                        value = eng_data[ value ]
+                        logging.debug( "xkey: %s, value: %s" % ( xkey, value ) )
+                    else:
+                        logging.debug( "not found: value: %s" % value )
+                        #logging.warning( "not found: value: %s" % value )
+                        
+                    sql_local[ xkey ] = "(%s='%s' OR %s='. '), " % ( xkey, value, xkey )
+                    
+                    if not known_fields.has_key( xkey ):
+                        known_fields[ xkey ] = value
+                        sql[ "condition" ] += "%s, " % xkey
+                
+                if sql_local:
+                    sql[ "internal" ] += " ("
+                    for key in sql_local:
+                        sql_local[ key ] = sql_local[ key ][ :-2 ]
+                        sql[ "internal" ] += "%s AND " % sql_local[ key ]
+                        logging.debug( "key: %s, value: %s" % ( key, sql_local[ key ] ) )
+                        
+                    sql[ "internal" ] = sql[ "internal" ][ :-4 ]
+                    sql[ "internal" ] += ") OR"
+
     sql[ "internal" ] = sql[ "internal" ][ :-3 ]
     
     logging.debug( "sql: %s" % str( sql ) )
@@ -1488,7 +1486,7 @@ def aggregate_year( qinput, add_subclasses, value_numerical = True ):
 
 
 
-def execute_year( qinput, sql_query, eng_data, key_set ):
+def execute_year( params, sql_query, eng_data, key_set ):
     logging.debug( "execute_year()" )
     
     time0 = time()      # seconds since the epoch
@@ -1538,7 +1536,7 @@ def execute_year( qinput, sql_query, eng_data, key_set ):
         logging.debug( "final_item: %s" % final_item )
         final_data.append( final_item )
     
-    entry_list = json_generator( qinput, sql_names, "data", final_data, key_set )
+    entry_list = json_generator( params, sql_names, "data", final_data, key_set )
     
     str_elapsed = format_secs( time() - time0 )
     logging.info( "execute_year() took %s" % str_elapsed )
@@ -2315,7 +2313,6 @@ def indicators():
 
 
 # Aggregation - Preview User selection post and gets data to build preview in GUI step 5 
-#@app.route( "/aggregation", methods = ["GET", "POST" ] )
 @app.route( "/aggregation", methods = ["POST" ] )
 def aggregation():
     logging.info( "" )
@@ -2331,24 +2328,31 @@ def aggregation():
     datatype = qinput.get( "datatype" )
     logging.debug( "language: %s, classification: %s, datatype: %s" % ( language, classification, datatype ) )
     
-    ter_codes = qinput.get( "ter_code", '' )
-    
     path = qinput.get( "path" )
     add_subclasses, path_stripped, key_set = strip_subclasses( path )
-    if add_subclasses:
-        del qinput[ "path" ]
-        qinput[ "path" ] = path_stripped                # replace without "subclasses"
+    #if add_subclasses:
+    #    del qinput[ "path" ]
+    #    qinput[ "path" ] = path_stripped                # replace path without "subclasses"
     
     logging.debug( "(%d) path          : %s" % ( len( path ),          path ) )
     logging.debug( "(%d) path_stripped : %s" % ( len( path_stripped ), path_stripped ) )
     
-    download_key = str( uuid.uuid4() )
-    
-    # put some additional info in the key
+    # put some additional info in the download key
     base_year = qinput.get( "base_year" )
     if base_year is None or base_year == "":
         base_year = "0000"
+    else:
+        base_year = str( base_year )
     
+    params = {
+        "language"       : language,
+        "datatype"       : datatype,
+        "classification" : classification,
+        "path"           : path_stripped,
+        "add_subclasses" : add_subclasses  
+    }
+    
+    download_key = str( uuid.uuid4() )
     download_key = "%s-%s-%s-%s-%s" % ( language, classification[ 0 ], datatype, base_year, download_key[ 2: ] )
     logging.debug( "download_key: %s" % download_key )
     
@@ -2358,28 +2362,27 @@ def aggregation():
     if not os.path.exists( download_dir ):
         os.makedirs( download_dir )
     
-    #reorder = True     # reordering is much too slow, especially for datatype 1.02 (much data)
-    reorder = False
-    
     json_string = str( "{}" )
     
     if classification == "historical":
-        # historical has base_year in qinput
+        # historical classification  has base_year from qinput
+        params[ "base_year" ] = base_year
         
-        # Two queries for temp table in reorder_entries:
-        # - without ter_code (actually implies all ter_code's) for all wanted rows
-        # - with ter_codes for the wanted regions
-        qinput_ntc = copy.deepcopy( qinput )
-        ter_codes = qinput_ntc.pop( "ter_code", None )
-        logging.info( "ter_code: %s" % ter_codes )
+        ter_codes = qinput.get( "ter_code" )
+        logging.info( "ter_codes: %s" % ter_codes )
         
-        entry_list_total = []
+        # 2 sets of parameters: 
+        # - for query without ter_code (actually implies all ter_code's) for all wanted rows
+        # - for query with ter_codes for the wanted regions
+        params_ntc = copy.deepcopy( params )    # without ter_codes
+        params[ "ter_codes" ] = ter_codes       # with ter_codes
         
         # split path in subgroups with the same key length
-        path_lists = group_levels( path )
+        path_lists = group_levels( path )       # input path WITH subclasses parameter, NOT path_stripped
         nlists = len( path_lists )
         logging.info( "%d path_dicts in path_lists" % nlists )
         
+        entry_list_total = []
         for pd, path_dict in enumerate( path_lists ):
             logging.info( "path_list %d-of-%d" % ( pd+1, nlists ) )
             
@@ -2393,25 +2396,25 @@ def aggregation():
             for p, path in enumerate( path_list ):
                 logging.debug( "path_dict %d-of-%d, path: %s" % ( p+1, len( path_list ), path ) )
             
-            logging.debug( "path_list: %s" % path_list )
+            logging.info( "path_list: %s" % path_list )
             
-            qinput[ "path" ] = path_list
-            logging.info( "path_list: %s" % qinput[ "path" ] )
-            sql_query, eng_data = aggregate_year( qinput, add_subclasses, value_numerical = True )  # only numbers
-            entry_list = execute_year( qinput, sql_query, eng_data, key_set )
+            show_params( "params", params )
+            sql_query, eng_data = aggregate_year( params, add_subclasses, value_numerical = True )  # only numbers
+            entry_list = execute_year( params, sql_query, eng_data, key_set )
             logging.info( "entry_list: %d items" % len( entry_list ) )
             
             entry_list_ntc = []
             if datatype != "1.02":      # not needed for 1.02 (and much data)
-                qinput_ntc[ "path" ] = path_list
-                logging.info( "path_list: %s" % qinput_ntc[ "path" ] )
-                sql_query_ntc, eng_data_ntc = aggregate_year( qinput_ntc, add_subclasses, value_numerical = True )  # only numbers
-                entry_list_ntc = execute_year( qinput, sql_query_ntc, eng_data_ntc, key_set )
+                params_ntc[ "path" ] = path_list
+                logging.info( "path_list: %s" % params_ntc[ "path" ] )
+                show_params( "params_ntc", params_ntc )
+                sql_query_ntc, eng_data_ntc = aggregate_year( params_ntc, add_subclasses, value_numerical = True )  # only numbers
+                entry_list_ntc = execute_year( params_ntc, sql_query_ntc, eng_data_ntc, key_set )
                 logging.info( "entry_list_ntc: %d items" % len( entry_list_ntc ) )
             
-            logging.info( "path_list: %s" % qinput[ "path" ] )
-            sql_query_none, eng_data_none = aggregate_year( qinput, add_subclasses, value_numerical = False)    # non-numbers
-            entry_list_none = execute_year( qinput, sql_query_none, eng_data_none, key_set )
+            show_params( "params", params )
+            sql_query_none, eng_data_none = aggregate_year( params, add_subclasses, value_numerical = False)    # non-numbers
+            entry_list_none = execute_year( params, sql_query_none, eng_data_none, key_set )
             logging.info( "entry_list_none: %d items" % len( entry_list_none ) )
             
             logging.info( "add_unique_ntcs()" )
@@ -2428,46 +2431,40 @@ def aggregation():
         entry_list_sorted = sort_entries( datatype, entry_list_total )   # sort by path, value_unit
         logging.debug( "entry_list_sorted: %d items" % len( entry_list_sorted ) )
         
-        json_string, cache_except = json_cache( entry_list_sorted, language, "data", download_key, qinput )
+        json_string, cache_except = json_cache( entry_list_sorted, language, "data", download_key, params )
         
         if cache_except is not None:
             logging.error( "caching of aggregation data failed" )
             logging.error( "length of json string: %d" % len( json_string ) )
             # try to show the error in download sheet
             #entry_list_ = [ { "cache_except" : cache_except } ]
-            #json_string, cache_except = json_cache( entry_list_, language, "data", download_key, qinput )
+            #json_string, cache_except = json_cache( entry_list_, language, "data", download_key, params )
         
         logging.debug( "aggregated json_string: \n%s" % json_string )
         
-        collect_docs( qinput, download_dir, download_key )  # collect doc files in download dir
+        collect_docs( params, download_dir, download_key )  # collect doc files in download dir
     
     elif classification == "modern":
-        # modern does not have base_year or ter_code in qinput
-        # parameters for modern classification:
-        params = {
-            "language"       : language,
-            "datatype"       : datatype,
-            "classification" : classification,
-            "path"           : path
-        }
+        # modern classification does not have base_year or ter_code from qinput
         
         entry_list_total = []
         
         # modern classification does not provide a base_year; 
         # loop over base_years, and accumulate results.
-        base_years = [ "1795", "1858", "1897", "1959", "2002" ]
+        #base_years = [ "1795", "1858", "1897", "1959", "2002" ]
+        base_years = [ "1795" ]
         for base_year in base_years:
             logging.info( "base_year: %s" % base_year )
-            qinput[ "base_year" ] = base_year
             params[ "base_year" ] = base_year
             
-            # no ter_code in qinput for modern
-            sql_query_ntc, eng_data_ntc = aggregate_year( qinput, add_subclasses, value_numerical = True )      # only numbers
-            entry_list_ntc = execute_year( qinput, sql_query_ntc, eng_data_ntc, key_set )
+            show_params( "params", params )
+            sql_query_ntc, eng_data_ntc = aggregate_year( params, add_subclasses, value_numerical = True )      # only numbers
+            entry_list_ntc = execute_year( params, sql_query_ntc, eng_data_ntc, key_set )
             logging.info( "entry_list_ntc: %d items" % len( entry_list_ntc ) )
             
-            sql_query_none, eng_data_none = aggregate_year( qinput, add_subclasses, value_numerical = False )   # non-numbers
-            entry_list_none = execute_year( qinput, sql_query_none, eng_data_none, key_set )
+            show_params( "params", params )
+            sql_query_none, eng_data_none = aggregate_year( params, add_subclasses, value_numerical = False )   # non-numbers
+            entry_list_none = execute_year( params, sql_query_none, eng_data_none, key_set )
             logging.info( "entry_list_none: %d items" % len( entry_list_none ) )
                 
             # only add entries with new paths
@@ -2480,7 +2477,7 @@ def aggregation():
         entry_list_sorted = sort_entries( datatype, entry_list_total )
         logging.debug( "entry_list_sorted: %d items" % len( entry_list_sorted ) )
         
-        json_string, cache_except = json_cache( entry_list_sorted, language, "data", download_key, qinput )
+        json_string, cache_except = json_cache( entry_list_sorted, language, "data", download_key, params )
         
         if cache_except is not None:
             logging.error( "caching of aggregation data failed" )
@@ -2488,7 +2485,7 @@ def aggregation():
         
         logging.debug( "aggregated json_string: \n%s" % json_string )
         
-        collect_docs( qinput, download_dir, download_key )  # collect doc files in download dir
+        collect_docs( params, download_dir, download_key )  # collect doc files in download dir
     
     logging.debug( "stop: %s" % datetime.datetime.now() )
     str_elapsed = format_secs( time() - time0 )
@@ -2497,6 +2494,13 @@ def aggregation():
     return Response( json_string, mimetype = "application/json; charset=utf-8" )
 
 
+
+def show_params( info, params ):
+    logging.info( "show_params() %s" % info )
+    for key, value in params.iteritems():
+        logging.info( "key: %s, value: %s" % ( key, value ) )
+
+        
 
 # Filecatalog - Create filecatalog download link
 @app.route( "/filecatalogdata", methods = [ "POST", "GET" ]  )
