@@ -2451,8 +2451,8 @@ def aggregation():
         
         # modern classification does not provide a base_year; 
         # loop over base_years, and accumulate results.
-        #base_years = [ "1795", "1858", "1897", "1959", "2002" ]
-        base_years = [ "1795" ]
+        base_years = [ "1795", "1858", "1897", "1959", "2002" ]
+        #base_years = [ "1795" ]	# test single year
         for base_year in base_years:
             logging.info( "base_year: %s" % base_year )
             params[ "base_year" ] = base_year

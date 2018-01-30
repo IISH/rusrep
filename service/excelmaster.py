@@ -387,11 +387,12 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         for chain in lex_lands_list0:
             for class_ in class_chain:
                 if not chain.get( class_ ):
-                    item[ class_ ] = ''
+                    chain[ class_ ] = ''
             lex_lands_list.append( chain )
             logging.debug( "chain: %s" % str( chain ) )
         
-        max_columns = len( header_chain )
+        #max_columns = len( header_chain )
+        max_columns = 1 + len( header_chain )	# +1: for count column
         logging.debug( "# of names in header_chain: %d" % len( header_chain ) )
         logging.debug( "header names in chain: %s" % str( header_chain ) )
         logging.debug( "# of names in class_chain: %d" % len( header_chain ) )
@@ -507,7 +508,7 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
             except:
                 base_year_chain = '0'
             
-            if base_year != base_year_chain:
+            if int( base_year ) != int( base_year_chain ):
                 logging.debug( "skip: base_year %s not equal to base_year_chain %s" % ( base_year, base_year_chain ) )
                 continue
             else:
