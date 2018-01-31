@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # VT-07-Jul-2016 Latest change by VT
-# FL-22-Jan-2018 Latest change
+# FL-31-Jan-2018 Latest change
 
 import json
 import logging
@@ -25,171 +25,201 @@ from openpyxl.utils import get_column_letter
 def preprocessor( datafilter ):
     logging.debug( "preprocessor() datafilter: %s" % datafilter )
     
-    #qinput    = {}
-    params    = {}
-    lex_lands = {}
-    lands     = {}
-    lang      = ""
-    base_year = 0
-    dataset   = []
-
-    key = datafilter[ "key" ]
-    if key:
-        topic = ""
-        key_comps = key.split( '-' )
-        logging.debug( "key_comps: %s" % str( key_comps ) )
-        if len( key_comps ) >= 1:
-            lang = key_comps[ 0 ]
-        if len( key_comps ) >= 2:
-            hist_mod = key_comps[ 1 ]
-        if len( key_comps ) >= 3:
-            topic = key_comps[ 2 ]
-        
-        clientcache = MongoClient()
-        db_datacache = clientcache.get_database( 'datacache' )
-        
-        logging.debug( "db_datacache.data.find with key: %s" % key )
-        result = db_datacache.data.find( { "key": key } )
-        #logging.debug( "preprocessor() cached result: %s for key: %s" % ( type( result ), key ) )
-        
-        ter_codes = []      # actually used region codes
-        logging.debug( "# of rowitems: %d" % result.count() )
-        
-        for rowitem in result:
-            logging.debug( "rowitem: %s" % str( rowitem ) )
-            
-            del rowitem[ 'key' ]
-            del rowitem[ '_id' ]
-            
-            #if "qinput" in rowitem:
-            #    qinput = rowitem[ "qinput" ]
-            #    logging.debug( "qinput: %s" % str( qinput ) )
-            #    del rowitem[ "qinput" ]
-            if "params" in rowitem:
-                params = rowitem[ "params" ]
-                logging.debug( "params: %s" % str( params ) )
-                del rowitem[ "params" ]
-            
-            if "language" in rowitem:
-                lang = rowitem[ "language" ]
-                del rowitem[ "language" ]
-            
-            logging.debug( "# of items in rowitem: %d" % len( rowitem[ 'data' ] ) )
-            for item in rowitem[ 'data' ]:
-                
-                dataitem = item
-                if 'path' in item:
-                    classes = item[ 'path' ]
-                    del item[ 'path' ]
-                    clist = {}
-                    for classname in classes:
-                        dataitem[ classname] = classes[ classname ]
-                if 'base_year' in item:
-                    base_year = item[ 'base_year' ]
-                
-                itemlexicon = dataitem
-                lands = {}
-                if 'ter_code' in itemlexicon:
-                    ter_code = itemlexicon[ 'ter_code' ]
-                    ter_codes.append( ter_code )
-                    lands[ itemlexicon[ 'ter_code' ] ] = itemlexicon.get( "total" )
-                    del itemlexicon[ 'ter_code' ]
-                if 'total' in itemlexicon:
-                    del itemlexicon[ 'total' ]
-                
-                try:
-                    count = itemlexicon[ 'count' ]
-                    #del itemlexicon[ 'count' ]          # 'count' should not be part of lexkey
-                except:
-                    pass
-                
-                lexkey = json.dumps( itemlexicon )
-                
-                itemlexicon[ 'lands' ] = lands
-                if lexkey in lex_lands:
-                    logging.debug( "old lexkey: %s" % lexkey )
-                    currentlands = lex_lands[ lexkey ]
-                    for item in lands:
-                        currentlands[ item ] = lands[ item ]
-                    lex_lands[ lexkey ] = currentlands
-                else:
-                    logging.debug( "new lexkey: %s" % lexkey )
-                    lex_lands[ lexkey ] = lands
-                
-                dataset.append( dataitem )
-        
-        vocab_regs_terms = {}       # regions and terms
-        vocab_regs_terms[ "ter_codes" ] = ter_codes
-        
-        db_vocabulary = clientcache.get_database( 'vocabulary' )   # vocabulary
-        
-        # create sheet_header
-        sheet_header = []
-        # load terms
-        terms_needed  = [ "na", "base_year", "count", "datatype", "value_unit" ]
-        if hist_mod == 'h':     # historical
-            terms_needed += [ "histclass1", "histclass2", "histclass3", "histclass4", "histclass5", "histclass6", "histclass7", "histclass8", "histclass9", "histclass10" ]
-        elif hist_mod == 'm':   # modern
-            terms_needed += [ "class1", "class2", "class3", "class4", "class5", "class6", "class7", "class8", "class9", "class10" ]
-        
-        terms = {}
-        vocab_download = db_vocabulary.data.find( { "vocabulary": "ERRHS_Vocabulary_download" } )
-        topic_name = ""
-        for item in vocab_download:
-            #logging.debug( str( item ) )
-            ID = item[ 'ID' ]
-            #logging.debug( "%s %s" % ( topic, ID ) )
-            if ID == topic:
-                if lang == 'en':
-                    topic_name = item[ 'EN' ]
-                else:
-                    topic_name = item[ 'RUS' ]
-            
-            if ID in terms_needed:
-                if lang == 'en':
-                    terms[ item[ 'ID' ] ] = item[ 'EN' ]
-                else:
-                    terms[ item[ 'ID' ] ] = item[ 'RUS' ]
-        
-        #logging.debug( "topic: %s, topic_name: %s" % ( topic, topic_name ) )
-        vocab_regs_terms[ "terms" ] = terms
-        
-        if lang == 'en':
-            if hist_mod == 'h':
-                classification = "HISTORICAL"
-            elif hist_mod == 'm':
-                classification = "MODERN"
-            else:
-                classification = ""
-            
-            sheet_header.append( { "r" : 1, "c" : 0, "value" : "Electronic repository of Russian Historical Statistics - ristat.org" } )
-            sheet_header.append( { "r" : 3, "c" : 0, "value" : "TOPIC:" } )
-            sheet_header.append( { "r" : 3, "c" : 1, "value" : topic_name } )
-            sheet_header.append( { "r" : 4, "c" : 0, "value" : "BENCHMARK-YEAR:" } )
-            sheet_header.append( { "r" : 4, "c" : 1, "value" : base_year } )
-            sheet_header.append( { "r" : 5, "c" : 0, "value" : "CLASSIFICATION:" } )
-            sheet_header.append( { "r" : 5, "c" : 1, "value" : classification } )
-            sheet_header.append( { "r" : 6, "c" : 0, "value" : "NUMBER" } )
-            sheet_header.append( { "r" : 6, "c" : 1, "value" : 0 } )
+    lex_lands        = {}
+    vocab_regs_terms = {}           # regions and terms
+    sheet_header     = []
+    topic_name       = ""
+    params           = {}
+    
+    key = datafilter.get( "key" )
+    if not key:
+        logging.error( "preprocessor() NO key?" )
+        return ( lex_lands, vocab_regs_terms, sheet_header, topic_name, params )
+    
+    key_comps = key.split( '-' )
+    logging.debug( "key_comps: %s" % str( key_comps ) )
+    
+    lang     = ''       # { 'en' | 'ru' }
+    hist_mod = ''       # { 'h' | 'm' }
+    topic    = ''       # x.yz
+    
+    if len( key_comps ) >= 1:
+        lang = key_comps[ 0 ]
+    if len( key_comps ) >= 2:
+        hist_mod = key_comps[ 1 ]
+    if len( key_comps ) >= 3:
+        topic = key_comps[ 2 ]
+    
+    clientcache = MongoClient()
+    db_datacache = clientcache.get_database( 'datacache' )
+    
+    logging.debug( "db_datacache.data.find with key: %s" % key )
+    cursor = db_datacache.data.find_one( { "key": key } )
+    
+    cache_data = dict ( cursor )
+    logging.debug( "# keys in cache_data: %s" % len( cache_data.keys() ) )
+    for key, value in cache_data.iteritems():
+        if isinstance( value, list ):
+            logging.debug( "key %s: value type: %s, # of elements: %d" % ( key, type( value ), len( value ) ) )
+        elif isinstance( value, dict ):
+            logging.debug( "key %s: value type: %s, # of keys: %d" % ( key, type( value ), len( value ) ) )
         else:
-            if hist_mod == 'h':
-                classification = "ИСТОРИЧЕСКАЯ"
-            elif hist_mod == 'm':
-                classification = "СОВРЕМЕННАЯ"
+            logging.debug( "key %s: value type: %s" % ( key, type( value ) ) )
+    
+    params = cache_data.get( "params" )
+    logging.debug( "# of keys in params: %d" % len( params.keys() ) )
+    for key, value in params.iteritems():
+        logging.debug( "key %s: value: %s" % ( key, value ) )
+    
+    
+    
+    data   = cache_data.get( "data" )
+    
+    base_year = '0'
+    ter_codes = []      # actually used region codes
+    dataset   = []
+    
+    """
+    for rowitem in cache_data:
+        logging.debug( "rowitem: %s" % str( rowitem ) )
+        
+        del rowitem[ 'key' ]
+        del rowitem[ '_id' ]
+        
+        #if "qinput" in rowitem:
+        #    qinput = rowitem[ "qinput" ]
+        #    logging.debug( "qinput: %s" % str( qinput ) )
+        #    del rowitem[ "qinput" ]
+        if "params" in rowitem:
+            params = rowitem[ "params" ]
+            logging.debug( "params: %s" % str( params ) )
+            del rowitem[ "params" ]
+        
+        if "language" in rowitem:
+            lang = rowitem[ "language" ]
+            del rowitem[ "language" ]
+        
+        logging.debug( "# of items in rowitem: %d" % len( rowitem[ 'data' ] ) )
+    """
+        
+    #for item in rowitem[ 'data' ]:
+    for item in data:  
+        logging.debug( "item type: %s" % type( item ) )
+        
+        
+        dataitem = item
+        if 'path' in item:
+            classes = item[ 'path' ]
+            del item[ 'path' ]
+            clist = {}
+            for classname in classes:
+                dataitem[ classname] = classes[ classname ]
+        if 'base_year' in item:
+            base_year = item[ 'base_year' ]
+        
+        itemlexicon = dataitem
+        lands = {}
+        if 'ter_code' in itemlexicon:
+            ter_code = itemlexicon[ 'ter_code' ]
+            ter_codes.append( ter_code )
+            lands[ itemlexicon[ 'ter_code' ] ] = itemlexicon.get( "total" )
+            del itemlexicon[ 'ter_code' ]
+        if 'total' in itemlexicon:
+            del itemlexicon[ 'total' ]
+        
+        try:
+            count = itemlexicon[ 'count' ]
+            #del itemlexicon[ 'count' ]          # 'count' should not be part of lexkey
+        except:
+            pass
+        
+        lexkey = json.dumps( itemlexicon )
+        
+        itemlexicon[ 'lands' ] = lands
+        if lexkey in lex_lands:
+            logging.debug( "old lexkey: %s" % lexkey )
+            currentlands = lex_lands[ lexkey ]
+            for item in lands:
+                currentlands[ item ] = lands[ item ]
+            lex_lands[ lexkey ] = currentlands
+        else:
+            logging.debug( "new lexkey: %s" % lexkey )
+            lex_lands[ lexkey ] = lands
+        
+        dataset.append( dataitem )
+    
+    if len( ter_codes ) == 0:
+        ter_codes = params.get( "ter_codes" )
+    vocab_regs_terms[ "ter_codes" ] = ter_codes
+    
+    db_vocabulary = clientcache.get_database( 'vocabulary' )   # vocabulary
+    
+    # create sheet_header
+    # load terms
+    terms_needed  = [ "na", "base_year", "count", "datatype", "value_unit" ]
+    if hist_mod == 'h':     # historical
+        terms_needed += [ "histclass1", "histclass2", "histclass3", "histclass4", "histclass5", "histclass6", "histclass7", "histclass8", "histclass9", "histclass10" ]
+    elif hist_mod == 'm':   # modern
+        terms_needed += [ "class1", "class2", "class3", "class4", "class5", "class6", "class7", "class8", "class9", "class10" ]
+    
+    terms = {}
+    vocab_download = db_vocabulary.data.find( { "vocabulary": "ERRHS_Vocabulary_download" } )
+    
+    for item in vocab_download:
+        #logging.debug( str( item ) )
+        ID = item[ 'ID' ]
+        #logging.debug( "%s %s" % ( topic, ID ) )
+        if ID == topic:
+            if lang == 'en':
+                topic_name = item[ 'EN' ]
             else:
-                classification = ""
-            
-            sheet_header.append( { "r" : 1, "c" : 0, "value" : "Электронный архив Российской исторической статистики - ristat.org" } )
-            sheet_header.append( { "r" : 3, "c" : 0, "value" : "ТЕМА:" } )
-            sheet_header.append( { "r" : 3, "c" : 1, "value" : topic_name } )
-            sheet_header.append( { "r" : 4, "c" : 0, "value" : "ГОД:" } )
-            sheet_header.append( { "r" : 4, "c" : 1, "value" : base_year } )
-            sheet_header.append( { "r" : 5, "c" : 0, "value" : "КЛАССИФИКАЦИЯ:" } )
-            sheet_header.append( { "r" : 5, "c" : 1, "value" : classification } )
-            sheet_header.append( { "r" : 6, "c" : 0, "value" : "ЧИСЛО" } )
-            sheet_header.append( { "r" : 6, "c" : 1, "value" : 0 } )
-            
-    if result.count() == 0:
+                topic_name = item[ 'RUS' ]
+        
+        if ID in terms_needed:
+            if lang == 'en':
+                terms[ item[ 'ID' ] ] = item[ 'EN' ]
+            else:
+                terms[ item[ 'ID' ] ] = item[ 'RUS' ]
+    
+    #logging.debug( "topic: %s, topic_name: %s" % ( topic, topic_name ) )
+    vocab_regs_terms[ "terms" ] = terms
+    
+    if lang == 'en':
+        if hist_mod == 'h':
+            classification = "HISTORICAL"
+        elif hist_mod == 'm':
+            classification = "MODERN"
+        else:
+            classification = ""
+        
+        sheet_header.append( { "r" : 1, "c" : 0, "value" : "Electronic repository of Russian Historical Statistics - ristat.org" } )
+        sheet_header.append( { "r" : 3, "c" : 0, "value" : "TOPIC:" } )
+        sheet_header.append( { "r" : 3, "c" : 1, "value" : topic_name } )
+        sheet_header.append( { "r" : 4, "c" : 0, "value" : "BENCHMARK-YEAR:" } )
+        sheet_header.append( { "r" : 4, "c" : 1, "value" : base_year } )
+        sheet_header.append( { "r" : 5, "c" : 0, "value" : "CLASSIFICATION:" } )
+        sheet_header.append( { "r" : 5, "c" : 1, "value" : classification } )
+        sheet_header.append( { "r" : 6, "c" : 0, "value" : "NUMBER" } )
+        sheet_header.append( { "r" : 6, "c" : 1, "value" : 0 } )
+    else:
+        if hist_mod == 'h':
+            classification = "ИСТОРИЧЕСКАЯ"
+        elif hist_mod == 'm':
+            classification = "СОВРЕМЕННАЯ"
+        else:
+            classification = ""
+        
+        sheet_header.append( { "r" : 1, "c" : 0, "value" : "Электронный архив Российской исторической статистики - ristat.org" } )
+        sheet_header.append( { "r" : 3, "c" : 0, "value" : "ТЕМА:" } )
+        sheet_header.append( { "r" : 3, "c" : 1, "value" : topic_name } )
+        sheet_header.append( { "r" : 4, "c" : 0, "value" : "ГОД:" } )
+        sheet_header.append( { "r" : 4, "c" : 1, "value" : base_year } )
+        sheet_header.append( { "r" : 5, "c" : 0, "value" : "КЛАССИФИКАЦИЯ:" } )
+        sheet_header.append( { "r" : 5, "c" : 1, "value" : classification } )
+        sheet_header.append( { "r" : 6, "c" : 0, "value" : "ЧИСЛО" } )
+        sheet_header.append( { "r" : 6, "c" : 1, "value" : 0 } )
+        
+    if not cache_data:
         # this happens when the data could not be cached in MongoDB because its size exceeded the limit
         sheet_header.append( { "r" : 7, "c" : 0, "value" : "Zero items received from MongoDB for key:" } )
         sheet_header.append( { "r" : 7, "c" : 1, "value" : key } )
@@ -207,7 +237,15 @@ def preprocessor( datafilter ):
 
 
 def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header, topic_name, params ):
-    logging.debug( "aggregate_dataset() key: %s" % key )
+    logging.info( "aggregate_dataset()" )
+    logging.debug( "key: %s" % key )
+    logging.debug( "download_dir: %s" % download_dir )
+    logging.debug( "xlsx_name: %s" % xlsx_name )
+    logging.debug( "lex_lands: %s" % str( lex_lands ) )
+    logging.debug( "vocab_regs_terms: %s" % str( vocab_regs_terms ) )
+    logging.debug( "sheet_header type: %s" % type( sheet_header ) )
+    logging.debug( "topic_name: %s" % topic_name )
+    logging.debug( "params: %s" % str( params ) )
     
     xlsx_pathname = ""
     if not os.path.isdir( download_dir ):
@@ -230,27 +268,28 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         base_year = int( base_year_str )
     logging.debug( "lang: %s, hist_mod: %s, base_year_str: %s" % ( lang, hist_mod, base_year_str ) )
     
-    logging.debug( "keys in vocab_regs_terms:" )
-    for k in vocab_regs_terms:
-        logging.debug( "key in vocab_regs_terms: %s" % k )
+    logging.debug( "# of keys in vocab_regs_terms: %d" % len( vocab_regs_terms.keys() ) )
+    for k, v in vocab_regs_terms.iteritems():
+        logging.debug( "k: %s, v: %s" % ( k, str( v ) ) )
     
     nsheets = 0
     ter_code_list = []
+    
     #wb = openpyxl.Workbook( encoding = "utf-8" )
     wb = openpyxl.Workbook()
     
     escape = False
     if escape:
-		logging.debug( "openpyxl version: %s" % openpyxl.__version__ )
-		logging.debug( "empty spreadsheet" )
-		ws = wb.active				# grab the active worksheet
-		ws['A1'] = 42				# Data can be assigned directly to cells
-		ws.append([1, 2, 3])		# Rows can also be appended
-		import datetime				# Python types will automatically be converted
-		ws['A2'] = datetime.datetime.now()
-		wb.save( "/home/dpe/tmp/data/download/sample.xlsx" )
-		wb.save( xlsx_pathname )	# Save the file
-		return xlsx_pathname, ""
+        logging.debug( "openpyxl version: %s" % openpyxl.__version__ )
+        logging.debug( "empty spreadsheet" )
+        ws = wb.active                  # grab the active worksheet
+        ws['A1'] = 42                   # Data can be assigned directly to cells
+        ws.append([1, 2, 3])            # Rows can also be appended
+        import datetime                 # Python types will automatically be converted
+        ws['A2'] = datetime.datetime.now()
+        wb.save( "/home/dpe/tmp/data/download/sample.xlsx" )
+        wb.save( xlsx_pathname )    # Save the file
+        return xlsx_pathname, ""
     
     clientcache = MongoClient()
     db_datacache = clientcache.get_database( 'datacache' )
@@ -333,7 +372,7 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         
         # get region names from ter_codes
         regions = {}
-        #ter_codes = vocab_regs_terms[ "ter_codes" ]     # from sql result
+        #ter_codes = vocab_regs_terms[ "ter_codes" ]    # from sql result
         ter_codes = ter_code_list                       # from qinput or all (modern)
         logging.debug( "ter_codes: %s" % str( ter_codes ) )
         for item in vocab_regions:
@@ -362,7 +401,8 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
             ter_name = tmpname.decode( 'utf-8' )
             regions[ ter_name ] = ter_code
             reg_names.append( ter_name ) 
-        
+            
+        logging.debug( "unsorted reg_names: %s" % str( reg_names ) )
         # sort the region names alphabetically
         locale = Locale( 'ru' )  # 'el' is the locale code for Greek
         collator = Collator.createInstance( locale )
@@ -392,7 +432,8 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
             logging.debug( "chain: %s" % str( chain ) )
         
         #max_columns = len( header_chain )
-        max_columns = 1 + len( header_chain )	# +1: for count column
+        max_columns = 1 + len( header_chain )       # +1: for count column
+        
         logging.debug( "# of names in header_chain: %d" % len( header_chain ) )
         logging.debug( "header names in chain: %s" % str( header_chain ) )
         logging.debug( "# of names in class_chain: %d" % len( header_chain ) )

@@ -5,7 +5,7 @@ VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
-FL-24-Jan-2018 reordering optional
+FL-31-Jan-2018 reordering optional
 
 def get_configparser():
 def get_connection():
@@ -446,14 +446,21 @@ def json_generator( params, sql_names, json_dataname, data, qkey_set = None ):
             new_entry[ "total" ]      = ''      # unknown, so not 0 or 0.0
             entry_list.append( new_entry )
     
+    logging.info( "json_generator() done, %d entries" % len( entry_list ) )
+    for e, entry in enumerate( entry_list ):
+        logging.debug( " %d: %s" % ( e, str( entry ) ) )
+    
     return entry_list
 
 
 
 def json_cache( entry_list, language, json_dataname, download_key, params = {} ):
     # cache entry_list in mongodb with download_key as key
-    logging.info( "json_cache() # entries in list: %d" %  len( entry_list ) )
+    logging.info( "json_cache() # entries in entry_list: %d" %  len( entry_list ) )
     
+    if params:
+        logging.info( "json_cache() params: %s" % str( params ) )
+                 
     configparser = get_configparser()
     root = configparser.get( "config", "root" )
     
@@ -469,29 +476,38 @@ def json_cache( entry_list, language, json_dataname, download_key, params = {} )
     time0 = time()      # seconds since the epoch
     logging.debug( "start: %s" % datetime.datetime.now() )
     
-    value = None
+    exc_value = None
     try:
-        this_data = json_hash
-        del this_data[ "url" ]
-        this_data[ "key" ] = download_key
-        this_data[ "language" ] = language
-        if params is not None:
-            this_data[ "params" ] = params
+        cache_data = json_hash
+        del cache_data[ "url" ]
+        
+        cache_data[ "key" ] = download_key
+        if params:
+            cache_data[ "params" ] = params
+        
+        logging.debug( "# keys in cache_data: %s" % len( cache_data.keys() ) )
+        for key, value in cache_data.iteritems():
+            if isinstance( value, list ):
+                logging.debug( "key %s: value type: %s, # of elements: %d" % ( key, type( value ), len( value ) ) )
+            elif isinstance( value, dict ):
+                logging.debug( "key %s: value type: %s, # of keys: %d" % ( key, type( value ), len( value ) ) )
+            else:
+                logging.debug( "key %s: value type: %s" % ( key, type( value ) ) )
         
         logging.debug( "dbcache.data.insert with key: %s" % download_key )
         clientcache = MongoClient()
         dbcache = clientcache.get_database( "datacache" )
-        result = dbcache.data.insert( this_data )
+        result = dbcache.data.insert( cache_data )
     except:
         logging.error( "caching with key %s failed:" % download_key )
-        type_, value, tb = sys.exc_info()
-        logging.error( "%s" % value )
+        type_, exc_value, tb = sys.exc_info()
+        logging.error( "%s" % exc_value )
     
     logging.debug( "stop: %s" % datetime.datetime.now() )
     str_elapsed = format_secs( time() - time0 )
     logging.info( "caching took %s" % str_elapsed )
     
-    return json_string, value
+    return json_string, exc_value
 
 
 
@@ -1061,7 +1077,8 @@ def get_sql_where( name, value ):
     logging.debug( "get_sql_where() name: %s, value: %s" % ( name, value ) )
     
     sql_query = ''
-    result = re.match( "\[(.+)\]", value )
+    #result = re.match( "\[(.+)\]", value )
+    result = re.match( "\[(.+)\]", str( value ) )
     
     if result:
         query = result.group( 1 )
@@ -1278,7 +1295,8 @@ def aggregate_year( params, add_subclasses, value_numerical = True ):
     base_year      = params.get( "base_year" )
     
     #forbidden = [ "classification", "action", "language", "path" ]
-    forbidden = [ "classification", "action", "language", "path", "ter_codes", "add_subclasses" ]
+    #forbidden = [ "classification", "action", "language", "path", "ter_codes", "add_subclasses" ]
+    forbidden = [ "classification", "action", "language", "path", "add_subclasses" ]
     
     eng_data = {}
     
@@ -1326,13 +1344,18 @@ def aggregate_year( params, add_subclasses, value_numerical = True ):
             value = params[ name ]
             logging.info( "value: %s" % value )
             
-            if value in eng_data:
-                value = eng_data[ value ]
-                logging.debug( "eng_data name: %s, value: %s" % ( name, value ) )
-                
-            sql[ "where" ] += "%s AND " % get_sql_where( name, value )
-            sql[ "condition" ] += "%s, " % name
-            known_fields[ name ] = value
+            #if value in eng_data:
+            #    value = eng_data[ value ]
+            #    logging.debug( "eng_data name: %s, value: %s" % ( name, value ) )
+            
+            # temporary fix, sql composition must be overhauled
+            name_ = name
+            if name == "ter_codes":
+                name_ = "ter_code"      # name of db column
+            
+            sql[ "where" ] += "%s AND " % get_sql_where( name_, value )
+            sql[ "condition" ] += "%s, " % name_
+            known_fields[ name_ ] = value
         
         elif name == "path":
             full_path = params[ name ]
@@ -1500,7 +1523,7 @@ def execute_year( params, sql_query, eng_data, key_set ):
     
     logging.debug( "query execute stop: %s" % datetime.datetime.now() )
     str_elapsed = format_secs( time() - time0 )
-    logging.debug( "execute_year() sql_query execute took %s" % str_elapsed )
+    logging.debug( "execute_year() sql_query took %s" % str_elapsed )
     
     sql_names = [ desc[ 0 ] for desc in cursor.description ]
     logging.debug( "%d sql_names:" % len( sql_names ) )
@@ -2321,7 +2344,7 @@ def aggregation():
     logging.info( "aggregation start: %s" % datetime.datetime.now() )
     
     qinput = simplejson.loads( request.data )
-    logging.debug( qinput )
+    logging.debug( "qinput: %s" % str( qinput ) )
     
     language = qinput.get( "language" )
     classification = qinput.get( "classification" )
