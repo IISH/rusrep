@@ -5,7 +5,7 @@ VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
-FL-31-Jan-2018 reordering optional
+FL-05-Feb-2018 reordering optional
 
 def get_configparser():
 def get_connection():
@@ -2421,11 +2421,13 @@ def aggregation():
             
             logging.info( "path_list: %s" % path_list )
             
+            # -1- = entry_list
             show_params( "params", params )
             sql_query, eng_data = aggregate_year( params, add_subclasses, value_numerical = True )  # only numbers
             entry_list = execute_year( params, sql_query, eng_data, key_set )
             logging.info( "entry_list: %d items" % len( entry_list ) )
             
+            # -2- = entry_list_ntc
             entry_list_ntc = []
             if datatype != "1.02":      # not needed for 1.02 (and much data)
                 params_ntc[ "path" ] = path_list
@@ -2435,22 +2437,25 @@ def aggregation():
                 entry_list_ntc = execute_year( params_ntc, sql_query_ntc, eng_data_ntc, key_set )
                 logging.info( "entry_list_ntc: %d items" % len( entry_list_ntc ) )
             
+            # -3- = entry_list_none
             show_params( "params", params )
             sql_query_none, eng_data_none = aggregate_year( params, add_subclasses, value_numerical = False)    # non-numbers
             entry_list_none = execute_year( params, sql_query_none, eng_data_none, key_set )
             logging.info( "entry_list_none: %d items" % len( entry_list_none ) )
             
+            # entry_list_path = entry_list + entry_list_ntc
             logging.info( "add_unique_ntcs()" )
             entry_list_path = add_unique_items( entry_list, entry_list_ntc )
             
-            # only add entries with new paths
+            # entry_list_collect = entry_list_path + entry_list_none
             logging.info( "add_unique_nones()" )
             entry_list_collect = add_unique_items( entry_list_path, entry_list_none )
             logging.info( "entry_list_collect: %d items" % len( entry_list_collect ) )
             
+            # entry_list_total = entry_list_total + entry_list_collect
             entry_list_total.extend( entry_list_collect )
             logging.info( "entry_list_total: %d items" % len( entry_list_total ) )
-        
+            
         entry_list_sorted = sort_entries( datatype, entry_list_total )   # sort by path, value_unit
         logging.debug( "entry_list_sorted: %d items" % len( entry_list_sorted ) )
         

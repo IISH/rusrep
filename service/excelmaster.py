@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # VT-07-Jul-2016 Latest change by VT
-# FL-31-Jan-2018 Latest change
+# FL-05-Feb-2018 Latest change
 
 import json
 import logging
@@ -71,9 +71,7 @@ def preprocessor( datafilter ):
     for key, value in params.iteritems():
         logging.debug( "key %s: value: %s" % ( key, value ) )
     
-    
-    
-    data   = cache_data.get( "data" )
+    data = cache_data.get( "data" )
     
     base_year = '0'
     ter_codes = []      # actually used region codes
@@ -103,9 +101,8 @@ def preprocessor( datafilter ):
     """
         
     #for item in rowitem[ 'data' ]:
-    for item in data:  
-        logging.debug( "item type: %s" % type( item ) )
-        
+    for i, item in enumerate( data ):  
+        logging.debug( "%d, item type: %s, %s" % ( i, type( item ), str( item ) ) )
         
         dataitem = item
         if 'path' in item:
@@ -117,34 +114,34 @@ def preprocessor( datafilter ):
         if 'base_year' in item:
             base_year = item[ 'base_year' ]
         
-        itemlexicon = dataitem
+        item_lexicon = dataitem
         lands = {}
-        if 'ter_code' in itemlexicon:
-            ter_code = itemlexicon[ 'ter_code' ]
+        if 'ter_code' in item_lexicon:
+            ter_code = item_lexicon[ 'ter_code' ]
             ter_codes.append( ter_code )
-            lands[ itemlexicon[ 'ter_code' ] ] = itemlexicon.get( "total" )
-            del itemlexicon[ 'ter_code' ]
-        if 'total' in itemlexicon:
-            del itemlexicon[ 'total' ]
+            lands[ item_lexicon[ 'ter_code' ] ] = item_lexicon.get( "total" )
+            del item_lexicon[ 'ter_code' ]
+        if 'total' in item_lexicon:
+            del item_lexicon[ 'total' ]
         
         try:
-            count = itemlexicon[ 'count' ]
-            #del itemlexicon[ 'count' ]          # 'count' should not be part of lexkey
+            count = item_lexicon[ 'count' ]
+            del item_lexicon[ 'count' ]          # 'count' should not be part of lex_key
         except:
             pass
         
-        lexkey = json.dumps( itemlexicon )
+        lex_key = json.dumps( item_lexicon )
         
-        itemlexicon[ 'lands' ] = lands
-        if lexkey in lex_lands:
-            logging.debug( "old lexkey: %s" % lexkey )
-            currentlands = lex_lands[ lexkey ]
+        item_lexicon[ 'lands' ] = lands
+        if lex_key in lex_lands:
+            logging.debug( "old lex_key: %s" % lex_key )
+            current_lands = lex_lands[ lex_key ]
             for item in lands:
-                currentlands[ item ] = lands[ item ]
-            lex_lands[ lexkey ] = currentlands
+                current_lands[ item ] = lands[ item ]
+            lex_lands[ lex_key ] = current_lands
         else:
-            logging.debug( "new lexkey: %s" % lexkey )
-            lex_lands[ lexkey ] = lands
+            logging.debug( "new lexkey: %s" % lex_key )
+            lex_lands[ lex_key ] = lands
         
         dataset.append( dataitem )
     
@@ -367,16 +364,20 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         # load regions for base_year
         regions_filter = {}
         regions_filter[ "vocabulary" ] = "ERRHS_Vocabulary_regions"
-        regions_filter[ 'basisyear' ] = base_year               # regions depend on base_year
-        vocab_regions = db_vocabulary.data.find( regions_filter )
+        # regions depend on base_year
+        regions_filter[ 'basisyear' ] = str( base_year )    # basisyear is int column in vocabulary file
+        logging.debug( "regions_filter: %s" % str( regions_filter ) )
+        cursor = db_vocabulary.data.find( regions_filter )
+        logging.debug( "# of regions from vocabulary: %d" % cursor.count() )
+        vocab_regions = list( cursor )
         
         # get region names from ter_codes
         regions = {}
         #ter_codes = vocab_regs_terms[ "ter_codes" ]    # from sql result
         ter_codes = ter_code_list                       # from qinput or all (modern)
         logging.debug( "ter_codes: %s" % str( ter_codes ) )
-        for item in vocab_regions:
-            #logging.debug( str( item ) )
+        for i, item in enumerate( vocab_regions ):
+            logging.debug( "%d: %s" % ( i, str( item ) ) )
             ID = item[ 'ID' ]
             if ID in ter_codes:
                 if lang == 'en':
@@ -431,8 +432,10 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
             lex_lands_list.append( chain )
             logging.debug( "chain: %s" % str( chain ) )
         
-        #max_columns = len( header_chain )
-        max_columns = 1 + len( header_chain )       # +1: for count column
+        max_columns = len( header_chain )
+        #max_columns = 1 + len( header_chain )       # +1: for count column
+        #max_columns = 2 + len( header_chain )       # +2: for unit + count columns
+        add_counts = False      # ToDo
         
         logging.debug( "# of names in header_chain: %d" % len( header_chain ) )
         logging.debug( "header names in chain: %s" % str( header_chain ) )
@@ -459,17 +462,23 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         #for i, item in enumerate( lex_lands_list ):
         #    logging.debug( "%d: item: %s" % ( i, str( sorted( item, key = itemgetter( *classes ) ) ) ) )
         
-        # unpack classes as individual variables
+        # *classes: unpack classes as individual variables, to be used as sort keys
         lex_lands_sorted = sorted( lex_lands_list, key = itemgetter( *classes ) )
         
         ndatarows = 0
         nitemchain = 0
         #for itemchain in lex_lands:
-        for chain in lex_lands_sorted:
+        for l, chain in enumerate( lex_lands_sorted ):
             #logging.debug( "itemchain %d: %s, %s" % ( nitemchain, itemchain, type( itemchain ) ) )
             nitemchain += 1
             #chain = json.loads( itemchain )
-            logging.debug( "chain: %s" %  str( chain ) )
+            logging.debug( "%d: chain: %s" %  ( l, str( chain ) ) )
+            
+            # optional counts column
+            add_to_counts = 0   # update total # of region counts (denominator)
+            counts_column = 0   # to be updated
+            counts_row    = 0   # to be updated
+            counts_value  = ''  # to be updated
             
             column = 1
             # sheet_header
@@ -478,8 +487,8 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                 logging.debug( "names in header_chain: %s" % str( header_chain ) )
                 #row_name = 0
                 #column_in_use = []
-                for name in sorted( header_chain ):
-                    logging.debug( "name: %s: " % name )
+                for n, name in enumerate( sorted( header_chain ) ):
+                    logging.debug( "%d: name: %s" % ( n, name ) )
                     if name == "base_year":
                         column =  1
                     elif name == "datatype":
@@ -514,13 +523,18 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                         logging.debug( "name: %s ???" % name )
                         continue
                     
-                    logging.debug( "row: %d, column: %d" % ( row, column ) )
                     cell = ws.cell( row = row, column = column )
                     column_name = name
                     if column_name in vocab_regs_terms[ "terms" ]:
                         column_name = vocab_regs_terms[ "terms" ][ column_name ]
                     cell.value = column_name
-                    logging.debug( "header column %d: %s" % ( column, cell.value ) )
+                    logging.debug( "row: %d, header column %d: %s" % ( row, column, cell.value ) )
+                
+                if add_counts:
+                    column += 1
+                    counts_column = column
+                    cell = ws.cell( row = row, column = column )
+                    cell.value = "Counts"
                 
                 column = max_columns
                 logging.debug( "# of ter_names in sorted_regions: %d" % len( sorted_regions ) )
@@ -536,13 +550,8 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                 row += 1
             
             # data records
-            add_to_counts = 0   # update total # of region counts (denominator)
-            counts_column = 0   # to be updated
-            counts_row    = 0   # to be updated
-            counts_value  = ''  # to be updated
-            
             column = 1
-            logging.debug( "# of names in chain: %d" % len( chain ) )
+            logging.debug( "# of names in data chain: %d" % len( chain ) )
             logging.debug( "names in chain: %s" % str( chain ) )
             try:
                 base_year_chain = chain.get( "base_year" )
@@ -555,7 +564,14 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
             else:
                 byear_counts[ str( base_year ) ] = 1 + byear_counts[ str( base_year ) ]
             
-            ter_data = lex_lands[ itemchain ]
+            #ter_data = lex_lands[ itemchain ]
+            lex_key = json.dumps( chain )       # this way the keys were made in preprocessor()
+            logging.debug( "lex_key: %s" % lex_key )
+            ter_data = lex_lands.get( lex_key )
+            if not ter_data:
+                logging.error( "NO ter_data from lex_key:\n%s" % lex_key )
+                continue        # <<<
+            
             logging.debug( "ter_data: %s: " % str( ter_data ) )
             nclasses = 0
             db_row = chain.get( "db_row" )
@@ -563,8 +579,8 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                 row = db_row + legend_offset + 1    # +1: skip table header
                 logging.debug( "db_row in chain: %d" % db_row )
             
-            for name in sorted( chain ):
-                logging.debug( "name: %s: " % name )
+            for n, name in enumerate( sorted( chain ) ):
+                logging.debug( "%d: name: %s" % ( n, name ) )
                 if name == "base_year":
                     column =  1
                 elif name == "datatype":
@@ -619,17 +635,17 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
             num_regions = len( sorted_regions )
             for idx, ter_name in enumerate( sorted_regions ):
                 ter_code = regions[ ter_name ]
-                logging.debug( "%d-of-%d ter_name: %s, ter_code: %s: " % ( idx+1, num_regions, ter_name, ter_code ) )
                 if ter_code in ter_data:
                     ter_value = ter_data[ ter_code ]
                     ter_value = re.sub( r'\.0', '', str( ter_value ) )
                 else:
                     ter_value = na
                     add_to_counts += 1
+                logging.debug( "%d-of-%d ter_code: %s, ter_name: %s, ter_value: %s" % ( idx+1, num_regions, ter_code, ter_name, ter_value ) )
                 
                 cell = ws.cell( row = row, column = column )
                 cell.value = ter_value
-                logging.debug( "%d: %s" % ( column, ter_value ) )
+                #logging.debug( "%d: %s" % ( column, ter_value ) )
                 column += 1
             
             logging.debug( "add_to_counts: %d, row: %d, column: %d" % ( add_to_counts, counts_row, counts_column ) )
