@@ -570,6 +570,8 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
             ter_data = lex_lands.get( lex_key )
             if not ter_data:
                 logging.error( "NO ter_data from lex_key:\n%s" % lex_key )
+                for l, lex_land in enumerate( lex_lands):
+                    logging.info( "%d: lex_land: %s" % ( l, lex_land ) )
                 continue        # <<<
             
             logging.debug( "ter_data: %s: " % str( ter_data ) )

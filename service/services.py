@@ -5,7 +5,7 @@ VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
-FL-05-Feb-2018 reordering optional
+FL-06-Feb-2018 reordering optional
 
 def get_configparser():
 def get_connection():
@@ -31,7 +31,7 @@ def filecat_subtopic( qinput, cursor, datatype, base_year ):
 def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
 def aggregate_year( params, add_subclasses, value_numerical ):
 def execute_year( params, sql_query, eng_data ):
-def add_unique_items( entry_list_collect, entry_list_none ):
+def add_unique_items( language, list_name, entry_list_collect, entry_list_none ):
 def remove_dups( entry_list_collect ):
 def sort_entries( entry_list_nodups ):
 def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None)
@@ -1510,7 +1510,7 @@ def aggregate_year( params, add_subclasses, value_numerical = True ):
 
 
 def execute_year( params, sql_query, eng_data, key_set ):
-    logging.debug( "execute_year()" )
+    logging.info( "execute_year()" )
     
     time0 = time()      # seconds since the epoch
     logging.debug( "query execute start: %s" % datetime.datetime.now() )
@@ -1568,33 +1568,63 @@ def execute_year( params, sql_query, eng_data, key_set ):
 
 
 
-def add_unique_items( entry_list_collect, entry_list_extra ):
+def add_unique_items( language, list_name, entry_list_collect, entry_list_extra ):
     # collect unique paths in entry_list_collect
+    logging.debug( "add_unique_items()" )
+    
     paths = []
-    for item in entry_list_collect:
-        path = item.get( "path" )
+    for entry_collect in entry_list_collect:
+        path = entry_collect.get( "path" )
         if path not in paths:
             paths.append( path )
-    #logging.debug( "paths: %s" % paths )
     
-    #nadded   = 0
-    #nskipped = 0
-    for item in entry_list_extra:
-        path = item[ "path" ]
-        if path not in paths:
-            entry_list_collect.append( item )
-            #nadded += 1
-            #logging.debug( "adding: %s" % paths )
-        #else:
-        #    nskipped += 1
-    #logging.debug( "nadded: %d, nskipped: %d" % ( nadded, nskipped ) )
+    logging.debug( "# of input path elements: %s" % len( paths ) )
+    for p, path in enumerate( paths ):
+        logging.debug( "%d: %s" % ( p, path ) )
+    
+    nadded = 0
+    nmodified = 0
+    entry_list_modify = []
+    
+    for entry_extra in entry_list_extra:
+        logging.debug( "entry_extra: %s" % str( entry_extra ) )
+        path_extra = entry_extra[ "path" ]
+        if path_extra not in paths:
+            entry_list_collect.append( entry_extra )
+            nadded += 1
+            logging.debug( "adding path: %s" % path_extra )
+        else:
+            if list_name == "entry_list_none":
+                for entry_collect in entry_list_collect:
+                    path_collect     = entry_collect[ "path" ]
+                    ter_code_collect = entry_collect[ "ter_code" ]
+                    ter_code_extra   = entry_extra[ "ter_code" ]
+                    if path_extra == path_collect and ter_code_extra == ter_code_collect:
+                        #logging.debug( "modify entry_collect: %s" % str( entry_collect ) )
+                        entry_list_modify.append( entry_collect )
+                        nmodified += 1
+    
+    logging.debug( "nadded: %d, nmodified: %d" % ( nadded, nmodified ) )
+    logging.debug( "modify entry_collect: %s" % str( entry_collect ) )
+    
+    
+    if language.upper() == "EN":
+        value_none = "cannot aggregate at this level"
+    elif language.upper() == "RU":
+        value_none = "агрегация на этом уровне невозможна"
+    
+    for entry_modify in entry_list_modify:
+        entry_new = copy.deepcopy( entry_modify )
+        entry_new[ "total" ] = value_none
+        entry_list_collect.remove( entry_modify )
+        entry_list_collect.append( entry_new )
     
     return entry_list_collect
 
 
 
 def remove_dups( entry_list_collect ):
-    logging.info( "remove_dups()" )
+    logging.debug( "remove_dups()" )
     time0 = time()      # seconds since the epoch
     
     # remove duplicates
@@ -2399,6 +2429,7 @@ def aggregation():
         # - for query with ter_codes for the wanted regions
         params_ntc = copy.deepcopy( params )    # without ter_codes
         params[ "ter_codes" ] = ter_codes       # with ter_codes
+        params_none = copy.deepcopy( params )   # with ter_codes
         
         # split path in subgroups with the same key length
         path_lists = group_levels( path )       # input path WITH subclasses parameter, NOT path_stripped
@@ -2421,13 +2452,13 @@ def aggregation():
             
             logging.info( "path_list: %s" % path_list )
             
-            # -1- = entry_list
+            logging.info( "-1- = entry_list" )
             show_params( "params", params )
             sql_query, eng_data = aggregate_year( params, add_subclasses, value_numerical = True )  # only numbers
             entry_list = execute_year( params, sql_query, eng_data, key_set )
             logging.info( "entry_list: %d items" % len( entry_list ) )
             
-            # -2- = entry_list_ntc
+            logging.info( "-2- = entry_list_ntc" )
             entry_list_ntc = []
             if datatype != "1.02":      # not needed for 1.02 (and much data)
                 params_ntc[ "path" ] = path_list
@@ -2437,19 +2468,19 @@ def aggregation():
                 entry_list_ntc = execute_year( params_ntc, sql_query_ntc, eng_data_ntc, key_set )
                 logging.info( "entry_list_ntc: %d items" % len( entry_list_ntc ) )
             
-            # -3- = entry_list_none
-            show_params( "params", params )
-            sql_query_none, eng_data_none = aggregate_year( params, add_subclasses, value_numerical = False)    # non-numbers
+            logging.info( "-3- = entry_list_none" )
+            show_params( "params", params_none )
+            sql_query_none, eng_data_none = aggregate_year( params_none, add_subclasses, value_numerical = False)   # non-numbers
             entry_list_none = execute_year( params, sql_query_none, eng_data_none, key_set )
             logging.info( "entry_list_none: %d items" % len( entry_list_none ) )
             
             # entry_list_path = entry_list + entry_list_ntc
             logging.info( "add_unique_ntcs()" )
-            entry_list_path = add_unique_items( entry_list, entry_list_ntc )
+            entry_list_path = add_unique_items( language, "entry_list_ntc", entry_list, entry_list_ntc )
             
             # entry_list_collect = entry_list_path + entry_list_none
             logging.info( "add_unique_nones()" )
-            entry_list_collect = add_unique_items( entry_list_path, entry_list_none )
+            entry_list_collect = add_unique_items( language, "entry_list_none", entry_list_path, entry_list_none )
             logging.info( "entry_list_collect: %d items" % len( entry_list_collect ) )
             
             # entry_list_total = entry_list_total + entry_list_collect
@@ -2495,8 +2526,8 @@ def aggregation():
             entry_list_none = execute_year( params, sql_query_none, eng_data_none, key_set )
             logging.info( "entry_list_none: %d items" % len( entry_list_none ) )
                 
-            # only add entries with new paths
-            entry_list_year = add_unique_items( entry_list_ntc, entry_list_none )
+            # only add entries with new paths ??
+            entry_list_year = add_unique_items( language, "entry_list_none", entry_list_ntc, entry_list_none )
             logging.info( "entry_list_year: %d items" % len( entry_list_year ) )
             
             entry_list_total.extend( entry_list_year )
