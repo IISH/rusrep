@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # VT-07-Jul-2016 Latest change by VT
-# FL-05-Feb-2018 Latest change
+# FL-07-Feb-2018 Latest change
 
 import json
 import logging
@@ -11,6 +11,7 @@ import os
 import re
 import sys
 
+from collections import OrderedDict
 from datetime import date
 from icu import Locale, Collator
 from operator import itemgetter
@@ -130,7 +131,11 @@ def preprocessor( datafilter ):
         except:
             pass
         
-        lex_key = json.dumps( item_lexicon )
+        # lex_key as stringyfied ordered dict
+        keys = sorted( item_lexicon.iterkeys() )                    # sorted keys
+        tuples = [ ( key, item_lexicon[ key ] ) for key in keys ]   # tuple list ordered by keys
+        ordered_dict = OrderedDict( tuples )                        # dict ordered by keys
+        lex_key = json.dumps( ordered_dict )                        # lex_key as string
         
         item_lexicon[ 'lands' ] = lands
         if lex_key in lex_lands:
@@ -140,7 +145,7 @@ def preprocessor( datafilter ):
                 current_lands[ item ] = lands[ item ]
             lex_lands[ lex_key ] = current_lands
         else:
-            logging.debug( "new lexkey: %s" % lex_key )
+            logging.debug( "new lex_key: %s" % lex_key )
             lex_lands[ lex_key ] = lands
         
         dataset.append( dataitem )
@@ -462,7 +467,7 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         #for i, item in enumerate( lex_lands_list ):
         #    logging.debug( "%d: item: %s" % ( i, str( sorted( item, key = itemgetter( *classes ) ) ) ) )
         
-        # *classes: unpack classes as individual variables, to be used as sort keys
+        # *classes: unpack classes list as individual variables, to be used as sort keys
         lex_lands_sorted = sorted( lex_lands_list, key = itemgetter( *classes ) )
         
         ndatarows = 0
@@ -565,8 +570,15 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
                 byear_counts[ str( base_year ) ] = 1 + byear_counts[ str( base_year ) ]
             
             #ter_data = lex_lands[ itemchain ]
-            lex_key = json.dumps( chain )       # this way the keys were made in preprocessor()
+            #lex_key = json.dumps( chain )       # this way the keys were made in preprocessor()
+            
+            # lex_key as stringyfied ordered dict
+            keys = sorted( chain.iterkeys() )                    # sorted keys
+            tuples = [ ( key, chain[ key ] ) for key in keys ]   # tuple list ordered by keys
+            ordered_dict = OrderedDict( tuples )                 # dict ordered by keys
+            lex_key = json.dumps( ordered_dict )                 # lex_key as string
             logging.debug( "lex_key: %s" % lex_key )
+            
             ter_data = lex_lands.get( lex_key )
             if not ter_data:
                 logging.error( "NO ter_data from lex_key:\n%s" % lex_key )
