@@ -35,7 +35,7 @@ def execute_year( params, sql_query, eng_data ):
 def add_unique_items( language, list_name, entry_list_collect, entry_list_none ):
 def remove_dups( entry_list_collect ):
 def sort_entries( entry_list_nodups ):
-def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None)
+#def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None)
 def cleanup_downloads( download_dir, time_limit ):
 def format_secs( seconds ):
 
@@ -243,7 +243,7 @@ def strip_subclasses( path ):
 
 
 def group_levels( path_list ):
-    logging.debug( "group_levels()" )
+    logging.info( "group_levels()" )
     """
     Split the path into groups of the same 'length': 
     Level 1, Level 1+2, Level 1+2+3, ...
@@ -275,6 +275,25 @@ def group_levels( path_list ):
         elif nkeys == 5:    # now 4, subclasses has been dropped
             path_list5.append( path )
             
+    logging.info( "path_list1: %d" % len( path_list1 ) )
+    for p, path in enumerate( path_list1 ):
+        logging.info( "%d: %s" % ( p+1, str( path ) ) )
+    
+    logging.info( "path_list2: %d" % len( path_list2 ) )
+    for p, path in enumerate( path_list2 ):
+        logging.info( "%d: %s" % ( p+1, str( path ) ) )
+    
+    logging.info( "path_list3: %d" % len( path_list3 ) )
+    for p, path in enumerate( path_list3 ):
+        logging.info( "%d: %s" % ( p+1, str( path ) ) )
+    
+    logging.info( "path_list4: %d" % len( path_list4 ) )
+    for p, path in enumerate( path_list4 ):
+        logging.info( "%d: %s" % ( p+1, str( path ) ) )
+    
+    logging.info( "path_list5: %d" % len( path_list5 ) )
+    for p, path in enumerate( path_list5 ):
+        logging.info( "%d: %s" % ( p+1, str( path ) ) )
     
     path_lists = []
     if len( path_list1 ) > 0:
@@ -391,12 +410,12 @@ def json_generator( params, sql_names, json_dataname, data, qkey_set = None ):
         output[ "path" ] = path
         entry_list.append( output )
     
-    value_unit = ''
+    #value_unit = ''
     logging.debug( "# of entries in entry_list: %d" % len( entry_list ) )
     for json_entry in entry_list:
         logging.debug( "json_entry: %s" % json_entry )
         
-        # value_unit may vary, so we cannot it for entries reated by ourselves
+        # value_unit may vary, so we cannot use it for entries created by ourselves
         #value_unit = json_entry.get( "value_unit" )
         
         # compare qinput paths with db returned paths; add missing paths (fill with NA values). 
@@ -440,7 +459,7 @@ def json_generator( params, sql_names, json_dataname, data, qkey_set = None ):
             
             new_entry[ "path" ]       = new_path
             new_entry[ "base_year" ]  = base_year
-            new_entry[ "value_unit" ] = value_unit
+            new_entry[ "value_unit" ] = '?'     # value_unit
             new_entry[ "datatype" ]   = datatype
             new_entry[ "count" ]      = 1       # was ''
             new_entry[ "ter_code" ]   = ''
@@ -1710,7 +1729,7 @@ def sort_entries( datatype, entry_list ):
     return entry_list_sorted
 
 
-
+"""
 def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None ):
     logging.info( "reorder_entries()" )
     # params params.keys() = [ "language", "classification", "datatype", "base_year", "ter_codes" ]
@@ -2024,7 +2043,7 @@ def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None 
     logging.info( "reordering entries took %s" % str_elapsed )
     
     return entry_list_sorted
-
+"""
 
 
 def cleanup_downloads( download_dir, time_limit ):
@@ -2434,7 +2453,7 @@ def aggregation():
         params[ "ter_codes" ] = ter_codes       # with ter_codes
         params_none = copy.deepcopy( params )   # with ter_codes
         
-        # split path in subgroups with the same key length
+        # split input path in subgroups with the same key length
         path_lists = group_levels( path )       # input path WITH subclasses parameter, NOT path_stripped
         nlists = len( path_lists )
         logging.info( "%d path_dicts in path_lists" % nlists )
@@ -2460,7 +2479,8 @@ def aggregation():
             sql_query, eng_data = aggregate_year( params, add_subclasses, value_numerical = True )  # only numbers
             entry_list = execute_year( params, sql_query, eng_data, key_set )
             logging.info( "entry_list: %d items" % len( entry_list ) )
-            
+            show_entries( entry_list )
+            """
             #logging.info( "-2- = entry_list_ntc" )
             entry_list_ntc = []
             if datatype != "1.02":      # not needed for 1.02 (and much data)
@@ -2489,6 +2509,8 @@ def aggregation():
             # entry_list_total = entry_list_total + entry_list_collect
             entry_list_total.extend( entry_list_collect )
             logging.info( "entry_list_total: %d items" % len( entry_list_total ) )
+            """
+            entry_list_total.extend( entry_list )
             
         entry_list_sorted = sort_entries( datatype, entry_list_total )   # sort by path, value_unit
         logging.debug( "entry_list_sorted: %d items" % len( entry_list_sorted ) )
@@ -2568,7 +2590,14 @@ def show_params( info, params ):
     for key, value in params.iteritems():
         logging.info( "key: %s, value: %s" % ( key, value ) )
 
-        
+
+
+def show_entries( entries ):
+    nentries = len( entries )
+    for e, entry in enumerate( entries ):
+        logging.info( "%d-of-%d: %s" % ( e+1, nentries, str( entry ) ) )
+
+
 
 # Filecatalog - Create filecatalog download link
 @app.route( "/filecatalogdata", methods = [ "POST", "GET" ]  )
