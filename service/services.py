@@ -6,7 +6,7 @@ FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
 FL-06-Feb-2018 reordering optional
-FL-07-Feb-2018 latest change
+FL-13-Feb-2018 latest change
 
 def get_configparser():
 def get_connection():
@@ -443,6 +443,7 @@ def json_generator( params, sql_names, json_dataname, data, qkey_set = None ):
         else:
             logging.debug( "remove entry_path: %s" % entry_path_cpy )
     
+    """
     if len( path_list ) != 0:
         # pure '.' dot entries are not returned from db
         logging.debug( "missing path entries: %d" % len( path_list ) )
@@ -465,6 +466,7 @@ def json_generator( params, sql_names, json_dataname, data, qkey_set = None ):
             new_entry[ "ter_code" ]   = ''
             new_entry[ "total" ]      = ''      # unknown, so not 0 or 0.0
             entry_list.append( new_entry )
+    """
     
     logging.info( "json_generator() done, %d entries" % len( entry_list ) )
     for e, entry in enumerate( entry_list ):
@@ -477,6 +479,9 @@ def json_generator( params, sql_names, json_dataname, data, qkey_set = None ):
 def json_cache( entry_list, language, json_dataname, download_key, params = {} ):
     # cache entry_list in mongodb with download_key as key
     logging.info( "json_cache() # entries in entry_list: %d" %  len( entry_list ) )
+    
+    #for e, entry in enumerate( entry_list ):
+    #    logging.info( "%d: %s" % ( e, str( entry ) ) )
     
     if params:
         logging.info( "json_cache() params: %s" % str( params ) )
@@ -507,6 +512,7 @@ def json_cache( entry_list, language, json_dataname, download_key, params = {} )
         
         logging.debug( "# keys in cache_data: %s" % len( cache_data.keys() ) )
         for key, value in cache_data.iteritems():
+            #logging.debug( "key: %s, value: %s" % ( key, value ) )
             if isinstance( value, list ):
                 logging.debug( "key %s: value type: %s, # of elements: %d" % ( key, type( value ), len( value ) ) )
             elif isinstance( value, dict ):
@@ -1280,7 +1286,7 @@ def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
 
 
 
-def aggregate_year( params, add_subclasses, value_numerical = True ):
+def aggregate_year( params, add_subclasses, value_total = True, value_numerical = True ):
     logging.debug( "aggregate_year() add_subclasses: %s" % add_subclasses )
     logging.debug( "params %s" % str( params ) )
     
@@ -1441,7 +1447,7 @@ def aggregate_year( params, add_subclasses, value_numerical = True ):
     sql_query  = "SELECT COUNT(*) AS datarecords" 
     sql_query += ", COUNT(*) - COUNT(value) AS data_active"
         
-    if value_numerical:
+    if value_total:
         sql_query += ", SUM(CAST(value AS DOUBLE PRECISION)) AS total"
         
     if classification == "modern":  # "ter_code" keyword not in qinput, but we always need it
@@ -1579,7 +1585,8 @@ def execute_year( params, sql_query, eng_data, key_set ):
         logging.debug( "final_item: %s" % final_item )
         final_data.append( final_item )
     
-    entry_list = json_generator( params, sql_names, "data", final_data, key_set )
+    params_ = copy.deepcopy( params )       # params path sometimes disrupted by json_generator() ???
+    entry_list = json_generator( params_, sql_names, "data", final_data, key_set )
     
     str_elapsed = format_secs( time() - time0 )
     logging.info( "execute_year() took %s" % str_elapsed )
@@ -1610,8 +1617,8 @@ def add_unique_items( language, list_name, entry_list_collect, entry_list_extra 
         logging.debug( "entry_extra: %s" % str( entry_extra ) )
         path_extra = entry_extra[ "path" ]
         if path_extra not in paths:
-            if not entry_extra.get( "total" ):
-                entry_extra[ "total" ] = "na"
+            #if not entry_extra.get( "total" ):
+            #    entry_extra[ "total" ] = "na"
             entry_list_collect.append( entry_extra )
             nadded += 1
             logging.debug( "adding path: %s" % path_extra )
@@ -1667,7 +1674,7 @@ def remove_dups( entry_list_collect ):
 
 
 def sort_entries( datatype, entry_list ):
-    logging.debug( "sort_entries()" )
+    logging.info( "sort_entries()" )
     time0 = time()      # seconds since the epoch
         
     # sorting with sorted() + path key only gives the desired result if all items 
@@ -1722,6 +1729,9 @@ def sort_entries( datatype, entry_list ):
     
     # sometimes the value_unit string is not constant, so first sort by path, next by value_unit
     entry_list_sorted = sorted( entry_list2, key = itemgetter( 'path', 'value_unit' ) )  
+    
+    #for e, entry in enumerate( entry_list_sorted ):
+    #    logging.info( "%d: %s" % ( e, str( entry ) ) )
     
     str_elapsed = format_secs( time() - time0 )
     logging.info( "sort_entries() took %s" % str_elapsed )
@@ -2423,7 +2433,7 @@ def aggregation():
         "language"       : language,
         "datatype"       : datatype,
         "classification" : classification,
-        "path"           : path_stripped,
+        #"path"           : path_stripped,      # loop over subpaths of equal length
         "add_subclasses" : add_subclasses  
     }
     
@@ -2462,38 +2472,36 @@ def aggregation():
         for pd, path_dict in enumerate( path_lists ):
             logging.info( "path_list %d-of-%d" % ( pd+1, nlists ) )
             
-            nkeys = path_dict[ "nkeys" ]
-            add_subclasses = path_dict[ "subclasses" ]
+            show_path_dict( path_dict )
             path_list = path_dict[ "path_list" ]
+            add_subclasses = path_dict[ "subclasses" ]
             
-            logging.debug( "path_list %d-of-%d, nkeys: %s, subclasses: %s, levels: %d" % 
-                ( pd+1, len( path_lists ), nkeys, add_subclasses, len( path_list ) ) )
-            
-            for p, path in enumerate( path_list ):
-                logging.debug( "path_dict %d-of-%d, path: %s" % ( p+1, len( path_list ), path ) )
-            
-            logging.info( "path_list: %s" % path_list )
+            params[      "path" ] = path_list
+            params_ntc[  "path" ] = path_list
+            params_none[ "path" ] = path_list
             
             #logging.info( "-1- = entry_list" )
             show_params( "params -1- = entry_list", params )
-            sql_query, eng_data = aggregate_year( params, add_subclasses, value_numerical = True )  # only numbers
+            sql_query, eng_data = aggregate_year( params, add_subclasses, value_total = True, value_numerical = True )
+            logging.info( "sql_query: %s" % sql_query )
             entry_list = execute_year( params, sql_query, eng_data, key_set )
             logging.info( "entry_list: %d items" % len( entry_list ) )
             show_entries( entry_list )
-            """
+            
             #logging.info( "-2- = entry_list_ntc" )
             entry_list_ntc = []
             if datatype != "1.02":      # not needed for 1.02 (and much data)
-                params_ntc[ "path" ] = path_list
                 logging.info( "path_list: %s" % params_ntc[ "path" ] )
                 show_params( "params_ntc -2- = entry_list_ntc", params_ntc )
-                sql_query_ntc, eng_data_ntc = aggregate_year( params_ntc, add_subclasses, value_numerical = True )  # only numbers
+                sql_query_ntc, eng_data_ntc = aggregate_year( params_ntc, add_subclasses, value_total = False, value_numerical = True )
+                logging.info( "sql_query_ntc: %s" % sql_query_ntc )
                 entry_list_ntc = execute_year( params_ntc, sql_query_ntc, eng_data_ntc, key_set )
                 logging.info( "entry_list_ntc: %d items" % len( entry_list_ntc ) )
             
             #logging.info( "-3- = entry_list_none" )
             show_params( "params -3- = entry_list_none", params_none )
-            sql_query_none, eng_data_none = aggregate_year( params_none, add_subclasses, value_numerical = False)   # non-numbers
+            sql_query_none, eng_data_none = aggregate_year( params_none, add_subclasses, value_total = False, value_numerical = False )   # non-numbers
+            logging.info( "sql_query_none: %s" % sql_query_none )
             entry_list_none = execute_year( params_none, sql_query_none, eng_data_none, key_set )
             logging.info( "entry_list_none: %d items" % len( entry_list_none ) )
             
@@ -2509,11 +2517,12 @@ def aggregation():
             # entry_list_total = entry_list_total + entry_list_collect
             entry_list_total.extend( entry_list_collect )
             logging.info( "entry_list_total: %d items" % len( entry_list_total ) )
-            """
-            entry_list_total.extend( entry_list )
             
         entry_list_sorted = sort_entries( datatype, entry_list_total )   # sort by path, value_unit
         logging.debug( "entry_list_sorted: %d items" % len( entry_list_sorted ) )
+        
+        #for e, entry in enumerate( entry_list_sorted ):
+        #    logging.info( "%d: %s" % ( e, str( entry ) ) )
         
         json_string, cache_except = json_cache( entry_list_sorted, language, "data", download_key, params )
         
@@ -2546,12 +2555,12 @@ def aggregation():
             params_none = copy.deepcopy( params )
             
             show_params( "params -1- = entry_list_ntc", params_ntc )
-            sql_query_ntc, eng_data_ntc = aggregate_year( params_ntc, add_subclasses, value_numerical = True )      # only numbers
+            sql_query_ntc, eng_data_ntc = aggregate_year( params_ntc, add_subclasses, value_total = True, value_numerical = True )
             entry_list_ntc = execute_year( params_ntc, sql_query_ntc, eng_data_ntc, key_set )
             logging.info( "entry_list_ntc: %d items" % len( entry_list_ntc ) )
             
             show_params( "params -2- = entry_list_none", params_none )
-            sql_query_none, eng_data_none = aggregate_year( params_none, add_subclasses, value_numerical = False )   # non-numbers
+            sql_query_none, eng_data_none = aggregate_year( params_none, add_subclasses, value_total = False, value_numerical = False )
             entry_list_none = execute_year( params_none, sql_query_none, eng_data_none, key_set )
             logging.info( "entry_list_none: %d items" % len( entry_list_none ) )
             
@@ -2582,6 +2591,28 @@ def aggregation():
     logging.info( "aggregation took %s" % str_elapsed )
     
     return Response( json_string, mimetype = "application/json; charset=utf-8" )
+
+
+
+def show_path_dict( path_dict ):
+    
+    logging.info( "show_path_dict()" )
+    """
+    nkeys = path_dict[ "nkeys" ]
+    add_subclasses = path_dict[ "subclasses" ]
+    path_list = path_dict[ "path_list" ]
+    
+    logging.info( "path_list %d-of-%d, nkeys: %s, subclasses: %s, levels: %d" % 
+        ( pd+1, len( path_lists ), nkeys, add_subclasses, len( path_list ) ) )
+    """
+    for key, value in path_dict.iteritems():
+        if key == "path_list":
+            path_list = value
+            logging.info( "path_list: %s" % path_list )
+            for p, path in enumerate( path_list ):
+                logging.info( "path_dict %d-of-%d, path: %s" % ( p+1, len( path_list ), path ) )
+        else:
+            logging.info( "key: %s, value: %s" % ( key, value ) )
 
 
 
