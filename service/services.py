@@ -6,7 +6,7 @@ FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
 FL-06-Feb-2018 reordering optional
-FL-14-Feb-2018 latest change
+FL-20-Feb-2018 latest change
 
 def get_configparser():
 def get_connection():
@@ -2518,8 +2518,8 @@ def aggregation():
             logging.info( "entry_list_collect: %d items" % len( entry_list_collect ) )
             
             # entry_list_total = entry_list_total + entry_list_collect
-            #entry_list_total.extend( entry_list_collect )      # may invoke duplicate entries
-            entry_list_total = extend_nodups( entry_list_total, entry_list_collect )
+            entry_list_total.extend( entry_list_collect )      # different path_dict, so no duplicates
+            #entry_list_total = extend_nodups( entry_list_total, entry_list_collect )   # avoid duplicates
             logging.info( "entry_list_total: %d items" % len( entry_list_total ) )
         
         entry_list_sorted = sort_entries( datatype, entry_list_total )   # sort by path, value_unit
@@ -2546,8 +2546,8 @@ def aggregation():
         # modern classification does not provide a base_year; 
         # loop over base_years, and accumulate results.
         base_years = [ "1795", "1858", "1897", "1959", "2002" ]
-        #base_years = [ "1795" ] # test single year
-        #base_years = [ "1858" ]	# test single year
+        #base_years = [ "1795" ]    # test single year
+        #base_years = [ "1858" ]    # test single year
         
         for base_year in base_years:
             logging.info( "base_year: %s" % base_year )
@@ -2560,6 +2560,8 @@ def aggregation():
             path_lists = group_levels( path )       # input path WITH subclasses parameter, NOT path_stripped
             nlists = len( path_lists )
             logging.info( "%d path_dicts in path_lists" % nlists )
+            
+            entry_list_year = []
             
             for pd, path_dict in enumerate( path_lists, start = 1 ):
                 logging.info( "path_list %d-of-%d" % ( pd, nlists ) )
@@ -2587,11 +2589,13 @@ def aggregation():
                 
                 # entry_list_year = entry_list_ntc + entry_list_none
                 logging.info( "add_unique_nones()" )
-                entry_list_year = add_unique_items( language, "entry_list_none", entry_list_ntc, entry_list_none )
-                logging.info( "entry_list_year: %d items" % len( entry_list_year ) )
+                entry_list_path = add_unique_items( language, "entry_list_none", entry_list_ntc, entry_list_none )
+                logging.info( "entry_list_year: %d items" % len( entry_list_path ) )
                 
-            #entry_list_total.extend( entry_list_year )         # may invoke duplicate entries 
-            entry_list_total = extend_nodups( entry_list_total, entry_list_year )
+                entry_list_year.extend( entry_list_path )           # different path_dict, so no duplicates 
+                
+            entry_list_total.extend( entry_list_year )              # different base_year, so no duplicates
+            #entry_list_total = extend_nodups( entry_list_total, entry_list_year )  # avoid duplicates
             logging.info( "entry_list_total: %d items" % len( entry_list_total ) )
         
         entry_list_sorted = sort_entries( datatype, entry_list_total )
