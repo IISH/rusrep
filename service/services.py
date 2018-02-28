@@ -6,7 +6,7 @@ FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
 FL-06-Feb-2018 reordering optional
-FL-20-Feb-2018 latest change
+FL-28-Feb-2018 latest change
 
 def get_configparser():
 def get_connection():
@@ -1631,7 +1631,7 @@ def add_unique_items( language, list_name, entry_list_collect, entry_list_extra 
         value_na   = "нет данных"
         value_none = "агрегация на этом уровне невозможна"
     
-    for entry_modify in entry_list_modify:
+    for e, entry_modify in enumerate( entry_list_modify ):
         entry_new = copy.deepcopy( entry_modify )
         
         try:
@@ -1642,6 +1642,8 @@ def add_unique_items( language, list_name, entry_list_collect, entry_list_extra 
             entry_new[ "total" ] = value_na
         
         if cmp( entry_modify, entry_new ) != 0:
+            #logging.debug( "remove entry_collect: %s" % str( entry_modify ) )
+            #logging.debug( "append entry_collect: %s" % str( entry_new ) )
             entry_list_collect.remove( entry_modify )
             entry_list_collect.append( entry_new )
     
@@ -2475,9 +2477,9 @@ def aggregation():
             path_list = path_dict[ "path_list" ]
             add_subclasses = path_dict[ "subclasses" ]
             
-            params[      "path" ] = path_list
-            params_ntc[  "path" ] = path_list
-            params_none[ "path" ] = path_list
+            params[      "path" ] = path_list		# default query
+            params_ntc[  "path" ] = path_list		# query without ter_code specification
+            params_none[ "path" ] = path_list		# query with only NANs in value response
             
             # only for debugging
             #params[      "etype" ] = ""
@@ -2553,7 +2555,7 @@ def aggregation():
             logging.info( "base_year: %s" % base_year )
             params[ "base_year" ] = base_year
             
-            params_ntc = copy.deepcopy( params )
+            params_ntc  = copy.deepcopy( params )
             params_none = copy.deepcopy( params )
             
             # split input path in subgroups with the same key length
