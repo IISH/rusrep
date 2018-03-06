@@ -6,7 +6,7 @@ FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
 FL-06-Feb-2018 reordering optional
-FL-28-Feb-2018 latest change
+FL-06-Mar-2018 reorder sql_query building
 
 def get_configparser():
 def get_connection():
@@ -30,7 +30,7 @@ def get_sql_where( name, value ):
 def loadjson( json_dataurl ):
 def filecat_subtopic( qinput, cursor, datatype, base_year ):
 def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
-def aggregate_year( params, add_subclasses, value_numerical ):
+def aggregate_year( params, add_subclasses, value_total = True, value_numerical = True  ):
 def execute_year( params, sql_query, eng_data ):
 def add_unique_items( language, list_name, entry_list_collect, entry_list_none ):
 def remove_dups( entry_list_collect ):
@@ -2446,6 +2446,11 @@ def aggregation():
     if not os.path.exists( download_dir ):
         os.makedirs( download_dir )
     
+    # split input path in subgroups with the same key length
+    path_lists = group_levels( path )       # input path WITH subclasses parameter, NOT path_stripped
+    nlists = len( path_lists )
+    logging.info( "%d path_dicts in path_lists" % nlists )
+    
     json_string = str( "{}" )
     
     if classification == "historical":
@@ -2465,10 +2470,10 @@ def aggregation():
         params[ "ter_codes" ] = ter_codes       # with ter_codes
         params_none = copy.deepcopy( params )   # with ter_codes
         
-        # split input path in subgroups with the same key length
-        path_lists = group_levels( path )       # input path WITH subclasses parameter, NOT path_stripped
-        nlists = len( path_lists )
-        logging.info( "%d path_dicts in path_lists" % nlists )
+        ## split input path in subgroups with the same key length
+        #path_lists = group_levels( path )       # input path WITH subclasses parameter, NOT path_stripped
+        #nlists = len( path_lists )
+        #logging.info( "%d path_dicts in path_lists" % nlists )
         
         for pd, path_dict in enumerate( path_lists, start = 1 ):
             logging.info( "path_list %d-of-%d" % ( pd, nlists ) )
@@ -2488,6 +2493,7 @@ def aggregation():
             
             #logging.info( "-1- = entry_list" )
             show_params( "params -1- = entry_list", params )
+            #query = make_query( language, datatype, classification, base_year, path_dict )
             sql_query, eng_data = aggregate_year( params, add_subclasses, value_total = True, value_numerical = True )
             logging.info( "sql_query: %s" % sql_query )
             entry_list = execute_year( params, sql_query, eng_data, key_set )
@@ -2558,10 +2564,10 @@ def aggregation():
             params_ntc  = copy.deepcopy( params )
             params_none = copy.deepcopy( params )
             
-            # split input path in subgroups with the same key length
-            path_lists = group_levels( path )       # input path WITH subclasses parameter, NOT path_stripped
-            nlists = len( path_lists )
-            logging.info( "%d path_dicts in path_lists" % nlists )
+            ## split input path in subgroups with the same key length
+            #path_lists = group_levels( path )       # input path WITH subclasses parameter, NOT path_stripped
+            #nlists = len( path_lists )
+            #logging.info( "%d path_dicts in path_lists" % nlists )
             
             entry_list_year = []
             
@@ -2619,6 +2625,39 @@ def aggregation():
     
     return Response( json_string, mimetype = "application/json; charset=utf-8" )
 
+
+"""
+def make_query( language, datatype, classification, base_year, path_dict ):
+    queries = []
+    
+    
+    value_total = True
+    
+    
+    query  = "SELECT COUNT(*) AS datarecords"
+    query += ", COUNT(*) - COUNT(value) AS data_active"
+    
+    if value_total:
+        query += ", SUM(CAST(value AS DOUBLE PRECISION)) AS total"
+    
+    
+    query += " FROM "russianrepo_%s"  % language"
+    query += " WHERE datatype = %s" % datatype
+    query += " AND base_year = %s" % base_year
+
+    if value_numerical:
+        query += " AND value <> ''"             # suppress empty values
+        query += " AND value <> '.'"            # suppress a 'lone' "optional point", used in the table to flag missing data
+        # plus an optional single . for floating point values, and plus an optional leading sign
+        query += " AND value ~ '^[-+]?\d*\.?\d*$'"
+    else:
+        query += " AND (value = '' OR value = ' ' OR value = '.' OR value = '. ' OR value = NULL)"
+
+    query += " GROUP BY .."
+    query += " ORDER BY .."
+    
+    return query
+"""
 
 
 def show_path_dict( path_dict ):
