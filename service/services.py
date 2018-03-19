@@ -7,6 +7,7 @@ FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
 FL-06-Feb-2018 reordering optional
 FL-06-Mar-2018 reorder sql_query building
+FL-19-Mar-2018 handle troublesome dataverse connection
 
 def get_configparser():
 def get_connection():
@@ -2156,13 +2157,19 @@ def documentation():
     ristatkey      = configparser.get( "config", "ristatkey" )
     ristatdocs     = configparser.get( "config", "hdl_documentation" )
     
-    #logging.info( "dataverse_root: %s" % dataverse_root )
-    #logging.info( "ristatkey: %s" % ristatkey )
-    connection = Connection( dataverse_root, ristatkey )
-    dataverse = connection.get_dataverse( "RISTAT" )
+    dv_ristat = "RISTAT"
     
-    settings = DataFilter( request.args )
+    logging.info( "dataverse_root: %s" % dataverse_root )
+    logging.info( "ristatkey: %s" % ristatkey )
+    connection = Connection( dataverse_root, ristatkey )
+    
     papers = []
+    dataverse = connection.get_dataverse( dv_ristat )
+    if not dataverse:
+        logging.error( "could not get a dataverse for %s" % dv_ristat )
+        return Response( json.dumps( papers ), mimetype = "application/json; charset=utf-8" )
+
+    settings = DataFilter( request.args )
     
     logging.debug( "request.args: %s" % request.args )
     logging.debug( "settings: %s" % settings )
@@ -2493,7 +2500,7 @@ def aggregation():
             
             #logging.info( "-1- = entry_list" )
             show_params( "params -1- = entry_list", params )
-            #query = make_query( language, datatype, classification, base_year, path_dict )
+            query = make_query( language, datatype, classification, base_year, path_dict, value_total = True, value_numerical = True  )
             sql_query, eng_data = aggregate_year( params, add_subclasses, value_total = True, value_numerical = True )
             logging.info( "sql_query: %s" % sql_query )
             entry_list = execute_year( params, sql_query, eng_data, key_set )
@@ -2626,14 +2633,9 @@ def aggregation():
     return Response( json_string, mimetype = "application/json; charset=utf-8" )
 
 
-"""
-def make_query( language, datatype, classification, base_year, path_dict ):
-    queries = []
-    
-    
-    value_total = True
-    
-    
+
+def make_query( language, datatype, classification, base_year, path_dict, value_total, value_numerical ):
+    logging.info( "make_query() value_total = %s, value_numerical = %s" % ( value_total, value_numerical ) )
     query  = "SELECT COUNT(*) AS datarecords"
     query += ", COUNT(*) - COUNT(value) AS data_active"
     
@@ -2641,7 +2643,7 @@ def make_query( language, datatype, classification, base_year, path_dict ):
         query += ", SUM(CAST(value AS DOUBLE PRECISION)) AS total"
     
     
-    query += " FROM "russianrepo_%s"  % language"
+    query += " FROM russianrepo_%s"  % language
     query += " WHERE datatype = %s" % datatype
     query += " AND base_year = %s" % base_year
 
@@ -2656,12 +2658,12 @@ def make_query( language, datatype, classification, base_year, path_dict ):
     query += " GROUP BY .."
     query += " ORDER BY .."
     
+    logging.info( query )
     return query
-"""
+
 
 
 def show_path_dict( path_dict ):
-    
     logging.info( "show_path_dict()" )
     """
     nkeys = path_dict[ "nkeys" ]
