@@ -19,6 +19,7 @@ FL-11-Jul-2017 pandas: do not parse numbers, but keep strings as they are
 FL-13-Aug-2017 Py2/Py3 cleanup
 FL-18-Dec-2017 Keep trailing input '\n' for header lines in translate_csv
 FL-16-Jan-2018 Separate RU & EN tables
+FL-26-Mar-2018 Latest change
 
 ToDo:
  - replace urllib by requests
@@ -156,17 +157,20 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", co
     logging.debug( "handle_name: %s" % handle_name )
     logging.info( "dst_dir: %s, dv_format: %s, copy_local: %s, to_csv: %s" % ( dst_dir, dv_format, copy_local, to_csv ) )
     
-    #host = "datasets.socialhistory.org"
-    dv_host = config_parser.get( "config", "dataverse_root" )
-    ristat_key = config_parser.get( "config", "ristatkey" )
-    #logging.debug( "host: %s" % host )
+    dv_host     = config_parser.get( "config", "dataverse_root" )
+    ristat_key  = config_parser.get( "config", "ristatkey" )
+    ristat_name = config_parser.get( "config", "ristatname" )
+    
     logging.info( "dv_host: %s" % dv_host )
-    logging.info( "ristat_key: %s" % ristat_key )
+    logging.info( "ristat_name: %s" % ristat_name )
     
-    #dv_connection = Connection( host, ristat_key )
     dv_connection = Connection( dv_host, ristat_key )
+    dataverse = dv_connection.get_dataverse( ristat_name )
+    if not dataverse:
+        logging.info( "ristat_key: %s" % ristat_key )
+        logging.error( "COULD NOT GET A DATAVERSE CONNECTION" )
+        sys.exit( 1 )
     
-    dataverse  = dv_connection.get_dataverse( 'RISTAT' )
     logging.debug( "title: %s" % dataverse.title )
     #datasets = dataverse.get_datasets()
     

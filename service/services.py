@@ -7,7 +7,7 @@ FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
 FL-06-Feb-2018 reordering optional
 FL-06-Mar-2018 reorder sql_query building
-FL-19-Mar-2018 handle troublesome dataverse connection
+FL-26-Mar-2018 handle dataverse connection nfailure
 
 def get_configparser():
 def get_connection():
@@ -2152,21 +2152,21 @@ def documentation():
     logging.debug( "Python version: %s" % sys.version  )
 
     configparser   = get_configparser()
-    dataverse_root = configparser.get( "config", "dataverse_root" )
+    dv_host        = configparser.get( "config", "dataverse_root" )
     api_root       = configparser.get( "config", "api_root" )
-    ristatkey      = configparser.get( "config", "ristatkey" )
+    ristat_key     = configparser.get( "config", "ristatkey" )
+    ristat_name    = configparser.get( "config", "ristatname" )
     ristatdocs     = configparser.get( "config", "hdl_documentation" )
     
-    dv_ristat = "RISTAT"
-    
-    logging.info( "dataverse_root: %s" % dataverse_root )
-    logging.info( "ristatkey: %s" % ristatkey )
-    connection = Connection( dataverse_root, ristatkey )
+    logging.info( "dv_host: %s" % dv_host )
+    logging.info( "ristat_key: %s" % ristat_key )
+    connection = Connection( dv_host, ristat_key )
     
     papers = []
-    dataverse = connection.get_dataverse( dv_ristat )
+    dataverse = connection.get_dataverse( ristat_name )
     if not dataverse:
-        logging.error( "could not get a dataverse for %s" % dv_ristat )
+        logging.info( "ristat_key: %s" % ristat_key )
+        logging.error( "COULD NOT GET A DATAVERSE CONNECTION" )
         return Response( json.dumps( papers ), mimetype = "application/json; charset=utf-8" )
 
     settings = DataFilter( request.args )
@@ -2192,7 +2192,7 @@ def documentation():
         handle = str( item[ "protocol" ] ) + ':' + str( item[ "authority" ] ) + '/' + str( item[ "identifier" ] )
         if handle == ristatdocs:
             datasetid = item[ "id" ]
-            url = "http://" + dataverse_root + "/api/datasets/" + str( datasetid ) + "/?&key=" + str( ristatkey )
+            url = "http://" + dv_host + "/api/datasets/" + str( datasetid ) + "/?&key=" + str( ristat_key )
             logging.debug( "url: %s" % url )
             dataframe = loadjson( url )
             for files in dataframe[ "data" ][ "latestVersion" ][ "files" ]:
@@ -2863,17 +2863,17 @@ def download():
     logging.debug( "/download %s" % request.args )
     
     configparser = get_configparser()
-    dataverse_root = configparser.get( "config", "dataverse_root" )
-    ristatkey = configparser.get( "config", "ristatkey" )
+    dv_host    = configparser.get( "config", "dataverse_root" )
+    ristat_key = configparser.get( "config", "ristatkey" )
     
-    logging.debug( "dataverse_root: %s" % dataverse_root )
-    logging.debug( "ristatkey: %s" % ristatkey )
+    logging.debug( "dv_host: %s" % dv_host )
+    logging.debug( "ristat_key: %s" % ristat_key )
     
     id_ = request.args.get( "id" )
     logging.debug( "id_: %s" % id_ )
     
     if id_:
-        url = "https://%s/api/access/datafile/%s?key=%s&show_entity_ids=true&q=authorName:*" % ( dataverse_root, id_, ristatkey )
+        url = "https://%s/api/access/datafile/%s?key=%s&show_entity_ids=true&q=authorName:*" % ( dv_host, id_, ristat_key )
         
         logging.debug( "url: %s" % url )
         
