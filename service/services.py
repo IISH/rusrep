@@ -7,7 +7,8 @@ FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
 FL-06-Feb-2018 reordering optional
 FL-06-Mar-2018 reorder sql_query building
-FL-26-Mar-2018 handle dataverse connection nfailure
+FL-26-Mar-2018 handle dataverse connection failure
+FL-26-Mar-2018 rebuilt postgres query
 
 def get_configparser():
 def get_connection():
@@ -2500,7 +2501,7 @@ def aggregation():
             
             #logging.info( "-1- = entry_list" )
             show_params( "params -1- = entry_list", params )
-            query = make_query( language, datatype, classification, base_year, path_dict, value_total = True, value_numerical = True  )
+            query = make_query( language, datatype, classification, base_year, path_dict, ter_codes, value_total = True, value_numerical = True  )
             sql_query, eng_data = aggregate_year( params, add_subclasses, value_total = True, value_numerical = True )
             logging.info( "sql_query: %s" % sql_query )
             entry_list = execute_year( params, sql_query, eng_data, key_set )
@@ -2634,18 +2635,39 @@ def aggregation():
 
 
 
-def make_query( language, datatype, classification, base_year, path_dict, value_total, value_numerical ):
+def make_query( language, datatype, classification, base_year, path_dict, ter_codes, value_total, value_numerical ):
     logging.info( "make_query() value_total = %s, value_numerical = %s" % ( value_total, value_numerical ) )
+    
+    path_list = path_dict.get( "path_list" )
+    subclasses = path_dict.get( "subclasses" )
+    
+    logging.info( "subclasses: %s" % subclasses )
+    logging.info( "path_dict: %s" % str( path_dict ) )
+    
+    logging.info( "ter_codes: %s" % str( ter_codes ) )
+    
+    path_keys = []
+    for pdict in path_list:
+            for k, v in pdict.iteritems():
+                path_keys.append( k )
+                logging.info( "key: %s, value: %s" % ( k, v ) )
+    path_keys.sort()
+    
     query  = "SELECT COUNT(*) AS datarecords"
     query += ", COUNT(*) - COUNT(value) AS data_active"
     
     if value_total:
         query += ", SUM(CAST(value AS DOUBLE PRECISION)) AS total"
     
+    query += ", datatype, base_year, value_unit, ter_code"
+    for key in path_keys:
+        query += ", %s" % key
+    
     
     query += " FROM russianrepo_%s"  % language
-    query += " WHERE datatype = %s" % datatype
-    query += " AND base_year = %s" % base_year
+    
+    query += " WHERE datatype = '%s'" % datatype
+    query += " AND base_year = '%s'" % base_year
 
     if value_numerical:
         query += " AND value <> ''"             # suppress empty values
@@ -2654,11 +2676,14 @@ def make_query( language, datatype, classification, base_year, path_dict, value_
         query += " AND value ~ '^[-+]?\d*\.?\d*$'"
     else:
         query += " AND (value = '' OR value = ' ' OR value = '.' OR value = '. ' OR value = NULL)"
-
-    query += " GROUP BY .."
-    query += " ORDER BY .."
     
-    logging.info( query )
+    query += " AND ter_code in ('%s')" % ','.join( ter_codes )
+
+    query += " GROUP BY value_unit, ter_code"
+    query += " ORDER BY value_unit, ter_code"
+    
+    logging.info( "make_query() %s:" %  query )
+    
     return query
 
 
