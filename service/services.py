@@ -1530,6 +1530,7 @@ def execute_year( params, sql_query, eng_data, key_set ):
     
     connection = get_connection()
     cursor = connection.cursor()
+    query = cursor.mogrify( sql_query )
     cursor.execute( sql_query )
     
     logging.debug( "query execute stop: %s" % datetime.datetime.now() )
@@ -2501,10 +2502,12 @@ def aggregation():
             
             #logging.info( "-1- = entry_list" )
             show_params( "params -1- = entry_list", params )
-            query = make_query( language, datatype, classification, base_year, path_dict, ter_codes, value_total = True, value_numerical = True  )
+            #fl_query = make_query( params, language, datatype, classification, base_year, path_dict, ter_codes, value_total = True, value_numerical = True  )
+            fl_query = make_query( params, add_subclasses, value_total = True, value_numerical = True  )
             sql_query, eng_data = aggregate_year( params, add_subclasses, value_total = True, value_numerical = True )
-            logging.info( "sql_query: %s" % sql_query )
-            entry_list = execute_year( params, sql_query, eng_data, key_set )
+            #logging.info( "sql_query: %s" % sql_query )
+            #entry_list = execute_year( params, sql_query, eng_data, key_set )
+            entry_list = execute_year( params, fl_query, eng_data, key_set )
             show_entries( "params -1- = entry_list", entry_list )
             
             #logging.info( "-2- = entry_list_ntc" )
@@ -2512,16 +2515,20 @@ def aggregation():
             if datatype != "1.02":      # not needed for 1.02 (and much data)
                 logging.info( "path_list: %s" % params_ntc[ "path" ] )
                 show_params( "params_ntc -2- = entry_list_ntc", params_ntc )
+                fl_query_ntc = make_query( params_ntc, add_subclasses, value_total = False, value_numerical = True )
                 sql_query_ntc, eng_data_ntc = aggregate_year( params_ntc, add_subclasses, value_total = False, value_numerical = True )
-                logging.info( "sql_query_ntc: %s" % sql_query_ntc )
-                entry_list_ntc = execute_year( params_ntc, sql_query_ntc, eng_data_ntc, key_set )
+                #logging.info( "sql_query_ntc: %s" % sql_query_ntc )
+                #entry_list_ntc = execute_year( params_ntc, sql_query_ntc, eng_data_ntc, key_set )
+                entry_list_ntc = execute_year( params_ntc, fl_query_ntc, eng_data_ntc, key_set )
                 show_entries( "params_ntc -2- = entry_list_ntc", entry_list_ntc )
             
             #logging.info( "-3- = entry_list_none" )
             show_params( "params -3- = entry_list_none", params_none )
+            fl_query_none = make_query( params_none, add_subclasses, value_total = False, value_numerical = False )   # non-numbers
             sql_query_none, eng_data_none = aggregate_year( params_none, add_subclasses, value_total = False, value_numerical = False )   # non-numbers
-            logging.info( "sql_query_none: %s" % sql_query_none )
-            entry_list_none = execute_year( params_none, sql_query_none, eng_data_none, key_set )
+            #logging.info( "sql_query_none: %s" % sql_query_none )
+            #entry_list_none = execute_year( params_none, sql_query_none, eng_data_none, key_set )
+            entry_list_none = execute_year( params_none, fl_query_none, eng_data_none, key_set )
             show_entries( "params -3- = entry_list_none", entry_list_none )
             
             # entry_list_path = entry_list + entry_list_ntc
@@ -2635,24 +2642,46 @@ def aggregation():
 
 
 
-def make_query( language, datatype, classification, base_year, path_dict, ter_codes, value_total, value_numerical ):
-    logging.info( "make_query() value_total = %s, value_numerical = %s" % ( value_total, value_numerical ) )
+#def make_query( params, language, datatype, classification, base_year, path_dict, ter_codes, value_total, value_numerical ):
+def make_query( params, subclasses, value_total, value_numerical ):
+    logging.info( "make_query()" )
     
-    path_list = path_dict.get( "path_list" )
-    subclasses = path_dict.get( "subclasses" )
+    language       = params[ "language" ] 
+    datatype       = params[ "datatype" ]
+    classification = params[ "classification" ]
+    base_year      = params[ "base_year" ]
+    path_list      = params[ "path" ]
+    ter_codes      = params.get( "ter_codes" )
     
-    logging.info( "subclasses: %s" % subclasses )
-    logging.info( "path_dict: %s" % str( path_dict ) )
+    """
+    logging.info( "make_query() language:       %s | %s" % ( language,       params[ "language" ] ) )
+    logging.info( "make_query() datatype:       %s | %s" % ( datatype,       params[ "datatype" ] ) )
+    logging.info( "make_query() classification: %s | %s" % ( classification, params[ "classification" ] ) )
+    logging.info( "make_query() base_year:      %s | %s" % ( base_year,      params[ "base_year" ] ) )
+    #logging.info( "make_query() path_dict:      %s | %s" % ( path_dict,      params[ "path_dict" ] ) )
+    logging.info( "make_query() ter_codes:      %s | %s" % ( ter_codes,      params[ "ter_codes" ] ) )
+    """
     
-    logging.info( "ter_codes: %s" % str( ter_codes ) )
+    logging.info( "language:        %s" % language )
+    logging.info( "datatype:        %s" % datatype )
+    logging.info( "classification:  %s" % classification )
+    logging.info( "base_year:       %s" % base_year )
+    logging.info( "path_list:       %s" % str( path_list ) )
+    logging.info( "subclasses:      %s" % subclasses )
+    logging.info( "ter_codes:       %s" % str( ter_codes ) )
+    logging.info( "value_total:     %s" % value_total )
+    logging.info( "value_numerical: %s" % value_numerical )
+    
+    #logging.info( "make_query() value_total = %s, value_numerical = %s" % ( value_total, value_numerical ) )
     
     path_keys = []
     for pdict in path_list:
-            for k, v in pdict.iteritems():
-                path_keys.append( k )
-                logging.info( "key: %s, value: %s" % ( k, v ) )
+        for k, v in pdict.iteritems():
+            path_keys.append( k )
+            logging.info( "key: %s, value: %s" % ( k, v ) )
     path_keys.sort()
     
+    # SELECT
     query  = "SELECT COUNT(*) AS datarecords"
     query += ", COUNT(*) - COUNT(value) AS data_active"
     
@@ -2663,12 +2692,14 @@ def make_query( language, datatype, classification, base_year, path_dict, ter_co
     for key in path_keys:
         query += ", %s" % key
     
-    
+    # FROM
     query += " FROM russianrepo_%s"  % language
     
+    # WHERE datatype AND base_year
     query += " WHERE datatype = '%s'" % datatype
     query += " AND base_year = '%s'" % base_year
 
+    # AND value
     if value_numerical:
         query += " AND value <> ''"             # suppress empty values
         query += " AND value <> '.'"            # suppress a 'lone' "optional point", used in the table to flag missing data
@@ -2677,12 +2708,37 @@ def make_query( language, datatype, classification, base_year, path_dict, ter_co
     else:
         query += " AND (value = '' OR value = ' ' OR value = '.' OR value = '. ' OR value = NULL)"
     
-    query += " AND ter_code in ('%s')" % ','.join( ter_codes )
-
-    query += " GROUP BY value_unit, ter_code"
-    query += " ORDER BY value_unit, ter_code"
+    # AND path_dict
+    query += " AND ( "
+    for p, path_key in enumerate( path_keys ):
+        for pdict in path_list:
+            for k, v in pdict.iteritems():
+                v = v.replace( "'", "''" )
+                if k == path_key:
+                    query += "(%s = '%s' OR %s = '. ')" % ( k, v, k )
+        if p + 1 < len( path_keys ):
+            query += " AND "
+    query += " )"
     
-    logging.info( "make_query() %s:" %  query )
+    # AND ter_codes
+    if ter_codes:
+        query += " AND ter_code in ('%s')" % ','.join( ter_codes )
+
+    # GROUP BY
+    query += " GROUP BY datatype, base_year, "
+    query += ", ".join( path_keys )
+    query += ", value_unit, ter_code"
+    
+    # ORDER BY
+    query += " ORDER BY datatype, base_year, "
+    query += ", ".join( path_keys )
+    query += ", value_unit"
+    if ter_codes:
+        query += ", ter_code"
+    
+    query += ";"
+    
+    logging.info( "make_query() %s" % query )
     
     return query
 
