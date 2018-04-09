@@ -6,7 +6,9 @@ FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
 FL-05-Aug-2017 cleanup function load_vocabulary()
 FL-06-Feb-2018 reordering optional
-FL-20-Feb-2018 latest change
+FL-06-Mar-2018 reorder sql_query building
+FL-26-Mar-2018 handle dataverse connection failure
+FL-04-Apr-2018 rebuilt postgres query
 
 def get_configparser():
 def get_connection():
@@ -30,8 +32,8 @@ def get_sql_where( name, value ):
 def loadjson( json_dataurl ):
 def filecat_subtopic( qinput, cursor, datatype, base_year ):
 def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
-def aggregate_year( params, add_subclasses, value_numerical ):
-def execute_year( params, sql_query, eng_data ):
+def aggregate_year( params, add_subclasses, value_total = True, value_numerical = True  ):
+def execute_year( params, sql_query, key_set, eng_data ):
 def add_unique_items( language, list_name, entry_list_collect, entry_list_none ):
 def remove_dups( entry_list_collect ):
 def sort_entries( entry_list_nodups ):
@@ -1518,7 +1520,7 @@ def aggregate_year( params, add_subclasses, value_total = True, value_numerical 
 
 
 
-def execute_year( params, sql_query, eng_data, key_set ):
+def execute_year( params, sql_query, key_set, eng_data = {} ):
     logging.info( "execute_year()" )
     
     time0 = time()      # seconds since the epoch
@@ -1528,6 +1530,7 @@ def execute_year( params, sql_query, eng_data, key_set ):
     
     connection = get_connection()
     cursor = connection.cursor()
+    query = cursor.mogrify( sql_query )     # needed if single quote has been escaped by repeating it
     cursor.execute( sql_query )
     
     logging.debug( "query execute stop: %s" % datetime.datetime.now() )
@@ -1560,9 +1563,11 @@ def execute_year( params, sql_query, eng_data, key_set ):
             if value in eng_data:
                 value = value.encode( "utf-8" )
                 value = eng_data[ value ]
+                
             if column_name not in forbidden:
                 if column_name == "base_year":
                     value = str( value )        # switch to strings
+                
                 final_item.append( value )
         
         logging.debug( "final_item: %s" % final_item )
@@ -1592,6 +1597,16 @@ def add_unique_items( language, list_name, entry_list_collect, entry_list_extra 
     for p, path in enumerate( paths ):
         logging.debug( "%d: %s" % ( p, path ) )
     
+    # value strings for empty and combined fields
+    value_na   = ""
+    value_none = ""
+    if language.upper() == "EN":
+        value_na   = "na"
+        value_none = "cannot aggregate at this level"
+    elif language.upper() == "RU":
+        value_na   = "нет данных"
+        value_none = "агрегация на этом уровне невозможна"
+    
     nadded = 0
     nmodified = 0
     entry_list_modify = []
@@ -1601,8 +1616,8 @@ def add_unique_items( language, list_name, entry_list_collect, entry_list_extra 
         path_extra = entry_extra[ "path" ]
         
         if path_extra not in paths:
-            #if not entry_extra.get( "total" ):
-            #    entry_extra[ "total" ] = "na"
+            if not entry_extra.get( "total" ):          # we need the field "total", 
+                entry_extra[ "total" ] = value_na       # otherwise the GUI shows "undefined" javascript variable
             entry_list_collect.append( entry_extra )
             nadded += 1
             logging.debug( "adding path: %s" % path_extra )
@@ -1621,28 +1636,22 @@ def add_unique_items( language, list_name, entry_list_collect, entry_list_extra 
     logging.debug( "nadded: %d, nmodified: %d" % ( nadded, nmodified ) )
     #logging.debug( "modify entry_collect: %s" % str( entry_collect ) )
     
-    # value strings for empty and combined fields
-    value_na   = ""
-    value_none = ""
-    if language.upper() == "EN":
-        value_na   = "na"
-        value_none = "cannot aggregate at this level"
-    elif language.upper() == "RU":
-        value_na   = "нет данных"
-        value_none = "агрегация на этом уровне невозможна"
-    
-    for entry_modify in entry_list_modify:
+    for e, entry_modify in enumerate( entry_list_modify ):
         entry_new = copy.deepcopy( entry_modify )
         
+        total = entry_modify.get( "total" )
         try:
-            float( entry_modify[ "total" ] )
+            float( total )
             entry_new[ "total" ] = value_none
         except:
-            value = value_na
             entry_new[ "total" ] = value_na
         
-        if cmp( entry_modify, entry_new ) != 0:
-            entry_list_collect.remove( entry_modify )
+        #if cmp( entry_modify, entry_new ) != 0:
+        #    #logging.debug( "remove from entry_collect: %s" % str( entry_modify ) )
+        #    entry_list_collect.remove( entry_modify )
+        
+        if entry_new not in entry_list_collect:
+            #logging.debug( "append to entry_collect: %s" % str( entry_new ) )
             entry_list_collect.append( entry_new )
     
     return entry_list_collect
@@ -2149,18 +2158,24 @@ def documentation():
     logging.debug( "Python version: %s" % sys.version  )
 
     configparser   = get_configparser()
-    dataverse_root = configparser.get( "config", "dataverse_root" )
+    dv_host        = configparser.get( "config", "dataverse_root" )
     api_root       = configparser.get( "config", "api_root" )
-    ristatkey      = configparser.get( "config", "ristatkey" )
+    ristat_key     = configparser.get( "config", "ristatkey" )
+    ristat_name    = configparser.get( "config", "ristatname" )
     ristatdocs     = configparser.get( "config", "hdl_documentation" )
     
-    #logging.info( "dataverse_root: %s" % dataverse_root )
-    #logging.info( "ristatkey: %s" % ristatkey )
-    connection = Connection( dataverse_root, ristatkey )
-    dataverse = connection.get_dataverse( "RISTAT" )
+    logging.info( "dv_host: %s" % dv_host )
+    logging.info( "ristat_key: %s" % ristat_key )
+    connection = Connection( dv_host, ristat_key )
     
-    settings = DataFilter( request.args )
     papers = []
+    dataverse = connection.get_dataverse( ristat_name )
+    if not dataverse:
+        logging.info( "ristat_key: %s" % ristat_key )
+        logging.error( "COULD NOT GET A DATAVERSE CONNECTION" )
+        return Response( json.dumps( papers ), mimetype = "application/json; charset=utf-8" )
+
+    settings = DataFilter( request.args )
     
     logging.debug( "request.args: %s" % request.args )
     logging.debug( "settings: %s" % settings )
@@ -2183,7 +2198,7 @@ def documentation():
         handle = str( item[ "protocol" ] ) + ':' + str( item[ "authority" ] ) + '/' + str( item[ "identifier" ] )
         if handle == ristatdocs:
             datasetid = item[ "id" ]
-            url = "http://" + dataverse_root + "/api/datasets/" + str( datasetid ) + "/?&key=" + str( ristatkey )
+            url = "http://" + dv_host + "/api/datasets/" + str( datasetid ) + "/?&key=" + str( ristat_key )
             logging.debug( "url: %s" % url )
             dataframe = loadjson( url )
             for files in dataframe[ "data" ][ "latestVersion" ][ "files" ]:
@@ -2444,6 +2459,11 @@ def aggregation():
     if not os.path.exists( download_dir ):
         os.makedirs( download_dir )
     
+    # split input path in subgroups with the same key length
+    path_lists = group_levels( path )       # input path WITH subclasses parameter, NOT path_stripped
+    nlists = len( path_lists )
+    logging.info( "%d path_dicts in path_lists" % nlists )
+    
     json_string = str( "{}" )
     
     if classification == "historical":
@@ -2463,10 +2483,10 @@ def aggregation():
         params[ "ter_codes" ] = ter_codes       # with ter_codes
         params_none = copy.deepcopy( params )   # with ter_codes
         
-        # split input path in subgroups with the same key length
-        path_lists = group_levels( path )       # input path WITH subclasses parameter, NOT path_stripped
-        nlists = len( path_lists )
-        logging.info( "%d path_dicts in path_lists" % nlists )
+        ## split input path in subgroups with the same key length
+        #path_lists = group_levels( path )       # input path WITH subclasses parameter, NOT path_stripped
+        #nlists = len( path_lists )
+        #logging.info( "%d path_dicts in path_lists" % nlists )
         
         for pd, path_dict in enumerate( path_lists, start = 1 ):
             logging.info( "path_list %d-of-%d" % ( pd, nlists ) )
@@ -2475,9 +2495,9 @@ def aggregation():
             path_list = path_dict[ "path_list" ]
             add_subclasses = path_dict[ "subclasses" ]
             
-            params[      "path" ] = path_list
-            params_ntc[  "path" ] = path_list
-            params_none[ "path" ] = path_list
+            params[      "path" ] = path_list		# default query
+            params_ntc[  "path" ] = path_list		# query without ter_code specification
+            params_none[ "path" ] = path_list		# query with only NANs in value response
             
             # only for debugging
             #params[      "etype" ] = ""
@@ -2486,9 +2506,11 @@ def aggregation():
             
             #logging.info( "-1- = entry_list" )
             show_params( "params -1- = entry_list", params )
-            sql_query, eng_data = aggregate_year( params, add_subclasses, value_total = True, value_numerical = True )
-            logging.info( "sql_query: %s" % sql_query )
-            entry_list = execute_year( params, sql_query, eng_data, key_set )
+            sql_query = make_query( "total", params, add_subclasses, value_total = True, value_numerical = True  )
+            #old_query, eng_data = aggregate_year( params, add_subclasses, value_total = True, value_numerical = True )
+            #logging.info( "old_query: %s" % old_query )
+            eng_data = {}
+            entry_list = execute_year( params, sql_query, key_set, eng_data )
             show_entries( "params -1- = entry_list", entry_list )
             
             #logging.info( "-2- = entry_list_ntc" )
@@ -2496,16 +2518,20 @@ def aggregation():
             if datatype != "1.02":      # not needed for 1.02 (and much data)
                 logging.info( "path_list: %s" % params_ntc[ "path" ] )
                 show_params( "params_ntc -2- = entry_list_ntc", params_ntc )
-                sql_query_ntc, eng_data_ntc = aggregate_year( params_ntc, add_subclasses, value_total = False, value_numerical = True )
-                logging.info( "sql_query_ntc: %s" % sql_query_ntc )
-                entry_list_ntc = execute_year( params_ntc, sql_query_ntc, eng_data_ntc, key_set )
+                sql_query_ntc = make_query( "ntc", params_ntc, add_subclasses, value_total = False, value_numerical = True )
+                #old_query_ntc, eng_data_ntc = aggregate_year( params_ntc, add_subclasses, value_total = False, value_numerical = True )
+                #logging.info( "old_query_ntc: %s" % old_query_ntc )
+                eng_data_ntc = {}
+                entry_list_ntc = execute_year( params_ntc, sql_query_ntc, key_set, eng_data_ntc )
                 show_entries( "params_ntc -2- = entry_list_ntc", entry_list_ntc )
             
             #logging.info( "-3- = entry_list_none" )
             show_params( "params -3- = entry_list_none", params_none )
-            sql_query_none, eng_data_none = aggregate_year( params_none, add_subclasses, value_total = False, value_numerical = False )   # non-numbers
-            logging.info( "sql_query_none: %s" % sql_query_none )
-            entry_list_none = execute_year( params_none, sql_query_none, eng_data_none, key_set )
+            sql_query_none = make_query( "none", params_none, add_subclasses, value_total = False, value_numerical = False )   # non-numbers
+            #old_query_none, eng_data_none = aggregate_year( params_none, add_subclasses, value_total = False, value_numerical = False )   # non-numbers
+            #logging.info( "old_query_none: %s" % old_query_none )
+            eng_data_none = {}
+            entry_list_none = execute_year( params_none, sql_query_none, key_set, eng_data_none )
             show_entries( "params -3- = entry_list_none", entry_list_none )
             
             # entry_list_path = entry_list + entry_list_ntc
@@ -2553,13 +2579,13 @@ def aggregation():
             logging.info( "base_year: %s" % base_year )
             params[ "base_year" ] = base_year
             
-            params_ntc = copy.deepcopy( params )
+            params_ntc  = copy.deepcopy( params )
             params_none = copy.deepcopy( params )
             
-            # split input path in subgroups with the same key length
-            path_lists = group_levels( path )       # input path WITH subclasses parameter, NOT path_stripped
-            nlists = len( path_lists )
-            logging.info( "%d path_dicts in path_lists" % nlists )
+            ## split input path in subgroups with the same key length
+            #path_lists = group_levels( path )       # input path WITH subclasses parameter, NOT path_stripped
+            #nlists = len( path_lists )
+            #logging.info( "%d path_dicts in path_lists" % nlists )
             
             entry_list_year = []
             
@@ -2578,13 +2604,17 @@ def aggregation():
                 params_none[ "etype" ] = "none"
                 
                 show_params( "params -1- = entry_list_ntc", params_ntc )
-                sql_query_ntc, eng_data_ntc = aggregate_year( params_ntc, add_subclasses, value_total = True, value_numerical = True )
-                entry_list_ntc = execute_year( params_ntc, sql_query_ntc, eng_data_ntc, key_set )
+                #old_query_ntc, eng_data_ntc = aggregate_year( params_ntc, add_subclasses, value_total = True, value_numerical = True )
+                sql_query_ntc = make_query( "ntc", params_ntc, add_subclasses, value_total = True, value_numerical = True )
+                eng_data_ntc = {}
+                entry_list_ntc = execute_year( params_ntc, sql_query_ntc, key_set, eng_data_ntc )
                 show_entries( "params -1- = entry_list_ntc", entry_list_ntc )
                 
                 show_params( "params -2- = entry_list_none", params_none )
-                sql_query_none, eng_data_none = aggregate_year( params_none, add_subclasses, value_total = False, value_numerical = False )
-                entry_list_none = execute_year( params_none, sql_query_none, eng_data_none, key_set )
+                #old_query_none, eng_data_none = aggregate_year( params_none, add_subclasses, value_total = False, value_numerical = False )
+                sql_query_none = make_query( "none", params_none, add_subclasses, value_total = False, value_numerical = False )   # non-numbers
+                eng_data_none = {}
+                entry_list_none = execute_year( params_none, sql_query_none, key_set, eng_data_none )
                 show_entries( "params -2- = entry_list_none", entry_list_none )
                 
                 # entry_list_year = entry_list_ntc + entry_list_none
@@ -2619,8 +2649,141 @@ def aggregation():
 
 
 
-def show_path_dict( path_dict ):
+def make_query( msg, params, subclasses, value_total, value_numerical ):
+    logging.info( "make_query() %s " % msg )
     
+    language       = params[ "language" ] 
+    datatype       = params[ "datatype" ]
+    classification = params[ "classification" ]
+    base_year      = params[ "base_year" ]
+    path_list      = params[ "path" ]
+    ter_codes      = params.get( "ter_codes" )
+    
+    logging.info( "language:        %s" % language )
+    logging.info( "datatype:        %s" % datatype )
+    logging.info( "classification:  %s" % classification )
+    logging.info( "base_year:       %s" % base_year )
+    logging.info( "path_list:       %s" % str( path_list ) )
+    logging.info( "subclasses:      %s" % subclasses )
+    logging.info( "ter_codes:       %s" % str( ter_codes ) )
+    logging.info( "value_total:     %s" % value_total )
+    logging.info( "value_numerical: %s" % value_numerical )
+    
+    path_keys = []
+    for pdict in path_list:
+        for k, v in pdict.iteritems():
+            if k not in path_keys:
+                path_keys.append( k )
+                #logging.debug( "key: %s, value: %s" % ( k, v ) )
+    
+    path_keys.sort()
+    
+    # SELECT
+    query  = "SELECT COUNT(*) AS datarecords"
+    query += ", COUNT(*) - COUNT(value) AS data_active"
+    
+    if value_total:
+        query += ", SUM(CAST(value AS DOUBLE PRECISION)) AS total"
+    
+    query += ", datatype, base_year, value_unit, ter_code"
+    
+    # paths
+    for key in path_keys:
+        query += ", %s" % key
+    
+    if subclasses:
+        cls = "class"
+        if classification == "historical":
+            cls = "hist" + cls
+        for k in range( 5, 10 ):
+            query += ", %s%d" % ( cls, k )
+    
+    # FROM
+    query += " FROM russianrepo_%s"  % language
+    
+    # WHERE datatype AND base_year
+    query += " WHERE datatype = '%s'" % datatype
+    query += " AND base_year = '%s'" % base_year
+
+    # AND value
+    if value_numerical:
+        query += " AND value <> ''"             # suppress empty values
+        query += " AND value <> '.'"            # suppress a 'lone' "optional point", used in the table to flag missing data
+        # plus an optional single . for floating point values, and plus an optional leading sign
+        query += " AND value ~ '^[-+]?\d*\.?\d*$'"
+    else:
+        query += " AND (value = '' OR value = ' ' OR value = '.' OR value = '. ' OR value = NULL)"
+    
+    # AND path_dicts
+    query += " AND ("
+    for pd, path_dict in enumerate( path_list ):
+        query += " ( "
+        
+        for pk, key in enumerate( path_keys ):
+            val = path_dict[ key ]
+            val = val.replace( "'", "''" )      # escape single quote by repeating it [also needs cursor.mogrify()]
+            query += "(%s = '%s' OR %s = '. ')" % ( key, val, key )
+            
+            if pk + 1 < len( path_keys ):
+                query += " AND "
+        
+        query += " )"
+        if pd + 1 < len( path_list ):
+            query += " OR"
+    
+    query += " )"
+    
+    # AND ter_codes
+    if ter_codes:
+        l =  len( ter_codes )
+        query += " AND ter_code in ("
+        
+        for t, ter_code in enumerate( ter_codes ):
+            query += " '%s'" % ter_code
+            
+            if t + 1 < l:
+                query += ", "
+        
+        query += ")"
+    
+    # GROUP BY
+    query += " GROUP BY datatype, base_year, "
+    query += ", ".join( path_keys )
+    
+    if subclasses:
+        cls = "class"
+        if classification == "historical":
+            cls = "hist" + cls
+        for k in range( 5, 10 ):
+            query += ", %s%d" % ( cls, k )
+    
+    query += ", value_unit, ter_code"
+    
+    # ORDER BY
+    query += " ORDER BY datatype, base_year, "
+    query += ", ".join( path_keys )
+    
+    if subclasses:
+        cls = "class"
+        if classification == "historical":
+            cls = "hist" + cls
+        for k in range( 5, 10 ):
+            query += ", %s%d" % ( cls, k )
+    
+    query += ", value_unit"
+    
+    if ter_codes:
+        query += ", ter_code"
+    
+    query += ";"
+    
+    logging.info( "make_query() %s" % query )
+    
+    return query
+
+
+
+def show_path_dict( path_dict ):
     logging.info( "show_path_dict()" )
     """
     nkeys = path_dict[ "nkeys" ]
@@ -2820,17 +2983,17 @@ def download():
     logging.debug( "/download %s" % request.args )
     
     configparser = get_configparser()
-    dataverse_root = configparser.get( "config", "dataverse_root" )
-    ristatkey = configparser.get( "config", "ristatkey" )
+    dv_host    = configparser.get( "config", "dataverse_root" )
+    ristat_key = configparser.get( "config", "ristatkey" )
     
-    logging.debug( "dataverse_root: %s" % dataverse_root )
-    logging.debug( "ristatkey: %s" % ristatkey )
+    logging.debug( "dv_host: %s" % dv_host )
+    logging.debug( "ristat_key: %s" % ristat_key )
     
     id_ = request.args.get( "id" )
     logging.debug( "id_: %s" % id_ )
     
     if id_:
-        url = "https://%s/api/access/datafile/%s?key=%s&show_entity_ids=true&q=authorName:*" % ( dataverse_root, id_, ristatkey )
+        url = "https://%s/api/access/datafile/%s?key=%s&show_entity_ids=true&q=authorName:*" % ( dv_host, id_, ristat_key )
         
         logging.debug( "url: %s" % url )
         
