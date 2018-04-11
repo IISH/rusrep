@@ -1646,14 +1646,19 @@ def add_unique_items( language, list_name, entry_list_collect, entry_list_extra 
         except:
             entry_new[ "total" ] = value_na
         
-        #if cmp( entry_modify, entry_new ) != 0:
-        #    #logging.debug( "remove from entry_collect: %s" % str( entry_modify ) )
-        #    entry_list_collect.remove( entry_modify )
+        # remove entry/entries with (same path + value_unit + ter_code)
+        path_m = entry_modify[ "path" ]
+        unit_m = entry_modify[ "value_unit" ]
+        terc_m = entry_modify[ "ter_code" ]
         
-        if entry_new not in entry_list_collect:
-            #logging.debug( "append to entry_collect: %s" % str( entry_new ) )
-            entry_list_collect.append( entry_new )
-    
+        for entry in entry_list_collect:
+            if entry[ "path" ] == path_m  and entry[ "value_unit" ] == unit_m and entry[ "ter_code" ] == terc_m:
+                logging.debug( "remove from entry_collect: %s" % str( entry ) )
+                entry_list_collect.remove( entry )
+        
+        # add modified entry
+        logging.debug( "append to entry_collect: %s" % str( entry_new ) )
+        entry_list_collect.append( entry_new )
     return entry_list_collect
 
 
@@ -2659,15 +2664,15 @@ def make_query( msg, params, subclasses, value_total, value_numerical ):
     path_list      = params[ "path" ]
     ter_codes      = params.get( "ter_codes" )
     
-    logging.info( "language:        %s" % language )
-    logging.info( "datatype:        %s" % datatype )
-    logging.info( "classification:  %s" % classification )
-    logging.info( "base_year:       %s" % base_year )
-    logging.info( "path_list:       %s" % str( path_list ) )
-    logging.info( "subclasses:      %s" % subclasses )
-    logging.info( "ter_codes:       %s" % str( ter_codes ) )
-    logging.info( "value_total:     %s" % value_total )
-    logging.info( "value_numerical: %s" % value_numerical )
+    logging.debug( "language:        %s" % language )
+    logging.debug( "datatype:        %s" % datatype )
+    logging.debug( "classification:  %s" % classification )
+    logging.debug( "base_year:       %s" % base_year )
+    logging.debug( "path_list:       %s" % str( path_list ) )
+    logging.debug( "subclasses:      %s" % subclasses )
+    logging.debug( "ter_codes:       %s" % str( ter_codes ) )
+    logging.debug( "value_total:     %s" % value_total )
+    logging.debug( "value_numerical: %s" % value_numerical )
     
     path_keys = []
     for pdict in path_list:
@@ -2784,23 +2789,23 @@ def make_query( msg, params, subclasses, value_total, value_numerical ):
 
 
 def show_path_dict( path_dict ):
-    logging.info( "show_path_dict()" )
+    logging.debug( "show_path_dict()" )
     """
     nkeys = path_dict[ "nkeys" ]
     add_subclasses = path_dict[ "subclasses" ]
     path_list = path_dict[ "path_list" ]
     
-    logging.info( "path_list %d-of-%d, nkeys: %s, subclasses: %s, levels: %d" % 
+    logging.debug( "path_list %d-of-%d, nkeys: %s, subclasses: %s, levels: %d" % 
         ( pd+1, len( path_lists ), nkeys, add_subclasses, len( path_list ) ) )
     """
     for key, value in path_dict.iteritems():
         if key == "path_list":
             path_list = value
-            logging.info( "path_list: %s" % path_list )
+            logging.debug( "path_list: %s" % path_list )
             for p, path in enumerate( path_list ):
-                logging.info( "path_dict %d-of-%d, path: %s" % ( p+1, len( path_list ), path ) )
+                logging.debug( "path_dict %d-of-%d, path: %s" % ( p+1, len( path_list ), path ) )
         else:
-            logging.info( "key: %s, value: %s" % ( key, value ) )
+            logging.debug( "key: %s, value: %s" % ( key, value ) )
 
 
 
@@ -2813,10 +2818,10 @@ def show_params( info, params ):
 
 def show_entries( info, entries ):
     logging.info( "show_entries() %s" % info )
-    logging.info( "%d items" % len( entries ) )
+    logging.debug( "%d items" % len( entries ) )
     nentries = len( entries )
     for e, entry in enumerate( entries ):
-        logging.info( "%d-of-%d: %s" % ( e+1, nentries, str( entry ) ) )
+        logging.debug( "%d-of-%d: %s" % ( e+1, nentries, str( entry ) ) )
 
 
 
