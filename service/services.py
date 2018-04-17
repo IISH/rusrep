@@ -9,6 +9,7 @@ FL-06-Feb-2018 reordering optional
 FL-06-Mar-2018 reorder sql_query building
 FL-26-Mar-2018 handle dataverse connection failure
 FL-04-Apr-2018 rebuilt postgres query
+FL-17-Apr-2018 group pg items by identifier
 
 def get_configparser():
 def get_connection():
@@ -1526,8 +1527,6 @@ def execute_year( params, sql_query, key_set, eng_data = {} ):
     time0 = time()      # seconds since the epoch
     logging.debug( "query execute start: %s" % datetime.datetime.now() )
     
-    entry_list = []
-    
     connection = get_connection()
     cursor = connection.cursor()
     query = cursor.mogrify( sql_query )     # needed if single quote has been escaped by repeating it
@@ -2516,6 +2515,7 @@ def aggregation():
             #logging.info( "old_query: %s" % old_query )
             eng_data = {}
             entry_list = execute_year( params, sql_query, key_set, eng_data )
+            #entry_list_ig = group_by_ident( entry_list )
             show_entries( "params -1- = entry_list", entry_list )
             
             #logging.info( "-2- = entry_list_ntc" )
@@ -2528,6 +2528,7 @@ def aggregation():
                 #logging.info( "old_query_ntc: %s" % old_query_ntc )
                 eng_data_ntc = {}
                 entry_list_ntc = execute_year( params_ntc, sql_query_ntc, key_set, eng_data_ntc )
+                #entry_list_ntc_ig = group_by_ident( entry_list_ntc )
                 show_entries( "params_ntc -2- = entry_list_ntc", entry_list_ntc )
             
             #logging.info( "-3- = entry_list_none" )
@@ -2537,6 +2538,7 @@ def aggregation():
             #logging.info( "old_query_none: %s" % old_query_none )
             eng_data_none = {}
             entry_list_none = execute_year( params_none, sql_query_none, key_set, eng_data_none )
+            #entry_list_none_ig = group_by_ident( entry_list_none )
             show_entries( "params -3- = entry_list_none", entry_list_none )
             
             # entry_list_path = entry_list + entry_list_ntc
@@ -2613,6 +2615,7 @@ def aggregation():
                 sql_query_ntc = make_query( "ntc", params_ntc, add_subclasses, value_total = True, value_numerical = True )
                 eng_data_ntc = {}
                 entry_list_ntc = execute_year( params_ntc, sql_query_ntc, key_set, eng_data_ntc )
+                #entry_list_ntc_ig = group_by_ident( entry_list_ntc )
                 show_entries( "params -1- = entry_list_ntc", entry_list_ntc )
                 
                 show_params( "params -2- = entry_list_none", params_none )
@@ -2620,6 +2623,7 @@ def aggregation():
                 sql_query_none = make_query( "none", params_none, add_subclasses, value_total = False, value_numerical = False )   # non-numbers
                 eng_data_none = {}
                 entry_list_none = execute_year( params_none, sql_query_none, key_set, eng_data_none )
+                #entry_list_none_ig = group_by_ident( entry_list_none )
                 show_entries( "params -2- = entry_list_none", entry_list_none )
                 
                 # entry_list_year = entry_list_ntc + entry_list_none
@@ -2654,6 +2658,60 @@ def aggregation():
 
 
 
+def make_identifier( path, value_unit ):
+    
+    # ordered dict, sorted by keys
+    ident_dict = collections.OrderedDict( sorted( path.items(), key = lambda t: t [ 0 ] ) )
+    ident_dict[ "value_unit" ] = value_unit
+
+    # identifier must be immutable
+    identifier = frozenset( ident_dict.items() )
+    
+    return identifier
+
+
+
+def group_by_ident( entry_list ):
+    logging.info( "group_by_ident()" )
+    
+    table_dict = {}
+    
+    for entry in entry_list:
+        path = entry.get( "path" )
+        value_unit = entry.get( "value_unit" )
+        
+        # ordered dict, sorted by keys
+        ident_dict = collections.OrderedDict( sorted( path.items(), key = lambda t: t [ 0 ] ) )
+        ident_dict[ "value_unit" ] = value_unit
+        
+        # identifier must be immutable
+        identifier = frozenset( ident_dict.items() )
+        logging.info( "identifier %s " % str( identifier ) )
+        
+        try:
+            line_dict = table_dict[ identifier ]
+            ter_codes = line_dict[ "ter_codes" ]
+        except:
+            line_dict = {}
+            line_dict[ "datatype" ] = entry.get( "datatype" )
+            line_dict[ "base_year" ] = entry.get( "base_year" )
+            line_dict[ "path" ] = path
+            line_dict[ "value_unit" ] = value_unit
+            ter_codes = []
+        
+        tcd = { "ter_code" : entry.get( "ter_code" ) , "total" : entry.get( "total" ) }
+        ter_codes.append( tcd )
+        line_dict[ "ter_codes" ] = ter_codes
+        table_dict[ identifier ] = line_dict
+    
+    logging.debug( "%d entries in dict" % len( table_dict ) )
+    for key, value in table_dict.iteritems():
+        logging.debug( "key: %s, \nvalue: %s" % ( key, str( value )) )
+    
+    return table_dict
+
+
+
 def make_query( msg, params, subclasses, value_total, value_numerical ):
     logging.info( "make_query() %s " % msg )
     
@@ -2685,6 +2743,7 @@ def make_query( msg, params, subclasses, value_total, value_numerical ):
     
     # SELECT
     query  = "SELECT COUNT(*) AS datarecords"
+    
     query += ", COUNT(*) - COUNT(value) AS data_active"
     
     if value_total:
@@ -2762,7 +2821,8 @@ def make_query( msg, params, subclasses, value_total, value_numerical ):
         for k in range( 5, 10 ):
             query += ", %s%d" % ( cls, k )
     
-    query += ", value_unit, ter_code"
+    query += ", value_unit"
+    query += ", ter_code"
     
     # ORDER BY
     query += " ORDER BY datatype, base_year, "
