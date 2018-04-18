@@ -37,6 +37,7 @@ def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
 def aggregate_year( params, add_subclasses, value_total = True, value_numerical = True  ):
 def execute_year( params, sql_query, key_set, eng_data ):
 def add_unique_items( language, list_name, entry_list_collect, entry_list_none ):
+def add_unique_items_grouped( language, dict_name, entry_dict_collect, entry_dict_none )
 def remove_dups( entry_list_collect ):
 def sort_entries( entry_list_nodups ):
 #def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None)
@@ -600,8 +601,8 @@ def collect_docs( qinput, download_dir, download_key ):
                 get_list.append( doc )
             
             if classification == "historical":                  # only base_year docs
-                if doc.find( "NACE 1.1_Classification") != -1 and datatype0 in [ "3", "4", "5"]:
-                    get_list.append( doc )
+                #if doc.find( "NACE 1.1_Classification") != -1 and datatype0 in [ "3", "4", "5"]:
+                #    get_list.append( doc )
                 
                 base_year = qinput.get( "base_year" )
                 if doc.find( str( base_year ) ) != -1:          # base_year
@@ -612,7 +613,7 @@ def collect_docs( qinput, download_dir, download_key ):
                         get_list.append( doc )
             
             elif classification == "modern":                    # modern: most lang docs
-                if doc.find( "NACE 1.1_Classification") != -1 and datatype0 in [ "3", "4", "5"]:
+                if doc.find( "NACE 1.1_Classification") != -1 and ( datatype == "2.03" or datatype0 in [ "3", "4", "5"] ):
                     get_list.append( doc )
                 
                 if doc.find( "GovReports" ) != -1:              # string
@@ -1637,10 +1638,14 @@ def add_unique_items( language, list_name, entry_list_collect, entry_list_extra 
         else:
             if list_name == "entry_list_none":
                 for entry_collect in entry_list_collect:
-                    path_collect     = entry_collect.get( "path" )
-                    ter_code_collect = entry_collect.get( "ter_code" )
+                    path_collect       = entry_collect.get( "path" )
+                    value_unit_collect = entry_collect.get( "value_unit" )
+                    ter_code_collect   = entry_collect.get( "ter_code" )
+                    
+                    value_unit_extra = entry_extra.get( "value_unit" )
                     ter_code_extra   = entry_extra.get( "ter_code" )
-                    if path_extra == path_collect and ter_code_extra == ter_code_collect:
+                    
+                    if path_extra == path_collect and value_unit_extra == value_unit_collect and ter_code_extra == ter_code_collect:
                         #logging.debug( "modify entry_collect: %s" % str( entry_collect ) )
                         entry_list_modify.append( entry_collect )
                         nmodified += 1
@@ -1671,7 +1676,30 @@ def add_unique_items( language, list_name, entry_list_collect, entry_list_extra 
         # add modified entry
         logging.debug( "append to entry_collect: %s" % str( entry_new ) )
         entry_list_collect.append( entry_new )
+    
     return entry_list_collect
+
+
+
+def add_unique_items_grouped( language, dict_name, entry_dict_collect, entry_dict_extra ):
+    # collect unique paths in entry_dict_collect
+    logging.info( "add_unique_items_grouped()" )
+    
+    entry_dict_path_ig = {}
+    """
+    logging.info( "entry_dict_collect: %s, len: %d" % ( type( entry_dict_collect ), len( entry_dict_collect ) ) )
+    for key, value in entry_dict_collect.iteritems():
+        logging.info( "key: %s\nvalue: %s" % ( key, value ) )
+    """
+
+    logging.info( "entry_dict_extra: %s, len: %d"  % ( type( entry_dict_extra ), len( entry_dict_extra ) ) )
+    for key, entry_extra in entry_dict_extra.iteritems():
+        logging.info( "key: %s\nentry_extra: %s" % ( key, entry_extra ) )
+        entry_collect = entry_dict_collect.get( key )
+        if entry_collect:
+            logging.info( "merge key: %s\nentry_extra: %s\nentry_collect: %s" % ( key, entry_extra, entry_collect ) )
+    
+    return entry_dict_path_ig
 
 
 
@@ -2458,12 +2486,16 @@ def aggregation():
     else:
         base_year = str( base_year )
     
+    group_tercodes = True   # group ter_codes with total values per unique path + unit_value
+    #group_tercodes = False  # default situation
+    
     params = {
         "language"       : language,
         "datatype"       : datatype,
         "classification" : classification,
         #"path"           : path_stripped,      # loop over subpaths of equal length
-        "add_subclasses" : add_subclasses  
+        "add_subclasses" : add_subclasses,
+        "group_tercodes" : group_tercodes
     }
     
     download_key = str( uuid.uuid4() )
@@ -2529,8 +2561,9 @@ def aggregation():
             #logging.info( "old_query: %s" % old_query )
             eng_data = {}
             entry_list = execute_year( params, sql_query, key_set, eng_data )
-            #entry_list_ig = group_by_ident( entry_list )
             show_entries( "params -1- = entry_list", entry_list )
+            if group_tercodes:
+                entry_dict_ig = group_by_ident( entry_list )
             
             #logging.info( "-2- = entry_list_ntc" )
             entry_list_ntc = []
@@ -2542,8 +2575,9 @@ def aggregation():
                 #logging.info( "old_query_ntc: %s" % old_query_ntc )
                 eng_data_ntc = {}
                 entry_list_ntc = execute_year( params_ntc, sql_query_ntc, key_set, eng_data_ntc )
-                #entry_list_ntc_ig = group_by_ident( entry_list_ntc )
                 show_entries( "params_ntc -2- = entry_list_ntc", entry_list_ntc )
+                if group_tercodes:
+                    entry_dict_ntc_ig = group_by_ident( entry_list_ntc )
             
             #logging.info( "-3- = entry_list_none" )
             show_params( "params -3- = entry_list_none", params_none )
@@ -2552,12 +2586,15 @@ def aggregation():
             #logging.info( "old_query_none: %s" % old_query_none )
             eng_data_none = {}
             entry_list_none = execute_year( params_none, sql_query_none, key_set, eng_data_none )
-            #entry_list_none_ig = group_by_ident( entry_list_none )
             show_entries( "params -3- = entry_list_none", entry_list_none )
+            if group_tercodes:
+                entry_dict_none_ig = group_by_ident( entry_list_none )
             
             # entry_list_path = entry_list + entry_list_ntc
             logging.info( "add_unique_ntcs()" )
             entry_list_path = add_unique_items( language, "entry_list_ntc", entry_list, entry_list_ntc )
+            if group_tercodes:
+                entry_list_path_ig = add_unique_items_grouped( language, "entry_dict_ntc", entry_dict_ig, entry_dict_ntc_ig )
             
             # entry_list_collect = entry_list_path + entry_list_none
             logging.info( "add_unique_nones()" )
@@ -2629,7 +2666,7 @@ def aggregation():
                 sql_query_ntc = make_query( "ntc", params_ntc, add_subclasses, value_total = True, value_numerical = True )
                 eng_data_ntc = {}
                 entry_list_ntc = execute_year( params_ntc, sql_query_ntc, key_set, eng_data_ntc )
-                #entry_list_ntc_ig = group_by_ident( entry_list_ntc )
+                #entry_dict_ntc_ig = group_by_ident( entry_list_ntc )
                 show_entries( "params -1- = entry_list_ntc", entry_list_ntc )
                 
                 show_params( "params -2- = entry_list_none", params_none )
@@ -2637,7 +2674,7 @@ def aggregation():
                 sql_query_none = make_query( "none", params_none, add_subclasses, value_total = False, value_numerical = False )   # non-numbers
                 eng_data_none = {}
                 entry_list_none = execute_year( params_none, sql_query_none, key_set, eng_data_none )
-                #entry_list_none_ig = group_by_ident( entry_list_none )
+                #entry_dict_none_ig = group_by_ident( entry_list_none )
                 show_entries( "params -2- = entry_list_none", entry_list_none )
                 
                 # entry_list_year = entry_list_ntc + entry_list_none
@@ -2681,7 +2718,8 @@ def make_identifier( path, value_unit ):
     ident_dict[ "value_unit" ] = value_unit
 
     # identifier must be immutable
-    identifier = frozenset( ident_dict.items() )
+    #identifier = frozenset( ident_dict.items() )
+    identifier = json.dumps( ident_dict.items(), encoding = "utf-8" )
     
     return identifier
 
@@ -2701,7 +2739,8 @@ def group_by_ident( entry_list ):
         ident_dict[ "value_unit" ] = value_unit
         
         # identifier must be immutable
-        identifier = frozenset( ident_dict.items() )
+        #identifier = frozenset( ident_dict.items() )
+        identifier = json.dumps( ident_dict.items(), encoding = "utf-8" )
         logging.info( "identifier %s " % str( identifier ) )
         
         try:
@@ -2713,16 +2752,17 @@ def group_by_ident( entry_list ):
             line_dict[ "base_year" ] = entry.get( "base_year" )
             line_dict[ "path" ] = path
             line_dict[ "value_unit" ] = value_unit
-            ter_codes = []
+            ter_codes = {}
         
-        tcd = { "ter_code" : entry.get( "ter_code" ) , "total" : entry.get( "total" ) }
-        ter_codes.append( tcd )
+        ter_code = entry.get( "ter_code" )
+        total = entry.get( "total" )
+        ter_codes[ ter_code ] = total
         line_dict[ "ter_codes" ] = ter_codes
         table_dict[ identifier ] = line_dict
     
-    logging.debug( "%d entries in dict" % len( table_dict ) )
+    logging.info( "%d entries in dict" % len( table_dict ) )
     for key, value in table_dict.iteritems():
-        logging.debug( "key: %s, \nvalue: %s" % ( key, str( value )) )
+        logging.info( "key: %s, \nvalue: %s" % ( key, str( value )) )
     
     return table_dict
 
