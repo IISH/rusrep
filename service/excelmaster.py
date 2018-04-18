@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # VT-07-Jul-2016 Latest change by VT
-# FL-13-Feb-2018 Latest change
+# FL-18-Apr-2018 handle None cursor
 
 import json
 import logging
@@ -57,7 +57,12 @@ def preprocessor( datafilter ):
     logging.debug( "db_datacache.data.find with key: %s" % key )
     cursor = db_datacache.data.find_one( { "key": key } )
     
-    cache_data = dict ( cursor )
+    cache_data = {}
+    if cursor:
+        cache_data = dict ( cursor )
+    else:
+        logging.error( "preprocessor() no cursor data for key: %s" % key )
+    
     logging.debug( "# keys in cache_data: %s" % len( cache_data.keys() ) )
     for key, value in cache_data.iteritems():
         if isinstance( value, list ):
@@ -67,10 +72,13 @@ def preprocessor( datafilter ):
         else:
             logging.debug( "key %s: value type: %s" % ( key, type( value ) ) )
     
+    nkeys = 0
     params = cache_data.get( "params" )
-    logging.debug( "# of keys in params: %d" % len( params.keys() ) )
-    for key, value in params.iteritems():
-        logging.debug( "key %s: value: %s" % ( key, value ) )
+    if params:
+        nkeys = len( params.keys() )
+        logging.debug( "# of keys in params: %d" % nkeys )
+        for key, value in params.iteritems():
+            logging.debug( "key %s: value: %s" % ( key, value ) )
     
     data = cache_data.get( "data" )
     
@@ -78,114 +86,91 @@ def preprocessor( datafilter ):
     ter_codes = []      # actually used region codes
     dataset   = []
     
-    """
-    for rowitem in cache_data:
-        logging.debug( "rowitem: %s" % str( rowitem ) )
-        
-        del rowitem[ 'key' ]
-        del rowitem[ '_id' ]
-        
-        #if "qinput" in rowitem:
-        #    qinput = rowitem[ "qinput" ]
-        #    logging.debug( "qinput: %s" % str( qinput ) )
-        #    del rowitem[ "qinput" ]
-        if "params" in rowitem:
-            params = rowitem[ "params" ]
-            logging.debug( "params: %s" % str( params ) )
-            del rowitem[ "params" ]
-        
-        if "language" in rowitem:
-            lang = rowitem[ "language" ]
-            del rowitem[ "language" ]
-        
-        logging.debug( "# of items in rowitem: %d" % len( rowitem[ 'data' ] ) )
-    """
-        
-    #for item in rowitem[ 'data' ]:
-    for i, item in enumerate( data ):  
-        logging.debug( "%d, item type: %s, %s" % ( i, type( item ), str( item ) ) )
-        
-        dataitem = item
-        if 'path' in item:
-            classes = item[ 'path' ]
-            del item[ 'path' ]
-            clist = {}
-            for classname in classes:
-                dataitem[ classname] = classes[ classname ]
-        if 'base_year' in item:
-            base_year = item[ 'base_year' ]
-        
-        item_lexicon = dataitem
-        lands = {}
-        if 'ter_code' in item_lexicon:
-            ter_code = item_lexicon[ 'ter_code' ]
-            ter_codes.append( ter_code )
-            lands[ item_lexicon[ 'ter_code' ] ] = item_lexicon.get( "total" )
-            del item_lexicon[ 'ter_code' ]
-        if 'total' in item_lexicon:
-            del item_lexicon[ 'total' ]
-        
-        try:
-            count = item_lexicon[ 'count' ]
-            del item_lexicon[ 'count' ]          # 'count' should not be part of lex_key
-        except:
-            pass
-        
-        # lex_key as stringyfied ordered dict
-        keys = sorted( item_lexicon.iterkeys() )                    # sorted keys
-        tuples = [ ( key, item_lexicon[ key ] ) for key in keys ]   # tuple list ordered by keys
-        ordered_dict = OrderedDict( tuples )                        # dict ordered by keys
-        lex_key = json.dumps( ordered_dict )                        # lex_key as string
-        
-        item_lexicon[ 'lands' ] = lands
-        if lex_key in lex_lands:
-            logging.debug( "old lex_key: %s" % lex_key )
-            current_lands = lex_lands[ lex_key ]
-            for item in lands:
-                current_lands[ item ] = lands[ item ]
-            lex_lands[ lex_key ] = current_lands
-        else:
-            logging.debug( "new lex_key: %s" % lex_key )
-            lex_lands[ lex_key ] = lands
-        
-        dataset.append( dataitem )
-    
-    if len( ter_codes ) == 0:
-        ter_codes = params.get( "ter_codes" )
-    vocab_regs_terms[ "ter_codes" ] = ter_codes
-    
-    db_vocabulary = clientcache.get_database( 'vocabulary' )   # vocabulary
-    
-    # create sheet_header
-    # load terms
-    terms_needed  = [ "na", "base_year", "count", "datatype", "value_unit" ]
-    if hist_mod == 'h':     # historical
-        terms_needed += [ "histclass1", "histclass2", "histclass3", "histclass4", "histclass5", "histclass6", "histclass7", "histclass8", "histclass9", "histclass10" ]
-    elif hist_mod == 'm':   # modern
-        terms_needed += [ "class1", "class2", "class3", "class4", "class5", "class6", "class7", "class8", "class9", "class10" ]
-    
-    terms = {}
-    vocab_download = db_vocabulary.data.find( { "vocabulary": "ERRHS_Vocabulary_download" } )
-    
-    for item in vocab_download:
-        #logging.debug( str( item ) )
-        ID = item[ 'ID' ]
-        #logging.debug( "%s %s" % ( topic, ID ) )
-        if ID == topic:
-            if lang == 'en':
-                topic_name = item[ 'EN' ]
+    if data:
+        for i, item in enumerate( data ):  
+            logging.debug( "%d, item type: %s, %s" % ( i, type( item ), str( item ) ) )
+            
+            dataitem = item
+            if 'path' in item:
+                classes = item[ 'path' ]
+                del item[ 'path' ]
+                clist = {}
+                for classname in classes:
+                    dataitem[ classname] = classes[ classname ]
+            if 'base_year' in item:
+                base_year = item[ 'base_year' ]
+            
+            item_lexicon = dataitem
+            lands = {}
+            if 'ter_code' in item_lexicon:
+                ter_code = item_lexicon[ 'ter_code' ]
+                ter_codes.append( ter_code )
+                lands[ item_lexicon[ 'ter_code' ] ] = item_lexicon.get( "total" )
+                del item_lexicon[ 'ter_code' ]
+            if 'total' in item_lexicon:
+                del item_lexicon[ 'total' ]
+            
+            try:
+                count = item_lexicon[ 'count' ]
+                del item_lexicon[ 'count' ]          # 'count' should not be part of lex_key
+            except:
+                pass
+            
+            # lex_key as stringyfied ordered dict
+            keys = sorted( item_lexicon.iterkeys() )                    # sorted keys
+            tuples = [ ( key, item_lexicon[ key ] ) for key in keys ]   # tuple list ordered by keys
+            ordered_dict = OrderedDict( tuples )                        # dict ordered by keys
+            lex_key = json.dumps( ordered_dict )                        # lex_key as string
+            
+            item_lexicon[ 'lands' ] = lands
+            if lex_key in lex_lands:
+                logging.debug( "old lex_key: %s" % lex_key )
+                current_lands = lex_lands[ lex_key ]
+                for item in lands:
+                    current_lands[ item ] = lands[ item ]
+                lex_lands[ lex_key ] = current_lands
             else:
-                topic_name = item[ 'RUS' ]
+                logging.debug( "new lex_key: %s" % lex_key )
+                lex_lands[ lex_key ] = lands
+            
+            dataset.append( dataitem )
         
-        if ID in terms_needed:
-            if lang == 'en':
-                terms[ item[ 'ID' ] ] = item[ 'EN' ]
-            else:
-                terms[ item[ 'ID' ] ] = item[ 'RUS' ]
-    
-    #logging.debug( "topic: %s, topic_name: %s" % ( topic, topic_name ) )
-    vocab_regs_terms[ "terms" ] = terms
-    
+        if len( ter_codes ) == 0:
+            ter_codes = params.get( "ter_codes" )
+        vocab_regs_terms[ "ter_codes" ] = ter_codes
+        
+        db_vocabulary = clientcache.get_database( 'vocabulary' )   # vocabulary
+        
+        # create sheet_header
+        # load terms
+        terms_needed  = [ "na", "base_year", "count", "datatype", "value_unit" ]
+        if hist_mod == 'h':     # historical
+            terms_needed += [ "histclass1", "histclass2", "histclass3", "histclass4", "histclass5", "histclass6", "histclass7", "histclass8", "histclass9", "histclass10" ]
+        elif hist_mod == 'm':   # modern
+            terms_needed += [ "class1", "class2", "class3", "class4", "class5", "class6", "class7", "class8", "class9", "class10" ]
+        
+        terms = {}
+        vocab_download = db_vocabulary.data.find( { "vocabulary": "ERRHS_Vocabulary_download" } )
+        
+        for item in vocab_download:
+            #logging.debug( str( item ) )
+            ID = item[ 'ID' ]
+            #logging.debug( "%s %s" % ( topic, ID ) )
+            if ID == topic:
+                if lang == 'en':
+                    topic_name = item[ 'EN' ]
+                else:
+                    topic_name = item[ 'RUS' ]
+            
+            if ID in terms_needed:
+                if lang == 'en':
+                    terms[ item[ 'ID' ] ] = item[ 'EN' ]
+                else:
+                    terms[ item[ 'ID' ] ] = item[ 'RUS' ]
+        
+        #logging.debug( "topic: %s, topic_name: %s" % ( topic, topic_name ) )
+        vocab_regs_terms[ "terms" ] = terms
+        
     if lang == 'en':
         if hist_mod == 'h':
             classification = "HISTORICAL"
@@ -302,24 +287,27 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
     db_vocabulary = clientcache.get_database( 'vocabulary' )   # vocabulary
     
     logging.debug( "params: %s, %s" % ( params, type( params ) ) )
-    for k in params:
-        logging.debug( "key: %s, value: %s" % ( k, params[ k ] ) )
+    if params:
+        for k in params:
+            logging.debug( "key: %s, value: %s" % ( k, params[ k ] ) )
     
-    try:
-        ter_code_list = params[ "ter_codes" ]
-    except:
-        ter_code_list = []
+        try:
+            ter_code_list = params[ "ter_codes" ]
+        except:
+            ter_code_list = []
     
-    logging.debug( "ter_code_list: %s, %s" % ( str( ter_code_list ), type( ter_code_list ) ) )
-    
-    try:
-        level_paths = params[ "path" ]
-    except:
-        level_paths = []
-    
-    logging.debug( "# of level paths: %d" % len( level_paths ) )
-    for level_path in level_paths:
-        logging.debug( "level path: %s" % level_path )
+        logging.debug( "ter_code_list: %s, %s" % ( str( ter_code_list ), type( ter_code_list ) ) )
+        
+        try:
+            level_paths = params[ "path" ]
+        except:
+            level_paths = []
+        
+        logging.debug( "# of level paths: %d" % len( level_paths ) )
+        for level_path in level_paths:
+            logging.debug( "level path: %s" % level_path )
+    else:
+        logging.error( "aggregate_dataset() NO params" )
     
     nrecords = []       # number of data records per sheet
     if hist_mod == 'h':
@@ -397,7 +385,10 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         for key in vocab_regs_terms:
             logging.debug( "key: %s" % key )
         
-        na = vocab_regs_terms[ "terms" ][ "na" ]
+        try:
+            na = vocab_regs_terms[ "terms" ][ "na" ]
+        except:
+            na = "na"
         logging.debug( "na: %s" % na )
         
         regions = {}        # key: reg_name, value: reg_code
@@ -467,8 +458,13 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         #for i, item in enumerate( lex_lands_list ):
         #    logging.debug( "%d: item: %s" % ( i, str( sorted( item, key = itemgetter( *classes ) ) ) ) )
         
-        # *classes: unpack classes list as individual variables, to be used as sort keys
-        lex_lands_sorted = sorted( lex_lands_list, key = itemgetter( *classes ) )
+        try:
+            # *classes: unpack classes list as individual variables, to be used as sort keys
+            lex_lands_sorted = sorted( lex_lands_list, key = itemgetter( *classes ) )
+        except:
+            type_, exc_value, tb = sys.exc_info()
+            logging.error( "%s" % exc_value )
+            lex_lands_sorted = []
         
         ndatarows = 0
         nitemchain = 0

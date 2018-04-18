@@ -10,6 +10,7 @@ FL-06-Mar-2018 reorder sql_query building
 FL-26-Mar-2018 handle dataverse connection failure
 FL-04-Apr-2018 rebuilt postgres query
 FL-17-Apr-2018 group pg items by identifier
+FL-18-Apr-2018 BSON DocumentTooLarge
 
 def get_configparser():
 def get_connection():
@@ -538,6 +539,18 @@ def json_cache( entry_list, language, json_dataname, download_key, params = {} )
         logging.error( "caching with key %s failed:" % download_key )
         type_, exc_value, tb = sys.exc_info()
         logging.error( "%s" % exc_value )
+        
+        exc_value_str = repr( exc_value )
+        
+        if exc_value_str.startswith( "DocumentTooLarge" ):   # use GridFS
+            logging.error( "DocumentTooLarge" )
+            json_hash = {}
+            json_hash[ "key" ] = download_key
+            json_hash[ "params" ] = params
+            json_hash[ "msg" ] = exc_value_str
+            json_string = json.dumps( json_hash, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
+        else:
+            logging.error( "%s" % exc_value_str )
     
     logging.debug( "stop: %s" % datetime.datetime.now() )
     str_elapsed = format_secs( time() - time0 )
@@ -2469,6 +2482,7 @@ def aggregation():
     logging.info( "%d path_dicts in path_lists" % nlists )
     
     json_string = str( "{}" )
+    cache_except = None
     
     if classification == "historical":
         # historical classification  has base_year from qinput
@@ -2653,6 +2667,8 @@ def aggregation():
     logging.debug( "stop: %s" % datetime.datetime.now() )
     str_elapsed = format_secs( time() - time0 )
     logging.info( "aggregation took %s" % str_elapsed )
+    
+    
     
     return Response( json_string, mimetype = "application/json; charset=utf-8" )
 
