@@ -3,7 +3,9 @@
 
 # VT-07-Jul-2016 Latest change by VT
 # FL-18-Apr-2018 handle None cursor
+# FL-24-Apr-2018 GridFS
 
+import gridfs
 import json
 import logging
 import openpyxl
@@ -23,7 +25,7 @@ from openpyxl.styles import Alignment
 from openpyxl.utils import get_column_letter
 
 
-def preprocessor( datafilter ):
+def preprocessor( use_gridfs, datafilter ):
     logging.debug( "preprocessor() datafilter: %s" % datafilter )
     
     lex_lands        = {}
@@ -52,16 +54,27 @@ def preprocessor( datafilter ):
         topic = key_comps[ 2 ]
     
     clientcache = MongoClient()
-    db_datacache = clientcache.get_database( 'datacache' )
-    
-    logging.debug( "db_datacache.data.find with key: %s" % key )
-    cursor = db_datacache.data.find_one( { "key": key } )
+    db_cache = clientcache.get_database( 'datacache' )
+    logging.debug( "find cached data with key: %s" % key )
     
     cache_data = {}
-    if cursor:
-        cache_data = dict ( cursor )
+    if use_gridfs:
+        fs_cache = gridfs.GridFS( db_cache )
+        grid_out = fs_cache.find_one( { "key": str( key ) } )
+        logging.debug( "type: %s" % type( grid_out ) )
+        if grid_out:
+            result_str = grid_out.read()
+            result_str = grid_out.get(  )
+            result = json.loads( result_str )
+            cache_data = dict ( result )
+        else:
+            logging.error( "preprocessor() no result data for key: %s" % key )
     else:
-        logging.error( "preprocessor() no cursor data for key: %s" % key )
+        cursor = db_cache.data.find_one( { "key": key } )
+        if cursor:
+            cache_data = dict ( cursor )
+        else:
+            logging.error( "preprocessor() no cursor data for key: %s" % key )
     
     logging.debug( "# keys in cache_data: %s" % len( cache_data.keys() ) )
     for key, value in cache_data.iteritems():
@@ -279,9 +292,10 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
         return xlsx_pathname, ""
     
     clientcache = MongoClient()
-    db_datacache = clientcache.get_database( 'datacache' )
-    logging.debug( "db_datacache.data.find with key: %s" % key )
-    #result = db_datacache.data.find( { "key": key } )
+    db_cache = clientcache.get_database( 'datacache' )
+    
+    logging.debug( "find cached data with key: %s" % key )
+    #result = db_cache.data.find( { "key": key } )
     #logging.info( "aggregate_dataset() length of cached dict: %d for key: %s" % ( len( result ), key ) )
     
     db_vocabulary = clientcache.get_database( 'vocabulary' )   # vocabulary

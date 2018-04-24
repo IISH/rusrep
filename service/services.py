@@ -10,7 +10,7 @@ FL-06-Mar-2018 reorder sql_query building
 FL-26-Mar-2018 handle dataverse connection failure
 FL-04-Apr-2018 rebuilt postgres query
 FL-17-Apr-2018 group pg items by identifier
-FL-18-Apr-2018 BSON DocumentTooLarge
+FL-24-Apr-2018 GridFS for large BSON
 
 def get_configparser():
 def get_connection():
@@ -74,6 +74,7 @@ import ConfigParser
 import copy
 import csv
 import datetime
+import gridfs
 import json
 import logging
 import os
@@ -111,11 +112,14 @@ from configutils import DataFilter
 
 sys.path.insert( 0, os.path.abspath( os.path.join( os.path.dirname( "__file__" ), "./" ) ) )
 
+use_gridfs = False
+
 forbidden = [ "classification", "action", "language", "path" ]
 vocab_debug = False
 
 #do_translate = True
 #do_translate = False   # read from English db for language = "en"
+
 
 def get_configparser():
     RUSSIANREPO_CONFIG_PATH = os.environ[ "RUSSIANREPO_CONFIG_PATH" ]
@@ -280,23 +284,23 @@ def group_levels( path_list ):
         elif nkeys == 5:    # now 4, subclasses has been dropped
             path_list5.append( path )
             
-    logging.info( "path_list1: %d" % len( path_list1 ) )
+    logging.info( "path_list1: %d entries with 1 indicator key" % len( path_list1 ) )
     for p, path in enumerate( path_list1 ):
         logging.info( "%d: %s" % ( p+1, str( path ) ) )
     
-    logging.info( "path_list2: %d" % len( path_list2 ) )
+    logging.info( "path_list2: %d entries with 2 indicator keys" % len( path_list2 ) )
     for p, path in enumerate( path_list2 ):
         logging.info( "%d: %s" % ( p+1, str( path ) ) )
     
-    logging.info( "path_list3: %d" % len( path_list3 ) )
+    logging.info( "path_list3: %d entries with 3 indicator keys" % len( path_list3 ) )
     for p, path in enumerate( path_list3 ):
         logging.info( "%d: %s" % ( p+1, str( path ) ) )
     
-    logging.info( "path_list4: %d" % len( path_list4 ) )
+    logging.info( "path_list4: %d entries with 4 indicator keys" % len( path_list4 ) )
     for p, path in enumerate( path_list4 ):
         logging.info( "%d: %s" % ( p+1, str( path ) ) )
     
-    logging.info( "path_list5: %d" % len( path_list5 ) )
+    logging.info( "path_list5: %d entries with 5 indicator keys" % len( path_list5 ) )
     for p, path in enumerate( path_list5 ):
         logging.info( "%d: %s" % ( p+1, str( path ) ) )
     
@@ -532,10 +536,17 @@ def json_cache( entry_list, language, json_dataname, download_key, params = {} )
             else:
                 logging.debug( "key %s: value type: %s" % ( key, type( value ) ) )
         
-        logging.debug( "dbcache.data.insert with key: %s" % download_key )
+        logging.debug( "cache data with key: %s" % download_key )
         clientcache = MongoClient()
-        dbcache = clientcache.get_database( "datacache" )
-        result = dbcache.data.insert( cache_data )
+        db_cache = clientcache.get_database( "datacache" )
+        
+        if use_gridfs:
+            json_string = json.dumps( cache_data, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
+            fs_cache = gridfs.GridFS( db_cache )
+            result = fs_cache.put( json_string, encoding = "utf8" )
+        else:
+            result = db_cache.data.insert( cache_data )
+        
     except:
         logging.error( "caching with key %s failed:" % download_key )
         type_, exc_value, tb = sys.exc_info()
@@ -2486,8 +2497,8 @@ def aggregation():
     else:
         base_year = str( base_year )
     
-    group_tercodes = True   # group ter_codes with total values per unique path + unit_value
-    #group_tercodes = False  # default situation
+    #group_tercodes = True   # group ter_codes with total values per unique path + unit_value
+    group_tercodes = False  # default situation
     
     params = {
         "language"       : language,
@@ -2511,7 +2522,7 @@ def aggregation():
     # split input path in subgroups with the same key length
     path_lists = group_levels( path )       # input path WITH subclasses parameter, NOT path_stripped
     nlists = len( path_lists )
-    logging.info( "%d path_dicts in path_lists" % nlists )
+    logging.info( "input path split in %d subgroups of the same number of keys per subgroup" % nlists )
     
     json_string = str( "{}" )
     cache_except = None
@@ -2539,10 +2550,10 @@ def aggregation():
         #logging.info( "%d path_dicts in path_lists" % nlists )
         
         for pd, path_dict in enumerate( path_lists, start = 1 ):
-            logging.info( "path_list %d-of-%d" % ( pd, nlists ) )
-            
-            show_path_dict( path_dict )
             path_list = path_dict[ "path_list" ]
+            logging.info( "" )
+            logging.info( "path subgroup %d-of-%d, %d different paths of length %d" % ( pd, nlists, len( path_list ), len( path_list[ 0 ].keys() ) ) )
+            show_path_dict( path_dict )
             add_subclasses = path_dict[ "subclasses" ]
             
             params[      "path" ] = path_list		# default query
@@ -2983,13 +2994,13 @@ def filecatalogdata():
     
     logging.debug( "language: %s" % language )
     
-    handle_names = [ 
+    handle_names = [                # per 2018.04.23
         "hdl_errhs_population",     # ERRHS_1   39 files
-        "hdl_errhs_labour",         # ERRHS_2
-        "hdl_errhs_industry",       # ERRHS_3
+        "hdl_errhs_labour",         # ERRHS_2    5 files
+        "hdl_errhs_industry",       # ERRHS_3    0 files
         "hdl_errhs_agriculture",    # ERRHS_4   10 files
-        "hdl_errhs_services",       # ERRHS_5
-        "hdl_errhs_capital",        # ERRHS_6
+        "hdl_errhs_services",       # ERRHS_5    0 files
+        "hdl_errhs_capital",        # ERRHS_6    0 files
         "hdl_errhs_land"            # ERRHS_7   10 files
     ]
     
@@ -3129,7 +3140,7 @@ def download():
         return Response( data, mimetype = filetype )
     
     key = request.args.get( "key" )
-    logging.debug( "key: %s" % key )
+    logging.debug( "download() key: %s" % key )
     
     if key:
         zipping = True
@@ -3141,12 +3152,10 @@ def download():
         logging.debug( "top_download_dir: %s" % top_download_dir )
         cleanup_downloads( top_download_dir, time_limit )       # remove too old downloads
         download_dir = os.path.join( top_download_dir, key )    # current download dir
-    
-        logging.debug( "download() key: %s" % key )
-        clientcache = MongoClient()
+        
         datafilter = {}
         datafilter[ "key" ] = key
-        ( lex_lands, vocab_regs_terms, sheet_header, topic_name, qinput ) = preprocessor( datafilter )
+        ( lex_lands, vocab_regs_terms, sheet_header, topic_name, qinput ) = preprocessor( use_gridfs, datafilter )
         
         xlsx_name = "%s.xlsx" % key
         pathname, msg = aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header, topic_name, qinput )
@@ -3231,8 +3240,15 @@ def download():
             memory_file.seek( 0 )
             return send_file( memory_file, attachment_filename = zip_filename, as_attachment = True )
         
-        dbcache = clientcache.get_database( "datacache" )
-        result = dbcache.data.find( { "key": str( request.args.get( "key" ) ) } )
+        clientcache = MongoClient()
+        db_cache = clientcache.get_database( "datacache" )
+        
+        if use_gridfs:
+            result = db_cache.data.find( { "key": str( request.args.get( "key" ) ) } )
+        else:
+            fs_cache = gridfs.GridFS( db_cache )
+            result_str = fs_cache.find( { "key": str( key ) } )
+            result = json.loads( result_str )
         
         for item in result:
             del item[ "key" ]
