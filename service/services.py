@@ -10,7 +10,7 @@ FL-06-Mar-2018 reorder sql_query building
 FL-26-Mar-2018 handle dataverse connection failure
 FL-04-Apr-2018 rebuilt postgres query
 FL-17-Apr-2018 group pg items by identifier
-FL-24-Apr-2018 GridFS for large BSON
+FL-01-May-2018 GridFS for large BSON
 
 def get_configparser():
 def get_connection():
@@ -99,7 +99,6 @@ from flask import Flask, jsonify, Response, request, send_from_directory, send_f
 from jsonmerge import merge
 from operator import itemgetter
 from pymongo import MongoClient
-#from rdflib import Graph, Literal, term
 from socket import gethostname
 from StringIO import StringIO
 from sys import exc_info
@@ -112,7 +111,7 @@ from configutils import DataFilter
 
 sys.path.insert( 0, os.path.abspath( os.path.join( os.path.dirname( "__file__" ), "./" ) ) )
 
-use_gridfs = False
+use_gridfs = True
 
 forbidden = [ "classification", "action", "language", "path" ]
 vocab_debug = False
@@ -421,7 +420,7 @@ def json_generator( params, sql_names, json_dataname, data, qkey_set = None ):
         
         ( path, output ) = class_collector( data_keys, key_set )
         output[ "path" ] = path
-        output[ "etype" ] = etype
+        #output[ "etype" ] = etype
         
         entry_list.append( output )
     
@@ -541,9 +540,13 @@ def json_cache( entry_list, language, json_dataname, download_key, params = {} )
         db_cache = clientcache.get_database( "datacache" )
         
         if use_gridfs:
-            json_string = json.dumps( cache_data, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
+            json_str = json.dumps( cache_data, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
             fs_cache = gridfs.GridFS( db_cache )
-            result = fs_cache.put( json_string, encoding = "utf8" )
+            gridfs_id = fs_cache.put( json_str, encoding = "utf8", _id = download_key )
+            if gridfs_id != download_key:
+                logging.error( "gridfs key: %s" % gridfs_id )
+            else:
+                logging.debug( "gridfs key: %s" % gridfs_id )
         else:
             result = db_cache.data.insert( cache_data )
         
@@ -574,7 +577,7 @@ def json_cache( entry_list, language, json_dataname, download_key, params = {} )
 
 def collect_docs( qinput, download_dir, download_key ):
     # collect the accompanying docs in the download dir
-    logging.info( "collect_docs() %s" % download_key )
+    logging.info( "collect_docs() key = %s, dir = %s" % ( download_key, download_dir ) )
     
     for key in qinput:
         logging.debug( "key: %s, value: %s" % ( key, qinput[ key ] ) )
@@ -2509,8 +2512,10 @@ def aggregation():
         "group_tercodes" : group_tercodes
     }
     
-    download_key = str( uuid.uuid4() )
-    download_key = "%s-%s-%s-%s-%s" % ( language, classification[ 0 ], datatype, base_year, download_key[ 2: ] )
+    uuid4 = str( uuid.uuid4() )
+    logging.debug( "uuid4: %s" % uuid4 )
+    download_key = "%s-%s-%s-%s-%s" % ( language, classification[ 0 ], datatype, base_year, uuid4 )
+    #download_key = "%s-%s-%s-%s=%s" % ( language, classification[ 0 ], datatype, base_year, uuid4 )
     logging.debug( "download_key: %s" % download_key )
     
     configparser = get_configparser()
@@ -2625,9 +2630,6 @@ def aggregation():
         if cache_except is not None:
             logging.error( "caching of aggregation data failed" )
             logging.error( "length of json string: %d" % len( json_string ) )
-            # try to show the error in download sheet
-            #entry_list_ = [ { "cache_except" : cache_except } ]
-            #json_string, cache_except = json_cache( entry_list_, language, "data", download_key, params )
         
         logging.debug( "aggregated json_string: \n%s" % json_string )
         
@@ -2669,8 +2671,8 @@ def aggregation():
                 params_none[ "path" ] = path_list
                 
                 # only for debugging
-                params_ntc[  "etype" ] = "ntc"
-                params_none[ "etype" ] = "none"
+                #params_ntc[  "etype" ] = "ntc"
+                #params_none[ "etype" ] = "none"
                 
                 show_params( "params -1- = entry_list_ntc", params_ntc )
                 #old_query_ntc, eng_data_ntc = aggregate_year( params_ntc, add_subclasses, value_total = True, value_numerical = True )
@@ -2710,6 +2712,9 @@ def aggregation():
         
         logging.debug( "aggregated json_string: \n%s" % json_string )
         
+        download_dir = os.path.join( tmp_dir, "download", download_key )
+        if not os.path.exists( download_dir ):
+            os.makedirs( download_dir )
         collect_docs( params, download_dir, download_key )  # collect doc files in download dir
     
     logging.debug( "stop: %s" % datetime.datetime.now() )
@@ -3109,7 +3114,6 @@ def filecatalogget():
 
 
 
-# Still in use?
 @app.route( "/download" )
 def download():
     logging.debug( "/download %s" % request.args )
@@ -3155,10 +3159,10 @@ def download():
         
         datafilter = {}
         datafilter[ "key" ] = key
-        ( lex_lands, vocab_regs_terms, sheet_header, topic_name, qinput ) = preprocessor( use_gridfs, datafilter )
+        lex_lands, vocab_regs_terms, sheet_header, topic_name, params = preprocessor( use_gridfs, datafilter )
         
         xlsx_name = "%s.xlsx" % key
-        pathname, msg = aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header, topic_name, qinput )
+        pathname, msg = aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header, topic_name, params )
         if os.path.isfile( pathname ):
             logging.debug( "pathname: %s" % pathname )
         else:
@@ -3244,11 +3248,11 @@ def download():
         db_cache = clientcache.get_database( "datacache" )
         
         if use_gridfs:
-            result = db_cache.data.find( { "key": str( request.args.get( "key" ) ) } )
-        else:
             fs_cache = gridfs.GridFS( db_cache )
-            result_str = fs_cache.find( { "key": str( key ) } )
+            result_str = fs_cache.get( str( key ) ).read()
             result = json.loads( result_str )
+        else:
+            result = db_cache.data.find( { "key": str( request.args.get( "key" ) ) } )
         
         for item in result:
             del item[ "key" ]

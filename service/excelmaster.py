@@ -60,15 +60,8 @@ def preprocessor( use_gridfs, datafilter ):
     cache_data = {}
     if use_gridfs:
         fs_cache = gridfs.GridFS( db_cache )
-        grid_out = fs_cache.find_one( { "key": str( key ) } )
-        logging.debug( "type: %s" % type( grid_out ) )
-        if grid_out:
-            result_str = grid_out.read()
-            result_str = grid_out.get(  )
-            result = json.loads( result_str )
-            cache_data = dict ( result )
-        else:
-            logging.error( "preprocessor() no result data for key: %s" % key )
+        result_str = fs_cache.get( str( key ) ).read()
+        cache_data = json.loads( result_str )
     else:
         cursor = db_cache.data.find_one( { "key": key } )
         if cursor:
@@ -92,6 +85,8 @@ def preprocessor( use_gridfs, datafilter ):
         logging.debug( "# of keys in params: %d" % nkeys )
         for key, value in params.iteritems():
             logging.debug( "key %s: value: %s" % ( key, value ) )
+    else:
+        logging.error( "No params in data cache" )
     
     data = cache_data.get( "data" )
     
@@ -231,8 +226,7 @@ def preprocessor( use_gridfs, datafilter ):
     logging.debug( "preprocessor (%d) vocab_regs_terms: %s" % ( len( vocab_regs_terms ), str( vocab_regs_terms ) ) )
     logging.debug( "preprocessor (%d) sheet_header: %s"     % ( len( sheet_header ),     str( sheet_header ) ) )
     
-    #return ( lex_lands, vocab_regs_terms, sheet_header, topic_name, qinput )
-    return ( lex_lands, vocab_regs_terms, sheet_header, topic_name, params )
+    return lex_lands, vocab_regs_terms, sheet_header, topic_name, params
 
 
 
@@ -294,7 +288,7 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
     clientcache = MongoClient()
     db_cache = clientcache.get_database( 'datacache' )
     
-    logging.debug( "find cached data with key: %s" % key )
+    #logging.debug( "find cached data with key: %s" % key )
     #result = db_cache.data.find( { "key": key } )
     #logging.info( "aggregate_dataset() length of cached dict: %d for key: %s" % ( len( result ), key ) )
     
@@ -658,6 +652,7 @@ def aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms
             # display region names sorted alphabetically
             column = max_columns
             num_regions = len( sorted_regions )
+            logging.debug( "number of sorted regions: %d" % num_regions )
             for idx, ter_name in enumerate( sorted_regions ):
                 ter_code = regions[ ter_name ]
                 if ter_code in ter_data:
