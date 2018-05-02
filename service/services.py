@@ -9,6 +9,8 @@ FL-06-Feb-2018 reordering optional
 FL-06-Mar-2018 reorder sql_query building
 FL-26-Mar-2018 handle dataverse connection failure
 FL-04-Apr-2018 rebuilt postgres query
+FL-17-Apr-2018 group pg items by identifier
+FL-01-May-2018 GridFS for large BSON
 
 def get_configparser():
 def get_connection():
@@ -35,6 +37,7 @@ def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
 def aggregate_year( params, add_subclasses, value_total = True, value_numerical = True  ):
 def execute_year( params, sql_query, key_set, eng_data ):
 def add_unique_items( language, list_name, entry_list_collect, entry_list_none ):
+def add_unique_items_grouped( language, dict_name, entry_dict_collect, entry_dict_none )
 def remove_dups( entry_list_collect ):
 def sort_entries( entry_list_nodups ):
 #def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None)
@@ -71,6 +74,7 @@ import ConfigParser
 import copy
 import csv
 import datetime
+import gridfs
 import json
 import logging
 import os
@@ -95,7 +99,6 @@ from flask import Flask, jsonify, Response, request, send_from_directory, send_f
 from jsonmerge import merge
 from operator import itemgetter
 from pymongo import MongoClient
-#from rdflib import Graph, Literal, term
 from socket import gethostname
 from StringIO import StringIO
 from sys import exc_info
@@ -108,11 +111,14 @@ from configutils import DataFilter
 
 sys.path.insert( 0, os.path.abspath( os.path.join( os.path.dirname( "__file__" ), "./" ) ) )
 
+use_gridfs = True
+
 forbidden = [ "classification", "action", "language", "path" ]
 vocab_debug = False
 
 #do_translate = True
 #do_translate = False   # read from English db for language = "en"
+
 
 def get_configparser():
     RUSSIANREPO_CONFIG_PATH = os.environ[ "RUSSIANREPO_CONFIG_PATH" ]
@@ -277,23 +283,23 @@ def group_levels( path_list ):
         elif nkeys == 5:    # now 4, subclasses has been dropped
             path_list5.append( path )
             
-    logging.info( "path_list1: %d" % len( path_list1 ) )
+    logging.info( "path_list1: %d entries with 1 indicator key" % len( path_list1 ) )
     for p, path in enumerate( path_list1 ):
         logging.info( "%d: %s" % ( p+1, str( path ) ) )
     
-    logging.info( "path_list2: %d" % len( path_list2 ) )
+    logging.info( "path_list2: %d entries with 2 indicator keys" % len( path_list2 ) )
     for p, path in enumerate( path_list2 ):
         logging.info( "%d: %s" % ( p+1, str( path ) ) )
     
-    logging.info( "path_list3: %d" % len( path_list3 ) )
+    logging.info( "path_list3: %d entries with 3 indicator keys" % len( path_list3 ) )
     for p, path in enumerate( path_list3 ):
         logging.info( "%d: %s" % ( p+1, str( path ) ) )
     
-    logging.info( "path_list4: %d" % len( path_list4 ) )
+    logging.info( "path_list4: %d entries with 4 indicator keys" % len( path_list4 ) )
     for p, path in enumerate( path_list4 ):
         logging.info( "%d: %s" % ( p+1, str( path ) ) )
     
-    logging.info( "path_list5: %d" % len( path_list5 ) )
+    logging.info( "path_list5: %d entries with 5 indicator keys" % len( path_list5 ) )
     for p, path in enumerate( path_list5 ):
         logging.info( "%d: %s" % ( p+1, str( path ) ) )
     
@@ -414,7 +420,7 @@ def json_generator( params, sql_names, json_dataname, data, qkey_set = None ):
         
         ( path, output ) = class_collector( data_keys, key_set )
         output[ "path" ] = path
-        output[ "etype" ] = etype
+        #output[ "etype" ] = etype
         
         entry_list.append( output )
     
@@ -529,14 +535,37 @@ def json_cache( entry_list, language, json_dataname, download_key, params = {} )
             else:
                 logging.debug( "key %s: value type: %s" % ( key, type( value ) ) )
         
-        logging.debug( "dbcache.data.insert with key: %s" % download_key )
+        logging.debug( "cache data with key: %s" % download_key )
         clientcache = MongoClient()
-        dbcache = clientcache.get_database( "datacache" )
-        result = dbcache.data.insert( cache_data )
+        db_cache = clientcache.get_database( "datacache" )
+        
+        if use_gridfs:
+            json_str = json.dumps( cache_data, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
+            fs_cache = gridfs.GridFS( db_cache )
+            gridfs_id = fs_cache.put( json_str, encoding = "utf8", _id = download_key )
+            if gridfs_id != download_key:
+                logging.error( "gridfs key: %s" % gridfs_id )
+            else:
+                logging.debug( "gridfs key: %s" % gridfs_id )
+        else:
+            result = db_cache.data.insert( cache_data )
+        
     except:
         logging.error( "caching with key %s failed:" % download_key )
         type_, exc_value, tb = sys.exc_info()
         logging.error( "%s" % exc_value )
+        
+        exc_value_str = repr( exc_value )
+        
+        if exc_value_str.startswith( "DocumentTooLarge" ):   # use GridFS
+            logging.error( "DocumentTooLarge" )
+            json_hash = {}
+            json_hash[ "key" ] = download_key
+            json_hash[ "params" ] = params
+            json_hash[ "msg" ] = exc_value_str
+            json_string = json.dumps( json_hash, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
+        else:
+            logging.error( "%s" % exc_value_str )
     
     logging.debug( "stop: %s" % datetime.datetime.now() )
     str_elapsed = format_secs( time() - time0 )
@@ -548,7 +577,7 @@ def json_cache( entry_list, language, json_dataname, download_key, params = {} )
 
 def collect_docs( qinput, download_dir, download_key ):
     # collect the accompanying docs in the download dir
-    logging.info( "collect_docs() %s" % download_key )
+    logging.info( "collect_docs() key = %s, dir = %s" % ( download_key, download_dir ) )
     
     for key in qinput:
         logging.debug( "key: %s, value: %s" % ( key, qinput[ key ] ) )
@@ -586,8 +615,8 @@ def collect_docs( qinput, download_dir, download_key ):
                 get_list.append( doc )
             
             if classification == "historical":                  # only base_year docs
-                if doc.find( "NACE 1.1_Classification") != -1 and datatype0 in [ "3", "4", "5"]:
-                    get_list.append( doc )
+                #if doc.find( "NACE 1.1_Classification") != -1 and datatype0 in [ "3", "4", "5"]:
+                #    get_list.append( doc )
                 
                 base_year = qinput.get( "base_year" )
                 if doc.find( str( base_year ) ) != -1:          # base_year
@@ -598,7 +627,7 @@ def collect_docs( qinput, download_dir, download_key ):
                         get_list.append( doc )
             
             elif classification == "modern":                    # modern: most lang docs
-                if doc.find( "NACE 1.1_Classification") != -1 and datatype0 in [ "3", "4", "5"]:
+                if doc.find( "NACE 1.1_Classification") != -1 and ( datatype == "2.03" or datatype0 in [ "3", "4", "5"] ):
                     get_list.append( doc )
                 
                 if doc.find( "GovReports" ) != -1:              # string
@@ -1526,8 +1555,6 @@ def execute_year( params, sql_query, key_set, eng_data = {} ):
     time0 = time()      # seconds since the epoch
     logging.debug( "query execute start: %s" % datetime.datetime.now() )
     
-    entry_list = []
-    
     connection = get_connection()
     cursor = connection.cursor()
     query = cursor.mogrify( sql_query )     # needed if single quote has been escaped by repeating it
@@ -1625,10 +1652,14 @@ def add_unique_items( language, list_name, entry_list_collect, entry_list_extra 
         else:
             if list_name == "entry_list_none":
                 for entry_collect in entry_list_collect:
-                    path_collect     = entry_collect.get( "path" )
-                    ter_code_collect = entry_collect.get( "ter_code" )
+                    path_collect       = entry_collect.get( "path" )
+                    value_unit_collect = entry_collect.get( "value_unit" )
+                    ter_code_collect   = entry_collect.get( "ter_code" )
+                    
+                    value_unit_extra = entry_extra.get( "value_unit" )
                     ter_code_extra   = entry_extra.get( "ter_code" )
-                    if path_extra == path_collect and ter_code_extra == ter_code_collect:
+                    
+                    if path_extra == path_collect and value_unit_extra == value_unit_collect and ter_code_extra == ter_code_collect:
                         #logging.debug( "modify entry_collect: %s" % str( entry_collect ) )
                         entry_list_modify.append( entry_collect )
                         nmodified += 1
@@ -1659,7 +1690,30 @@ def add_unique_items( language, list_name, entry_list_collect, entry_list_extra 
         # add modified entry
         logging.debug( "append to entry_collect: %s" % str( entry_new ) )
         entry_list_collect.append( entry_new )
+    
     return entry_list_collect
+
+
+
+def add_unique_items_grouped( language, dict_name, entry_dict_collect, entry_dict_extra ):
+    # collect unique paths in entry_dict_collect
+    logging.info( "add_unique_items_grouped()" )
+    
+    entry_dict_path_ig = {}
+    """
+    logging.info( "entry_dict_collect: %s, len: %d" % ( type( entry_dict_collect ), len( entry_dict_collect ) ) )
+    for key, value in entry_dict_collect.iteritems():
+        logging.info( "key: %s\nvalue: %s" % ( key, value ) )
+    """
+
+    logging.info( "entry_dict_extra: %s, len: %d"  % ( type( entry_dict_extra ), len( entry_dict_extra ) ) )
+    for key, entry_extra in entry_dict_extra.iteritems():
+        logging.info( "key: %s\nentry_extra: %s" % ( key, entry_extra ) )
+        entry_collect = entry_dict_collect.get( key )
+        if entry_collect:
+            logging.info( "merge key: %s\nentry_extra: %s\nentry_collect: %s" % ( key, entry_extra, entry_collect ) )
+    
+    return entry_dict_path_ig
 
 
 
@@ -2446,16 +2500,22 @@ def aggregation():
     else:
         base_year = str( base_year )
     
+    #group_tercodes = True   # group ter_codes with total values per unique path + unit_value
+    group_tercodes = False  # default situation
+    
     params = {
         "language"       : language,
         "datatype"       : datatype,
         "classification" : classification,
         #"path"           : path_stripped,      # loop over subpaths of equal length
-        "add_subclasses" : add_subclasses  
+        "add_subclasses" : add_subclasses,
+        "group_tercodes" : group_tercodes
     }
     
-    download_key = str( uuid.uuid4() )
-    download_key = "%s-%s-%s-%s-%s" % ( language, classification[ 0 ], datatype, base_year, download_key[ 2: ] )
+    uuid4 = str( uuid.uuid4() )
+    logging.debug( "uuid4: %s" % uuid4 )
+    download_key = "%s-%s-%s-%s-%s" % ( language, classification[ 0 ], datatype, base_year, uuid4 )
+    #download_key = "%s-%s-%s-%s=%s" % ( language, classification[ 0 ], datatype, base_year, uuid4 )
     logging.debug( "download_key: %s" % download_key )
     
     configparser = get_configparser()
@@ -2467,9 +2527,10 @@ def aggregation():
     # split input path in subgroups with the same key length
     path_lists = group_levels( path )       # input path WITH subclasses parameter, NOT path_stripped
     nlists = len( path_lists )
-    logging.info( "%d path_dicts in path_lists" % nlists )
+    logging.info( "input path split in %d subgroups of the same number of keys per subgroup" % nlists )
     
     json_string = str( "{}" )
+    cache_except = None
     
     if classification == "historical":
         # historical classification  has base_year from qinput
@@ -2494,10 +2555,10 @@ def aggregation():
         #logging.info( "%d path_dicts in path_lists" % nlists )
         
         for pd, path_dict in enumerate( path_lists, start = 1 ):
-            logging.info( "path_list %d-of-%d" % ( pd, nlists ) )
-            
-            show_path_dict( path_dict )
             path_list = path_dict[ "path_list" ]
+            logging.info( "" )
+            logging.info( "path subgroup %d-of-%d, %d different paths of length %d" % ( pd, nlists, len( path_list ), len( path_list[ 0 ].keys() ) ) )
+            show_path_dict( path_dict )
             add_subclasses = path_dict[ "subclasses" ]
             
             params[      "path" ] = path_list		# default query
@@ -2517,6 +2578,8 @@ def aggregation():
             eng_data = {}
             entry_list = execute_year( params, sql_query, key_set, eng_data )
             show_entries( "params -1- = entry_list", entry_list )
+            if group_tercodes:
+                entry_dict_ig = group_by_ident( entry_list )
             
             #logging.info( "-2- = entry_list_ntc" )
             entry_list_ntc = []
@@ -2529,6 +2592,8 @@ def aggregation():
                 eng_data_ntc = {}
                 entry_list_ntc = execute_year( params_ntc, sql_query_ntc, key_set, eng_data_ntc )
                 show_entries( "params_ntc -2- = entry_list_ntc", entry_list_ntc )
+                if group_tercodes:
+                    entry_dict_ntc_ig = group_by_ident( entry_list_ntc )
             
             #logging.info( "-3- = entry_list_none" )
             show_params( "params -3- = entry_list_none", params_none )
@@ -2538,10 +2603,14 @@ def aggregation():
             eng_data_none = {}
             entry_list_none = execute_year( params_none, sql_query_none, key_set, eng_data_none )
             show_entries( "params -3- = entry_list_none", entry_list_none )
+            if group_tercodes:
+                entry_dict_none_ig = group_by_ident( entry_list_none )
             
             # entry_list_path = entry_list + entry_list_ntc
             logging.info( "add_unique_ntcs()" )
             entry_list_path = add_unique_items( language, "entry_list_ntc", entry_list, entry_list_ntc )
+            if group_tercodes:
+                entry_list_path_ig = add_unique_items_grouped( language, "entry_dict_ntc", entry_dict_ig, entry_dict_ntc_ig )
             
             # entry_list_collect = entry_list_path + entry_list_none
             logging.info( "add_unique_nones()" )
@@ -2561,9 +2630,6 @@ def aggregation():
         if cache_except is not None:
             logging.error( "caching of aggregation data failed" )
             logging.error( "length of json string: %d" % len( json_string ) )
-            # try to show the error in download sheet
-            #entry_list_ = [ { "cache_except" : cache_except } ]
-            #json_string, cache_except = json_cache( entry_list_, language, "data", download_key, params )
         
         logging.debug( "aggregated json_string: \n%s" % json_string )
         
@@ -2605,14 +2671,15 @@ def aggregation():
                 params_none[ "path" ] = path_list
                 
                 # only for debugging
-                params_ntc[  "etype" ] = "ntc"
-                params_none[ "etype" ] = "none"
+                #params_ntc[  "etype" ] = "ntc"
+                #params_none[ "etype" ] = "none"
                 
                 show_params( "params -1- = entry_list_ntc", params_ntc )
                 #old_query_ntc, eng_data_ntc = aggregate_year( params_ntc, add_subclasses, value_total = True, value_numerical = True )
                 sql_query_ntc = make_query( "ntc", params_ntc, add_subclasses, value_total = True, value_numerical = True )
                 eng_data_ntc = {}
                 entry_list_ntc = execute_year( params_ntc, sql_query_ntc, key_set, eng_data_ntc )
+                #entry_dict_ntc_ig = group_by_ident( entry_list_ntc )
                 show_entries( "params -1- = entry_list_ntc", entry_list_ntc )
                 
                 show_params( "params -2- = entry_list_none", params_none )
@@ -2620,6 +2687,7 @@ def aggregation():
                 sql_query_none = make_query( "none", params_none, add_subclasses, value_total = False, value_numerical = False )   # non-numbers
                 eng_data_none = {}
                 entry_list_none = execute_year( params_none, sql_query_none, key_set, eng_data_none )
+                #entry_dict_none_ig = group_by_ident( entry_list_none )
                 show_entries( "params -2- = entry_list_none", entry_list_none )
                 
                 # entry_list_year = entry_list_ntc + entry_list_none
@@ -2644,13 +2712,75 @@ def aggregation():
         
         logging.debug( "aggregated json_string: \n%s" % json_string )
         
+        download_dir = os.path.join( tmp_dir, "download", download_key )
+        if not os.path.exists( download_dir ):
+            os.makedirs( download_dir )
         collect_docs( params, download_dir, download_key )  # collect doc files in download dir
     
     logging.debug( "stop: %s" % datetime.datetime.now() )
     str_elapsed = format_secs( time() - time0 )
     logging.info( "aggregation took %s" % str_elapsed )
     
+    
+    
     return Response( json_string, mimetype = "application/json; charset=utf-8" )
+
+
+
+def make_identifier( path, value_unit ):
+    
+    # ordered dict, sorted by keys
+    ident_dict = collections.OrderedDict( sorted( path.items(), key = lambda t: t [ 0 ] ) )
+    ident_dict[ "value_unit" ] = value_unit
+
+    # identifier must be immutable
+    #identifier = frozenset( ident_dict.items() )
+    identifier = json.dumps( ident_dict.items(), encoding = "utf-8" )
+    
+    return identifier
+
+
+
+def group_by_ident( entry_list ):
+    logging.info( "group_by_ident()" )
+    
+    table_dict = {}
+    
+    for entry in entry_list:
+        path = entry.get( "path" )
+        value_unit = entry.get( "value_unit" )
+        
+        # ordered dict, sorted by keys
+        ident_dict = collections.OrderedDict( sorted( path.items(), key = lambda t: t [ 0 ] ) )
+        ident_dict[ "value_unit" ] = value_unit
+        
+        # identifier must be immutable
+        #identifier = frozenset( ident_dict.items() )
+        identifier = json.dumps( ident_dict.items(), encoding = "utf-8" )
+        logging.info( "identifier %s " % str( identifier ) )
+        
+        try:
+            line_dict = table_dict[ identifier ]
+            ter_codes = line_dict[ "ter_codes" ]
+        except:
+            line_dict = {}
+            line_dict[ "datatype" ] = entry.get( "datatype" )
+            line_dict[ "base_year" ] = entry.get( "base_year" )
+            line_dict[ "path" ] = path
+            line_dict[ "value_unit" ] = value_unit
+            ter_codes = {}
+        
+        ter_code = entry.get( "ter_code" )
+        total = entry.get( "total" )
+        ter_codes[ ter_code ] = total
+        line_dict[ "ter_codes" ] = ter_codes
+        table_dict[ identifier ] = line_dict
+    
+    logging.info( "%d entries in dict" % len( table_dict ) )
+    for key, value in table_dict.iteritems():
+        logging.info( "key: %s, \nvalue: %s" % ( key, str( value )) )
+    
+    return table_dict
 
 
 
@@ -2685,6 +2815,7 @@ def make_query( msg, params, subclasses, value_total, value_numerical ):
     
     # SELECT
     query  = "SELECT COUNT(*) AS datarecords"
+    
     query += ", COUNT(*) - COUNT(value) AS data_active"
     
     if value_total:
@@ -2762,7 +2893,8 @@ def make_query( msg, params, subclasses, value_total, value_numerical ):
         for k in range( 5, 10 ):
             query += ", %s%d" % ( cls, k )
     
-    query += ", value_unit, ter_code"
+    query += ", value_unit"
+    query += ", ter_code"
     
     # ORDER BY
     query += " ORDER BY datatype, base_year, "
@@ -2867,13 +2999,13 @@ def filecatalogdata():
     
     logging.debug( "language: %s" % language )
     
-    handle_names = [ 
+    handle_names = [                # per 2018.04.23
         "hdl_errhs_population",     # ERRHS_1   39 files
-        "hdl_errhs_labour",         # ERRHS_2
-        "hdl_errhs_industry",       # ERRHS_3
+        "hdl_errhs_labour",         # ERRHS_2    5 files
+        "hdl_errhs_industry",       # ERRHS_3    0 files
         "hdl_errhs_agriculture",    # ERRHS_4   10 files
-        "hdl_errhs_services",       # ERRHS_5
-        "hdl_errhs_capital",        # ERRHS_6
+        "hdl_errhs_services",       # ERRHS_5    0 files
+        "hdl_errhs_capital",        # ERRHS_6    0 files
         "hdl_errhs_land"            # ERRHS_7   10 files
     ]
     
@@ -2982,7 +3114,6 @@ def filecatalogget():
 
 
 
-# Still in use?
 @app.route( "/download" )
 def download():
     logging.debug( "/download %s" % request.args )
@@ -3013,7 +3144,7 @@ def download():
         return Response( data, mimetype = filetype )
     
     key = request.args.get( "key" )
-    logging.debug( "key: %s" % key )
+    logging.debug( "download() key: %s" % key )
     
     if key:
         zipping = True
@@ -3025,15 +3156,13 @@ def download():
         logging.debug( "top_download_dir: %s" % top_download_dir )
         cleanup_downloads( top_download_dir, time_limit )       # remove too old downloads
         download_dir = os.path.join( top_download_dir, key )    # current download dir
-    
-        logging.debug( "download() key: %s" % key )
-        clientcache = MongoClient()
+        
         datafilter = {}
         datafilter[ "key" ] = key
-        ( lex_lands, vocab_regs_terms, sheet_header, topic_name, qinput ) = preprocessor( datafilter )
+        lex_lands, vocab_regs_terms, sheet_header, topic_name, params = preprocessor( use_gridfs, datafilter )
         
         xlsx_name = "%s.xlsx" % key
-        pathname, msg = aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header, topic_name, qinput )
+        pathname, msg = aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header, topic_name, params )
         if os.path.isfile( pathname ):
             logging.debug( "pathname: %s" % pathname )
         else:
@@ -3115,8 +3244,15 @@ def download():
             memory_file.seek( 0 )
             return send_file( memory_file, attachment_filename = zip_filename, as_attachment = True )
         
-        dbcache = clientcache.get_database( "datacache" )
-        result = dbcache.data.find( { "key": str( request.args.get( "key" ) ) } )
+        clientcache = MongoClient()
+        db_cache = clientcache.get_database( "datacache" )
+        
+        if use_gridfs:
+            fs_cache = gridfs.GridFS( db_cache )
+            result_str = fs_cache.get( str( key ) ).read()
+            result = json.loads( result_str )
+        else:
+            result = db_cache.data.find( { "key": str( request.args.get( "key" ) ) } )
         
         for item in result:
             del item[ "key" ]
