@@ -4,6 +4,7 @@
 # VT-07-Jul-2016 Latest change by VT
 # FL-18-Apr-2018 handle None cursor
 # FL-24-Apr-2018 GridFS
+# FL-07-may-2018 Changed
 
 import gridfs
 import json
@@ -26,7 +27,7 @@ from openpyxl.utils import get_column_letter
 
 
 def preprocessor( use_gridfs, datafilter ):
-    logging.debug( "preprocessor() datafilter: %s" % datafilter )
+    logging.info( "preprocessor() datafilter: %s" % datafilter )
     
     lex_lands        = {}
     vocab_regs_terms = {}           # regions and terms
