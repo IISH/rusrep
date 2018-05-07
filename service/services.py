@@ -10,7 +10,7 @@ FL-06-Mar-2018 reorder sql_query building
 FL-26-Mar-2018 handle dataverse connection failure
 FL-04-Apr-2018 rebuilt postgres query
 FL-17-Apr-2018 group pg items by identifier
-FL-01-May-2018 GridFS for large BSON
+FL-07-May-2018 GridFS for large BSON
 
 def get_configparser():
 def get_connection():
@@ -285,23 +285,23 @@ def group_levels( path_list ):
             
     logging.info( "path_list1: %d entries with 1 indicator key" % len( path_list1 ) )
     for p, path in enumerate( path_list1 ):
-        logging.info( "%d: %s" % ( p+1, str( path ) ) )
+        logging.debug( "%d: %s" % ( p+1, str( path ) ) )
     
     logging.info( "path_list2: %d entries with 2 indicator keys" % len( path_list2 ) )
     for p, path in enumerate( path_list2 ):
-        logging.info( "%d: %s" % ( p+1, str( path ) ) )
+        logging.debug( "%d: %s" % ( p+1, str( path ) ) )
     
     logging.info( "path_list3: %d entries with 3 indicator keys" % len( path_list3 ) )
     for p, path in enumerate( path_list3 ):
-        logging.info( "%d: %s" % ( p+1, str( path ) ) )
+        logging.debug( "%d: %s" % ( p+1, str( path ) ) )
     
     logging.info( "path_list4: %d entries with 4 indicator keys" % len( path_list4 ) )
     for p, path in enumerate( path_list4 ):
-        logging.info( "%d: %s" % ( p+1, str( path ) ) )
+        logging.debug( "%d: %s" % ( p+1, str( path ) ) )
     
     logging.info( "path_list5: %d entries with 5 indicator keys" % len( path_list5 ) )
     for p, path in enumerate( path_list5 ):
-        logging.info( "%d: %s" % ( p+1, str( path ) ) )
+        logging.debug( "%d: %s" % ( p+1, str( path ) ) )
     
     path_lists = []
     if len( path_list1 ) > 0:
@@ -352,7 +352,7 @@ def json_generator( params, sql_names, json_dataname, data, qkey_set = None ):
     if path_list:
         logging.info( "# entries in path_list: %d" % len( path_list ) )
         for pe, path_entry in enumerate( path_list ):
-            logging.info( "%d %s" % ( pe+1, path_entry ) )
+            logging.debug( "%d %s" % ( pe+1, path_entry ) )
     else:
         logging.info( "NO path_list" )
     
@@ -569,7 +569,7 @@ def json_cache( entry_list, language, json_dataname, download_key, params = {} )
     
     logging.debug( "stop: %s" % datetime.datetime.now() )
     str_elapsed = format_secs( time() - time0 )
-    logging.info( "caching took %s" % str_elapsed )
+    logging.info( "json_cache() caching took %s" % str_elapsed )
     
     return json_string, exc_value
 
@@ -2337,9 +2337,9 @@ def topics():
 # Years - Get available years for year selection at GUI step 2
 @app.route( "/years" )
 def years():
-    logging.debug( "/years" )
+    logging.info( "/years" )
     
-    logging.debug( "request.args: %s" % str( request.args ) )
+    logging.info( "request.args: %s" % str( request.args ) )
     settings = DataFilter( request.args )
     
     datatype = ''
@@ -2353,6 +2353,8 @@ def years():
     json_string = load_years( cursor, datatype )
     cursor.close()
     connection.close()
+    
+    logging.info( "json_string: %s" % str( json_string ) )
     
     logging.debug( "/years return Response" )
     return Response( json_string, mimetype = "application/json; charset=utf-8" )
@@ -2380,7 +2382,7 @@ def regions():
 # Histclasses - Get historical indicators for the indicator selection at GUI step 4
 @app.route( "/histclasses" )
 def histclasses():
-    logging.debug( "/histclasses" )
+    logging.info( "/histclasses" )
     logging.debug( "histclasses() request.args: %s" % str( request.args ) )
     
     language  = request.args.get( "language" )
@@ -2398,7 +2400,7 @@ def histclasses():
 # Classes - Get modern indicators for the indicator selection at GUI step 4
 @app.route( "/classes" )
 def classes():
-    logging.debug( "/classes" )
+    logging.info( "/classes" )
     logging.debug( "classes() request.args: %s" % str( request.args ) )
     
     language  = request.args.get( "language" )
@@ -2407,6 +2409,7 @@ def classes():
     
     vocab_type = "modern"
     data = load_vocabulary( vocab_type, language, datatype, base_year )
+    logging.info( "data: %s" % data )
     
     logging.debug( "/classes return Response" )
     return Response( json.dumps( data ), mimetype = "application/json; charset=utf-8" )
@@ -2474,7 +2477,7 @@ def aggregation():
     logging.info( "" )
     logging.info( "/aggregation" )
     time0 = time()      # seconds since the epoch
-    logging.info( "aggregation start: %s" % datetime.datetime.now() )
+    logging.debug( "aggregation start: %s" % datetime.datetime.now() )
     
     qinput = simplejson.loads( request.data )
     logging.debug( "qinput: %s" % str( qinput ) )
@@ -2549,11 +2552,6 @@ def aggregation():
         params[ "ter_codes" ] = ter_codes       # with ter_codes
         params_none = copy.deepcopy( params )   # with ter_codes
         
-        ## split input path in subgroups with the same key length
-        #path_lists = group_levels( path )       # input path WITH subclasses parameter, NOT path_stripped
-        #nlists = len( path_lists )
-        #logging.info( "%d path_dicts in path_lists" % nlists )
-        
         for pd, path_dict in enumerate( path_lists, start = 1 ):
             path_list = path_dict[ "path_list" ]
             logging.info( "" )
@@ -2561,9 +2559,9 @@ def aggregation():
             show_path_dict( path_dict )
             add_subclasses = path_dict[ "subclasses" ]
             
-            params[      "path" ] = path_list		# default query
-            params_ntc[  "path" ] = path_list		# query without ter_code specification
-            params_none[ "path" ] = path_list		# query with only NANs in value response
+            params[      "path" ] = path_list        # default query
+            params_ntc[  "path" ] = path_list        # query without ter_code specification
+            params_none[ "path" ] = path_list        # query with only NANs in value response
             
             # only for debugging
             #params[      "etype" ] = ""
@@ -2625,6 +2623,7 @@ def aggregation():
         entry_list_sorted = sort_entries( datatype, entry_list_total )   # sort by path, value_unit
         logging.debug( "entry_list_sorted: %d items" % len( entry_list_sorted ) )
         
+        """
         json_string, cache_except = json_cache( entry_list_sorted, language, "data", download_key, params )
         
         if cache_except is not None:
@@ -2634,7 +2633,7 @@ def aggregation():
         logging.debug( "aggregated json_string: \n%s" % json_string )
         
         collect_docs( params, download_dir, download_key )  # collect doc files in download dir
-    
+        """
     elif classification == "modern":
         # modern classification does not have base_year or ter_code from qinput
         
@@ -2643,7 +2642,6 @@ def aggregation():
         # modern classification does not provide a base_year; 
         # loop over base_years, and accumulate results.
         base_years = [ "1795", "1858", "1897", "1959", "2002" ]
-        #base_years = [ "1795" ]    # test single year
         #base_years = [ "1858" ]    # test single year
         
         for base_year in base_years:
@@ -2652,11 +2650,6 @@ def aggregation():
             
             params_ntc  = copy.deepcopy( params )
             params_none = copy.deepcopy( params )
-            
-            ## split input path in subgroups with the same key length
-            #path_lists = group_levels( path )       # input path WITH subclasses parameter, NOT path_stripped
-            #nlists = len( path_lists )
-            #logging.info( "%d path_dicts in path_lists" % nlists )
             
             entry_list_year = []
             
@@ -2704,6 +2697,7 @@ def aggregation():
         entry_list_sorted = sort_entries( datatype, entry_list_total )
         logging.debug( "entry_list_sorted: %d items" % len( entry_list_sorted ) )
         
+        """
         json_string, cache_except = json_cache( entry_list_sorted, language, "data", download_key, params )
         
         if cache_except is not None:
@@ -2712,16 +2706,23 @@ def aggregation():
         
         logging.debug( "aggregated json_string: \n%s" % json_string )
         
-        download_dir = os.path.join( tmp_dir, "download", download_key )
-        if not os.path.exists( download_dir ):
-            os.makedirs( download_dir )
         collect_docs( params, download_dir, download_key )  # collect doc files in download dir
+        """
+    # end classification
     
+    json_string, cache_except = json_cache( entry_list_sorted, language, "data", download_key, params )
+    
+    if cache_except is not None:
+        logging.error( "caching of aggregation data failed" )
+        logging.error( "length of json string: %d" % len( json_string ) )
+    else:
+        logging.debug( "aggregated json_string: \n%s" % json_string )
+    
+    collect_docs( params, download_dir, download_key )  # collect doc files in download dir
+
     logging.debug( "stop: %s" % datetime.datetime.now() )
     str_elapsed = format_secs( time() - time0 )
     logging.info( "aggregation took %s" % str_elapsed )
-    
-    
     
     return Response( json_string, mimetype = "application/json; charset=utf-8" )
 
@@ -3116,7 +3117,9 @@ def filecatalogget():
 
 @app.route( "/download" )
 def download():
-    logging.debug( "/download %s" % request.args )
+    logging.info( "/download %s" % request.args )
+    time0 = time()      # seconds since the epoch
+    logging.debug( "download start: %s" % datetime.datetime.now() )
     
     configparser = get_configparser()
     dv_host    = configparser.get( "config", "dataverse_root" )
@@ -3126,9 +3129,8 @@ def download():
     logging.debug( "ristat_key: %s" % ristat_key )
     
     id_ = request.args.get( "id" )
-    logging.debug( "id_: %s" % id_ )
-    
     if id_:
+        logging.debug( "id_: %s" % id_ )
         url = "https://%s/api/access/datafile/%s?key=%s&show_entity_ids=true&q=authorName:*" % ( dv_host, id_, ristat_key )
         
         logging.debug( "url: %s" % url )
@@ -3139,128 +3141,143 @@ def download():
         
         if request.args.get( "filetype" ) == "excel":
             filetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-		
+        
         logging.debug( "filetype: %s" % filetype )
         return Response( data, mimetype = filetype )
     
     key = request.args.get( "key" )
-    logging.debug( "download() key: %s" % key )
-    
-    if key:
-        zipping = True
-        logging.debug( "download() zip: %s" % zipping )
-    
-        tmp_dir    = configparser.get( "config", "tmppath" )
-        time_limit = int( configparser.get( "config", "time_limit" ) )
-        top_download_dir = os.path.join( tmp_dir, "download" )
-        logging.debug( "top_download_dir: %s" % top_download_dir )
-        cleanup_downloads( top_download_dir, time_limit )       # remove too old downloads
-        download_dir = os.path.join( top_download_dir, key )    # current download dir
-        
-        datafilter = {}
-        datafilter[ "key" ] = key
-        lex_lands, vocab_regs_terms, sheet_header, topic_name, params = preprocessor( use_gridfs, datafilter )
-        
-        xlsx_name = "%s.xlsx" % key
-        pathname, msg = aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header, topic_name, params )
-        if os.path.isfile( pathname ):
-            logging.debug( "pathname: %s" % pathname )
-        else:
-            return str( { "msg": "%s" % msg } )
-        
-        with open( pathname, "rb" ) as f:
-            datacontents = f.read()
-        
-        if not zipping:
-            filetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            return Response( datacontents, mimetype = filetype )
-        
-        else:
-            """
-            https://unix.stackexchange.com/questions/14705/the-zip-formats-external-file-attribute
-            The high 16 bits of the external file attributes seem to be used for OS-specific permissions. The Unix values are the same as on traditional unix implementations. Other OSes use other values. Information about the formats used in a variety of different OSes can be found in the Info-ZIP source code (download or e.g in debian apt-get source [zip or unzip]) - relevant files are zipinfo.c in unzip, and the platform-specific files in zip.
-            
-            These are conventionally defined in octal (base 8); this is represented in C and python by prefixing the number with a 0.
-            
-            These values can all be found in <sys/stat.h> - link to 4.4BSD version. These are not in the POSIX standard (which defines test macros instead); but originate from AT&T Unix and BSD. (in GNU libc / Linux, the values themselves are defined as __S_IFDIR etc in bits/stat.h, though the kernel header might be easier to read - the values are all the same pretty much everywhere.)
-            
-            #define S_IFIFO  0010000  /* named pipe (fifo) */
-            #define S_IFCHR  0020000  /* character special */
-            #define S_IFDIR  0040000  /* directory */
-            #define S_IFBLK  0060000  /* block special */
-            #define S_IFREG  0100000  /* regular */
-            #define S_IFLNK  0120000  /* symbolic link */
-            #define S_IFSOCK 0140000  /* socket */
-            
-            And of course, the other 12 bits are for the permissions and setuid/setgid/sticky bits, the same as for chmod:
-            
-            #define S_ISUID 0004000 /* set user id on execution */
-            #define S_ISGID 0002000 /* set group id on execution */
-            #define S_ISTXT 0001000 /* sticky bit */
-            #define S_IRWXU 0000700 /* RWX mask for owner */
-            #define S_IRUSR 0000400 /* R for owner */
-            #define S_IWUSR 0000200 /* W for owner */
-            #define S_IXUSR 0000100 /* X for owner */
-            #define S_IRWXG 0000070 /* RWX mask for group */
-            #define S_IRGRP 0000040 /* R for group */
-            #define S_IWGRP 0000020 /* W for group */
-            #define S_IXGRP 0000010 /* X for group */
-            #define S_IRWXO 0000007 /* RWX mask for other */
-            #define S_IROTH 0000004 /* R for other */
-            #define S_IWOTH 0000002 /* W for other */
-            #define S_IXOTH 0000001 /* X for other */
-            #define S_ISVTX 0001000 /* save swapped text even after use */
-            
-            As a historical note, the reason 0100000 is for regular files instead of 0 is that in very early versions of unix, 0 was for 'small' files (these did not use indirect blocks in the filesystem) and the high bit of the mode flag was set for 'large' files which would use indirect blocks. The other two types using this bit were added in later unix-derived OSes, after the filesystem had changed.
-            
-            So, to wrap up, the overall layout of the extended attributes field for Unix is
-            
-            TTTTsstrwxrwxrwx0000000000ADVSHR
-            ^^^^____________________________ file type as explained above
-                ^^^_________________________ setuid, setgid, sticky
-                ^^^^^^^^^________________ permissions
-                            ^^^^^^^^________ This is the "lower-middle byte" your post mentions
-                                    ^^^^^^^^ DOS attribute bits
-            """
-            zip_filename = "%s.zip" % key
-            memory_file = BytesIO()
-            with zipfile.ZipFile( memory_file, 'w' ) as zf:
-                for root, sdirs, files in os.walk( download_dir ):
-                    for fname in files:
-                        info = zipfile.ZipInfo( fname )
-                        info.date_time = localtime( time() )[ :6 ]
-                        info.compress_type = zipfile.ZIP_DEFLATED
-                        # Notes from the web and zipfile sources:
-                        # external_attr is 32 in size, with the unix permissions in the
-                        # high order 16 bit, and the MS-DOS FAT attributes in the lower 16.
-                        # man 2 stat tells us that 040755 should be a drwxr-xr-x style file,
-                        # and word of mouth tells me that bit 4 marks directories in FAT.
-                        info.external_attr = (0664 << 16)       # -rw-rw-r--
-                        
-                        file_path = os.path.join( root, fname )
-                        with open( file_path, "rb" ) as f:
-                            datacontents = f.read()
-                            zf.writestr( info, datacontents )
-            memory_file.seek( 0 )
-            return send_file( memory_file, attachment_filename = zip_filename, as_attachment = True )
-        
-        clientcache = MongoClient()
-        db_cache = clientcache.get_database( "datacache" )
-        
-        if use_gridfs:
-            fs_cache = gridfs.GridFS( db_cache )
-            result_str = fs_cache.get( str( key ) ).read()
-            result = json.loads( result_str )
-        else:
-            result = db_cache.data.find( { "key": str( request.args.get( "key" ) ) } )
-        
-        for item in result:
-            del item[ "key" ]
-            del item[ "_id" ]
-            dataset = json.dumps( item, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
-            return Response( dataset, mimetype = "application/json; charset=utf-8" )
-    else:
+    if not key:
         return str( { "msg" : "Argument 'key' not found" } )
+    
+    logging.info( "download() key: %s" % key )
+    zipping = True
+    logging.debug( "download() zip: %s" % zipping )
+    
+    tmp_dir    = configparser.get( "config", "tmppath" )
+    time_limit = int( configparser.get( "config", "time_limit" ) )
+    top_download_dir = os.path.join( tmp_dir, "download" )
+    logging.debug( "top_download_dir: %s" % top_download_dir )
+    cleanup_downloads( top_download_dir, time_limit )       # remove too old downloads
+    download_dir = os.path.join( top_download_dir, key )    # current download dir
+    
+    datafilter = {}
+    datafilter[ "key" ] = key
+    lex_lands, vocab_regs_terms, sheet_header, topic_name, params = preprocessor( use_gridfs, datafilter )
+    
+    xlsx_name = "%s.xlsx" % key
+    pathname, msg = aggregate_dataset( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header, topic_name, params )
+    if os.path.isfile( pathname ):
+        logging.debug( "pathname: %s" % pathname )
+    else:
+        return str( { "msg": "%s" % msg } )
+    
+    with open( pathname, "rb" ) as f:
+        datacontents = f.read()
+    
+    if not zipping:
+        filetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        return Response( datacontents, mimetype = filetype )
+    
+    else:
+        """
+        https://unix.stackexchange.com/questions/14705/the-zip-formats-external-file-attribute
+        The high 16 bits of the external file attributes seem to be used for OS-specific permissions. The Unix values are the same as on traditional unix implementations. Other OSes use other values. Information about the formats used in a variety of different OSes can be found in the Info-ZIP source code (download or e.g in debian apt-get source [zip or unzip]) - relevant files are zipinfo.c in unzip, and the platform-specific files in zip.
+        
+        These are conventionally defined in octal (base 8); this is represented in C and python by prefixing the number with a 0.
+        
+        These values can all be found in <sys/stat.h> - link to 4.4BSD version. These are not in the POSIX standard (which defines test macros instead); but originate from AT&T Unix and BSD. (in GNU libc / Linux, the values themselves are defined as __S_IFDIR etc in bits/stat.h, though the kernel header might be easier to read - the values are all the same pretty much everywhere.)
+        
+        #define S_IFIFO  0010000  /* named pipe (fifo) */
+        #define S_IFCHR  0020000  /* character special */
+        #define S_IFDIR  0040000  /* directory */
+        #define S_IFBLK  0060000  /* block special */
+        #define S_IFREG  0100000  /* regular */
+        #define S_IFLNK  0120000  /* symbolic link */
+        #define S_IFSOCK 0140000  /* socket */
+        
+        And of course, the other 12 bits are for the permissions and setuid/setgid/sticky bits, the same as for chmod:
+        
+        #define S_ISUID 0004000 /* set user id on execution */
+        #define S_ISGID 0002000 /* set group id on execution */
+        #define S_ISTXT 0001000 /* sticky bit */
+        #define S_IRWXU 0000700 /* RWX mask for owner */
+        #define S_IRUSR 0000400 /* R for owner */
+        #define S_IWUSR 0000200 /* W for owner */
+        #define S_IXUSR 0000100 /* X for owner */
+        #define S_IRWXG 0000070 /* RWX mask for group */
+        #define S_IRGRP 0000040 /* R for group */
+        #define S_IWGRP 0000020 /* W for group */
+        #define S_IXGRP 0000010 /* X for group */
+        #define S_IRWXO 0000007 /* RWX mask for other */
+        #define S_IROTH 0000004 /* R for other */
+        #define S_IWOTH 0000002 /* W for other */
+        #define S_IXOTH 0000001 /* X for other */
+        #define S_ISVTX 0001000 /* save swapped text even after use */
+        
+        As a historical note, the reason 0100000 is for regular files instead of 0 is that in very early versions of unix, 0 was for 'small' files (these did not use indirect blocks in the filesystem) and the high bit of the mode flag was set for 'large' files which would use indirect blocks. The other two types using this bit were added in later unix-derived OSes, after the filesystem had changed.
+        
+        So, to wrap up, the overall layout of the extended attributes field for Unix is
+        
+        TTTTsstrwxrwxrwx0000000000ADVSHR
+        ^^^^____________________________ file type as explained above
+            ^^^_________________________ setuid, setgid, sticky
+            ^^^^^^^^^________________ permissions
+                        ^^^^^^^^________ This is the "lower-middle byte" your post mentions
+                                ^^^^^^^^ DOS attribute bits
+        """
+        zip_filename = "%s.zip" % key
+        logging.info( "zip_filename: %s" % zip_filename )
+        
+        memory_file = BytesIO()
+        with zipfile.ZipFile( memory_file, 'w' ) as zf:
+            for root, sdirs, files in os.walk( download_dir ):
+                for fname in files:
+                    logging.info( "fname: %s" % fname )
+                    info = zipfile.ZipInfo( fname )
+                    info.date_time = localtime( time() )[ :6 ]
+                    info.compress_type = zipfile.ZIP_DEFLATED
+                    # Notes from the web and zipfile sources:
+                    # external_attr is 32 in size, with the unix permissions in the
+                    # high order 16 bit, and the MS-DOS FAT attributes in the lower 16.
+                    # man 2 stat tells us that 040755 should be a drwxr-xr-x style file,
+                    # and word of mouth tells me that bit 4 marks directories in FAT.
+                    info.external_attr = (0664 << 16)       # -rw-rw-r--
+                    
+                    file_path = os.path.join( root, fname )
+                    with open( file_path, "rb" ) as f:
+                        datacontents = f.read()
+                        zf.writestr( info, datacontents )
+        memory_file.seek( 0 )
+        
+        logging.debug( "stop: %s" % datetime.datetime.now() )
+        str_elapsed = format_secs( time() - time0 )
+        logging.info( "creating download took %s" % str_elapsed )
+        
+        return send_file( memory_file, attachment_filename = zip_filename, as_attachment = True )
+    
+    """
+    clientcache = MongoClient()
+    db_cache = clientcache.get_database( "datacache" )
+    
+    if use_gridfs:
+        fs_cache = gridfs.GridFS( db_cache )
+        result_str = fs_cache.get( str( key ) ).read()
+        result = json.loads( result_str )
+    else:
+        result = db_cache.data.find( { "key": str( request.args.get( "key" ) ) } )
+    
+    for item in result:
+        del item[ "key" ]
+        del item[ "_id" ]
+    
+    dataset = json.dumps( item, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
+        
+    logging.debug( "stop: %s" % datetime.datetime.now() )
+    str_elapsed = format_secs( time() - time0 )
+    logging.info( "creating download took %s" % str_elapsed )
+    
+    return Response( dataset, mimetype = "application/json; charset=utf-8" )
+    """
 
 
 
