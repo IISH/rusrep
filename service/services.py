@@ -11,6 +11,7 @@ FL-26-Mar-2018 handle dataverse connection failure
 FL-04-Apr-2018 rebuilt postgres query
 FL-17-Apr-2018 group pg items by identifier
 FL-07-May-2018 GridFS for large BSON
+FL-08-May-2018 /years URL now with extra classification parameter
 
 def get_configparser():
 def get_connection():
@@ -20,7 +21,7 @@ def path_levels = group_levels( path ):
 def json_generator( params, sql_names, json_dataname, data, key_set = None ):
 def json_cache( entry_list, language, json_dataname, download_key, params = {} ):
 def collect_docs( params, download_dir, download_key ):
-def load_years( cursor, datatype, language = "en" ):
+def load_years( cursor, datatype, classification ):
 def sqlfilter( sql ):
 def sqlconstructor( sql ):
 def topic_counts():
@@ -667,7 +668,7 @@ def collect_docs( qinput, download_dir, download_key ):
 
 
 
-def load_years( cursor, datatype, language = "en" ):
+def load_years( cursor, datatype, classification ):
     """
     return a json dictionary with record counts from table russianrepository for the given datatype
     """
@@ -676,28 +677,33 @@ def load_years( cursor, datatype, language = "en" ):
     config_parser = get_configparser()
     years = config_parser.get( "config", "years" ).split( ',' )
     
+    language = "en"
     dbtable_name = "dbtable" + '_' + language
     dbtable  = config_parser.get( "config", dbtable_name )
     
     sql = "SELECT base_year, COUNT(*) AS cnt FROM %s" % dbtable
     
     if datatype:
-        sql = sql + " WHERE datatype = '%s'" % datatype 
+        sql += " WHERE datatype = '%s'" % datatype 
     
-    sql = sql + " GROUP BY base_year";
-    logging.debug( sql )
+    if classification == "modern":
+        sql += " AND class1 <> 'no modern classification for this datatype'"
+    
+    sql += " GROUP BY base_year ORDER BY base_year;"
+    
+    logging.info( sql )
+    
     cursor.execute( sql )
-    
-    sql_resp = cursor.fetchall()
-    result = {}
-    
-    for val in sql_resp:
+    resp = cursor.fetchall()
+    result = collections.OrderedDict()
+        
+    for val in resp:
         if val[ 0 ]:
             result[ val[ 0 ] ] = val[ 1 ]
-    
     for year in years:
         if int( year ) not in result:
             result[ int( year ) ] = 0
+    logging.info( "result: %s" % result )
     
     json_string = json.dumps( result, encoding = "utf-8" )
 
@@ -2346,11 +2352,15 @@ def years():
     if "datatype" in settings.datafilter:
         datatype = settings.datafilter[ "datatype" ]
     
+    classification = ''
+    if "classification" in settings.datafilter:
+        classification = settings.datafilter[ "classification" ]
+    
     connection = get_connection()
     cursor = connection.cursor()
     
     # json_string = dictionary with record counts from table russianrepository for the given datatype
-    json_string = load_years( cursor, datatype )
+    json_string = load_years( cursor, datatype, classification )
     cursor.close()
     connection.close()
     
