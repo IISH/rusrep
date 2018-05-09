@@ -19,7 +19,7 @@ FL-11-Jul-2017 pandas: do not parse numbers, but keep strings as they are
 FL-13-Aug-2017 Py2/Py3 cleanup
 FL-18-Dec-2017 Keep trailing input '\n' for header lines in translate_csv
 FL-16-Jan-2018 Separate RU & EN tables
-FL-26-Mar-2018 Latest change
+FL-09-May-2018 Rounding of data in value column
 
 ToDo:
  - replace urllib by requests
@@ -574,7 +574,7 @@ def store_handle_docs( config_parser, handle_name, language ):
             #psv_file = codecs.open( out_pathname, 'r', encoding = "utf-8" )
             #cursor.copy_from( psv_file, dbtable, sep ='|' )
             
-            stringio_file = filter_csv( csv_dir, filename )
+            stringio_file = filter_csv( config_parser, csv_dir, filename )
             cursor.copy_from( stringio_file, dbtable, sep = '|' )
             #cursor.copy_from( stringio_file, dbtable, sep = '|', null = "None" )
             
@@ -616,13 +616,17 @@ def test_csv_file( path_name ):
 
 
 
-def filter_csv( csv_dir, in_filename ):
+def filter_csv( config_parser, csv_dir, in_filename ):
     global Nexcept
     global pkey
     logging.debug( "filter_csv()" )
     
     # Notice: the applied filtering is reflected in the returned out_file; 
     # the input csv file is _unchanged_.
+    
+    # rounding of data in value column is specified in ERRHS_Vocabulary_units.csv
+    vocab_units = bidict()
+    vocab_units = load_vocab( config_parser, "ERRHS_Vocabulary_units.csv", vocab_units, 0, 1 )
     
     # dataverse column names
     dv_column_names = [
@@ -1095,9 +1099,10 @@ def load_vocab( config_parser, vocab_fname, vocab, pos_rus, pos_eng ):
                     #sys.stderr.write( "%s\n" % msg )
             else:
                 if vocab_fname == "ERRHS_Vocabulary_units.csv":
-                    logging.debug( "rus: %s, eng: %s" % ( rus, eng ) )
-                    rus_d = { "rus" : rus } 
-                    eng_d = { "eng" : eng }
+                    decimals = int( parts[ 2 ] )
+                    logging.debug( "rus: %s, eng: %s, decimals: %s" % ( rus, eng, decimals ) )
+                    rus_d = { "rus" : rus, "decimals" : decimals } 
+                    eng_d = { "eng" : eng, "decimals" : decimals }
                 
                 elif vocab_fname == "ERRHS_Vocabulary_histclasses.csv":
                     byear = parts[ 2 ].strip()
@@ -1417,12 +1422,12 @@ if __name__ == "__main__":
         "hdl_errhs_capital",        # 
         "hdl_errhs_industry",       # 
         "hdl_errhs_agriculture",    # ERRHS_4   10 files
-        "hdl_errhs_labour",         # 
+        "hdl_errhs_labour",         # ERRHS_2    5 files
         "hdl_errhs_services",       # 
         "hdl_errhs_land"            # ERRHS_7   10 files
     ]
     #"""
-    #handle_names = [ "hdl_errhs_land" ]
+    #handle_names = [ "hdl_errhs_agriculture" ]     # test for rounding
     
     if DO_RETRIEVE_ERRHS:
         logging.info( "-4- DO_RETRIEVE_ERRHS" )
