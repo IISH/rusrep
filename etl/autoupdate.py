@@ -19,11 +19,10 @@ FL-11-Jul-2017 pandas: do not parse numbers, but keep strings as they are
 FL-13-Aug-2017 Py2/Py3 cleanup
 FL-18-Dec-2017 Keep trailing input '\n' for header lines in translate_csv
 FL-16-Jan-2018 Separate RU & EN tables
-FL-09-May-2018 Rounding of data in value column
+FL-14-May-2018 Rounding of data in value column
 
 ToDo:
  - replace urllib by requests
- - also use bidict in service/services.py
 
 def load_json( apiurl ):
 def empty_dir( dst_dir ):
@@ -39,6 +38,7 @@ def filter_csv( csv_dir, in_filename ):
 def update_handle_docs( config_parser, mongo_client ):
 def clear_mongo( mongo_client ):
 def topic_counts( config_parser, language ):
+def load_vocab( config_parser, vocab_fname, vocab, pos_rus, pos_eng ):
 def translate_csv( config_parser, handle_name ):
 def format_secs( seconds ):
 """
@@ -85,6 +85,19 @@ Nexcept = 0
 COMMENT_LENGTH_MAX_DB = 4096
 # primary key for russianrepository table
 pkey = None
+
+#"""
+handle_names = [ 
+    "hdl_errhs_population",     # ERRHS_1   39 files
+    "hdl_errhs_capital",        # 
+    "hdl_errhs_industry",       # 
+    "hdl_errhs_agriculture",    # ERRHS_4   10 files
+    "hdl_errhs_labour",         # ERRHS_2    5 files
+    "hdl_errhs_services",       # 
+    "hdl_errhs_land"            # ERRHS_7   10 files
+]
+#"""
+#handle_names = [ "hdl_errhs_agriculture" ]     # test for rounding
 
 
 def load_json( url ):
@@ -225,7 +238,7 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", co
                 datasetVersionId = str( dv_file[ "datasetVersionId" ] )
                 version          = str( dv_file[ "version" ] )
                 label            = str( dv_file[ "label" ] )
-                datafile         =  dv_file[ "datafile" ]
+                datafile         =      dv_file[ "datafile" ]
                 paperitem = {}
                 paperitem[ 'id' ]   = str( datafile[ 'id' ] )
                 originalFormatLabel = str( datafile[ 'originalFormatLabel' ] )
@@ -281,10 +294,13 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", co
                         
                         # pandas doc: dtype : Type name or dict of column -> type, default None
                         # Data type for data or columns. E.g. {‘a’: np.float64, ‘b’: np.int32} 
-                        # Use str or object to preserve and not interpret dtype. If converters are specified, 
-                        # they will be applied INSTEAD of dtype conversion.
+                        # Use str or object to preserve and not interpret dtype. 
+                        # If converters are specified, they will be applied INSTEAD of dtype conversion.
                         #data_xls = pd.read_excel( filepath, index_col = False,  dtype = str )      # ValueError: Unable to convert column Term_RUS to type <type 'str'>
-                        data_xls = pd.read_excel( filepath, index_col = False,  dtype = object )
+                        #data_xls = pd.read_excel( filepath, index_col = False,  dtype = object )   # 2018.05.14: large ints become negative!
+                        #data_xls = pd.read_excel( filepath, index_col = False )                    # 2018.05.14: large ints become negative!
+                        data_xls = pd.read_excel( filepath, index_col = False, convert_float = False, dtype = str )
+                        
                         data_xls.to_csv( csv_path, encoding = 'utf-8', index = False, **kwargs_pandas )
                         
                         if remove_xlsx and ext == ".xlsx":
@@ -619,14 +635,21 @@ def test_csv_file( path_name ):
 def filter_csv( config_parser, csv_dir, in_filename ):
     global Nexcept
     global pkey
-    logging.debug( "filter_csv()" )
+    logging.info( "filter_csv() %s" % in_filename )
     
     # Notice: the applied filtering is reflected in the returned out_file; 
     # the input csv file is _unchanged_.
     
     # rounding of data in value column is specified in ERRHS_Vocabulary_units.csv
-    vocab_units = bidict()
-    vocab_units = load_vocab( config_parser, "ERRHS_Vocabulary_units.csv", vocab_units, 0, 1 )
+    # Equality of pos_rus anf pos_eng is a hack, used to flag decimals from either rus or eng
+    vocab_units = dict()
+    if in_filename.endswith( "-ru.csv" ):
+        vocab_units = load_vocab( config_parser, "ERRHS_Vocabulary_units.csv", vocab_units, 0, 0 )
+    elif in_filename.endswith( "-en.csv" ):
+        vocab_units = load_vocab( config_parser, "ERRHS_Vocabulary_units.csv", vocab_units, 1, 1 )
+    else:
+        logging.error( "in_filename does not end with either '-ru.csv' or '-en.csv'" )
+    #logging.info( "vocab_units: %s" % str( vocab_units ) )
     
     # dataverse column names
     dv_column_names = [
@@ -847,6 +870,36 @@ def filter_csv( config_parser, csv_dir, in_filename ):
             else:   # chop spurious decimals of stupid spreadsheets
                 fields[ datatype_pos ] = "%4.2f" % float( datatype )
             
+            # round value to specified number of decimals
+            value_pos = csv_header_names.index( "value" )
+            value_str = fields[ value_pos ]
+            value_unit_pos = csv_header_names.index( "value_unit" )
+            value_unit = fields[ value_unit_pos ]
+            
+            try:
+                decimals = int( vocab_units[ value_unit ] )
+                #logging.debug( "value: %s, value_unit: %s, decimals: %s" % ( value_str, value_unit, decimals ) )
+                if value_str.isdigit():
+                    pass    # all digits, no change
+                else:
+                    try:
+                        value_float = float( value_str )
+                        value_round = round( value_float, decimals )
+                        if decimals == 0:
+                            value_new = str( long( round( value_float, decimals ) ) )
+                        else:
+                            value_new = str( round( value_float, decimals ) )
+                        
+                        if value_new != value_str:
+                            #logging.debug( line )
+                            #logging.debug( "value: %s, value_unit: %s, decimals: %s" % ( value_str, value_unit, decimals ) )
+                            logging.info( "value: %s => %s (%d decimals)" % ( value_str, value_new, decimals ) )
+                            fields[ value_pos ] = value_new     # replace
+                    except:
+                        pass    # no change
+            except:
+                pass
+        
         #print( "|".join( fields ) )
         if ndiff > 0:
             npop = ndiff
@@ -1080,6 +1133,7 @@ def load_vocab( config_parser, vocab_fname, vocab, pos_rus, pos_eng ):
             
             if vocab_fname == "ERRHS_Vocabulary_regions.csv":
                 # The regions (territorium) vocab is special: 
+                # vocab = dict(), not bidict()
                 # the original rus terms contain a lot of noise, but the codes 
                 # and eng translations are unique and OK. For both forward and 
                 # inverse lookup the code is the key, and either rus or eng the value. 
@@ -1097,14 +1151,28 @@ def load_vocab( config_parser, vocab_fname, vocab, pos_rus, pos_eng ):
                     msg = "%s: %s %s" % ( type_, vocab_fname, value )
                     logging.error( msg )
                     #sys.stderr.write( "%s\n" % msg )
+            elif vocab_fname == "ERRHS_Vocabulary_units.csv":
+                if pos_rus == pos_eng:              # a bit of a hack
+                    # vocab is a dict(), not bidict(), 
+                    # used for decimals, either from rus or from eng
+                    decimals_str = parts[ 2 ]
+                    decimals = int( float( decimals_str.strip() ) )     # strip(): sometimes a spurious space
+                    eng_d = decimals                # using value for decimals
+                    if pos_rus == 0:                # rus => decimals
+                        logging.debug( "rus: %s, decimals: %d" % ( rus, decimals ) )
+                        vocab[ rus ] = decimals     # using key for rus
+                    else:                           # eng => decimals
+                        logging.debug( "eng: %s, decimals: %d" % ( eng, decimals ) )
+                        vocab[ eng ] = decimals     # using key for eng
+                else:
+                    # vocab is a bidict(), not dict()
+                    # used for normal bidict translation
+                    logging.debug( "rus: %s, eng: %s" % ( rus, eng ) )
+                    rus_s = json.dumps( { "rus" : rus } )
+                    eng_s = json.dumps( { "eng" : eng } )
+                    vocab[ rus_s ] = eng_s
             else:
-                if vocab_fname == "ERRHS_Vocabulary_units.csv":
-                    decimals = int( parts[ 2 ] )
-                    logging.debug( "rus: %s, eng: %s, decimals: %s" % ( rus, eng, decimals ) )
-                    rus_d = { "rus" : rus, "decimals" : decimals } 
-                    eng_d = { "eng" : eng, "decimals" : decimals }
-                
-                elif vocab_fname == "ERRHS_Vocabulary_histclasses.csv":
+                if vocab_fname == "ERRHS_Vocabulary_histclasses.csv":
                     byear = parts[ 2 ].strip()
                     dtype = parts[ 3 ].strip()
                     rus_d = { "rus" : rus, "byear" : byear, "dtype" : dtype }
@@ -1416,18 +1484,6 @@ if __name__ == "__main__":
         else:
             to_csv = True       # we get .xlsx
         update_vocabularies( config_parser, mongo_client, dv_format, copy_local, to_csv )
-    #"""
-    handle_names = [ 
-        "hdl_errhs_population",     # ERRHS_1   39 files
-        "hdl_errhs_capital",        # 
-        "hdl_errhs_industry",       # 
-        "hdl_errhs_agriculture",    # ERRHS_4   10 files
-        "hdl_errhs_labour",         # ERRHS_2    5 files
-        "hdl_errhs_services",       # 
-        "hdl_errhs_land"            # ERRHS_7   10 files
-    ]
-    #"""
-    #handle_names = [ "hdl_errhs_agriculture" ]     # test for rounding
     
     if DO_RETRIEVE_ERRHS:
         logging.info( "-4- DO_RETRIEVE_ERRHS" )
