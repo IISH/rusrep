@@ -98,6 +98,7 @@ handle_names = [
 ]
 #"""
 #handle_names = [ "hdl_errhs_agriculture" ]     # test for rounding
+#handle_names = [ "hdl_errhs_land" ]     		# test for rounding
 
 
 def load_json( url ):
@@ -895,10 +896,10 @@ def filter_csv( config_parser, csv_dir, in_filename ):
                             nfiltered += 1
                             #logging.debug( line )
                             #logging.debug( "value: %s, value_unit: %s, decimals: %s" % ( value_str, value_unit, decimals ) )
-                            if in_filename == "ERRHS_4_01_data_1897-en.csv":
-                                logging.info( "nline: %d, value: %s => %s (%s, %d decimals)" % ( nline, value_str, value_new, value_unit, decimals ) )
-                                
-                                fields[ value_pos ] = value_new     # replace
+                            #if in_filename == "ERRHS_4_01_data_1897-en.csv":
+                            #if in_filename == "ERRHS_7_03_data_1897-en.csv":
+                            #    logging.info( "nline: %d, value: %s => %s (%s, %d decimals)" % ( nline, value_str, value_new, value_unit, decimals ) )
+                            #    fields[ value_pos ] = value_new     # replace
                     except:
                         pass    # no change
             except:
