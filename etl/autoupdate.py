@@ -19,7 +19,7 @@ FL-11-Jul-2017 pandas: do not parse numbers, but keep strings as they are
 FL-13-Aug-2017 Py2/Py3 cleanup
 FL-18-Dec-2017 Keep trailing input '\n' for header lines in translate_csv
 FL-16-Jan-2018 Separate RU & EN tables
-FL-14-May-2018 Rounding of data in value column
+FL-15-May-2018 Rounding of data in value column
 
 ToDo:
  - replace urllib by requests
@@ -637,8 +637,8 @@ def filter_csv( config_parser, csv_dir, in_filename ):
     global pkey
     logging.info( "filter_csv() %s" % in_filename )
     
-    # Notice: the applied filtering is reflected in the returned out_file; 
-    # the input csv file is _unchanged_.
+    # Notice: the applied filtering is reflected in the returned out_file, 
+    # which is copied to a postgres table; the input csv file is _unchanged_.
     
     # rounding of data in value column is specified in ERRHS_Vocabulary_units.csv
     # Equality of pos_rus anf pos_eng is a hack, used to flag decimals from either rus or eng
@@ -723,7 +723,8 @@ def filter_csv( config_parser, csv_dir, in_filename ):
     nskipped = 0
     comment_length_max = 0
     
-    nstripped = 0                       # count all stripped fields
+    nfiltered = 0                       # count filtered values reduce decimals)
+    nstripped = 0                       # count stripped fields
     stripped_fields  = set()            # collect only unique fields
     affected_headers = set()            # corresponding headers
     
@@ -891,10 +892,13 @@ def filter_csv( config_parser, csv_dir, in_filename ):
                             value_new = str( round( value_float, decimals ) )
                         
                         if value_new != value_str:
+                            nfiltered += 1
                             #logging.debug( line )
                             #logging.debug( "value: %s, value_unit: %s, decimals: %s" % ( value_str, value_unit, decimals ) )
-                            logging.info( "value: %s => %s (%d decimals)" % ( value_str, value_new, decimals ) )
-                            fields[ value_pos ] = value_new     # replace
+                            if in_filename == "ERRHS_4_01_data_1897-en.csv":
+                                logging.info( "nline: %d, value: %s => %s (%s, %d decimals)" % ( nline, value_str, value_new, value_unit, decimals ) )
+                                
+                                fields[ value_pos ] = value_new     # replace
                     except:
                         pass    # no change
             except:
@@ -916,10 +920,14 @@ def filter_csv( config_parser, csv_dir, in_filename ):
         # base_year, must be integer
         base_year_idx = None
         try:
-            base_year_idx = csv_header_names.index( "base_year" )    # 38, 37, ...?
+            base_year_idx = csv_header_names.index( "base_year" )   # 38, 37, ...?
             try:
-                dummy = int( fields[ base_year_idx ] )
+                base_year_in  = fields[ base_year_idx ]             # e.g. "1897.0" due to unwanted pandas xlsx input conversion?
+                base_year_out = str( int( float( fields[ base_year_idx ] ) ) )
+                if base_year_in != base_year_out:
+                    fields[ base_year_idx ] = base_year_out
             except:
+                logging.warning( "base_year not integer: %s" % fields[ base_year_idx ] )
                 try:
                     fields[ base_year_idx ] = "0"
                 except:
@@ -975,7 +983,7 @@ def filter_csv( config_parser, csv_dir, in_filename ):
         
         out_file.write( "%s\n" % table_line )
     
-    out_file.seek( 0)   # start of the stream
+    out_file.seek( 0 )   # start of the stream
     #out_file.close()    # closed by caller!: closing discards memory buffer
     csv_file.close()
     
@@ -992,6 +1000,9 @@ def filter_csv( config_parser, csv_dir, in_filename ):
         logging.info( "affected_headers: %s" % affected_headers )
         for field in stripped_fields:
             logging.info( "leading/trailing whitespace: |%s|" % field )
+    
+    if nfiltered != 0:
+        logging.info( "%d value fields were filtered to reduce the # of decimals" % nfiltered )
     
     #return out_pathname
     return out_file
