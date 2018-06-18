@@ -1,29 +1,29 @@
-# FL-15-Jan-2018
+# FL-18-Jun-2018
 
-# pip requirements file for RusRep with a Python-2.7.14
+# pip requirements file for RusRep with a Python-2.7.15
 # setuptools, pip, and virtualenv should already be present in the (virtual) python2.7
 # install the packages below from a terminal; 
 # newer versions may work; we used the versions below: 
 
 # $ pip install -r requirements_py2.7.txt
 
-future == 0.16.0
-six == 1.11.0
-simplejson == 3.13.2
-jsonmerge == 1.4.0      # also fetched jsonschema-2.6.0
-ldap == 1.0.2           # also fetched ldap3-2.4 pyasn1-0.4.2
-Flask == 0.12.2         # also fetched Jinja2-2.10 MarkupSafe-1.0 Werkzeug-0.14.1 click-6.7 itsdangerous-0.24
-psycopg2 == 2.7.3.2
-pymongo == 3.6.0
-pandas == 0.22.0        # also fetched numpy-1.14.0 python-dateutil-2.6.1 pytz-2017.3
-bidict == 0.14.2
-XlsxWriter == 1.0.2
-xlrd == 1.1.0
-openpyxl == 2.5.0b1     # also fetched et-xmlfile-1.0.1 jdcal-1.3
-PyICU == 2.0.2          # requires C++11, otherwise use PyICU-1.9.6
+future == 0.16.0        # 
+six == 1.11.0           # 
+simplejson == 3.15.0    # 
+jsonmerge == 1.5.1      # also fetched jsonschema-2.6.0
+ldap == 1.0.2           # also fetched ldap3-2.5 pyasn1-0.4.3
+Flask == 1.0.2          # also fetched Jinja2-2.10 MarkupSafe-1.0 Werkzeug-0.14.1 click-6.7 itsdangerous-0.24
+psycopg2 == 2.7.5       # 
+pymongo == 3.6.1        # 
+pandas == 0.23.1        # also fetched numpy-1.14.5 python-dateutil-2.7.3 pytz-2018.4
+bidict == 0.17.2        # 
+XlsxWriter == 1.0.5     # 
+xlrd == 1.1.0           # 
+openpyxl == 2.5.4       # also fetched et-xmlfile-1.0.1 jdcal-1.4
+PyICU == 2.0.3          # requires C++11, otherwise use PyICU-1.9.6
+#PyICU == 1.9.6          # also fetched bleach-2.1.3 certifi-2018.4.16 chardet-3.0.4 html5lib-1.0.1 idna-2.7 lxml-4.2.1 requests-2.19.1 urllib3-1.23 webencodings-0.5.1
 
 # dataverse-client-python not yet in PyPI, fetch dataverse-0.1.2 from github
 git+https://github.com/IQSS/dataverse-client-python.git#egg=dataverse
-# also fetched bleach-2.1.2 certifi-2017.11.5 chardet-3.0.4 html5lib-1.0.1  idna-2.6 lxml-4.1.1 requests-2.18.4 urllib3-1.22 webencodings-0.5.1
 
 # [eof]
