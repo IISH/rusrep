@@ -2513,8 +2513,10 @@ def aggregation():
     else:
         base_year = str( base_year )
     
-    #group_tercodes = True   # group ter_codes with total values per unique path + unit_value
-    group_tercodes = False  # default situation
+    group_tercodes = True   # group ter_codes with total values per unique path + unit_value
+    #group_tercodes = False  # default situation
+    if group_tercodes:
+        logging.debug( "grouping ter_codes with total values per unique path + unit_value" )
     
     params = {
         "language"       : language,
