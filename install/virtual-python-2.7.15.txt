@@ -1,19 +1,19 @@
-FL-18-Sep-2017 Created
-FL-27-Sep-2017 Changed
+FL-18-Jun-2018 Created
+FL-18-Jn-2018 Changed
 
-Create a virtualenv Python-2.7.14
+Create a virtualenv Python-2.7.15
 
 Used with CentOS-7.4
 	use the _new_ setuptools
 	use pip instead of easy_install
 	use unicode ucs4 instead of ucs2
 
--1- Create a normal Python-2.7.14 from its source. 
-	Get Python-2.7.14 from https://www.python.org/downloads/release/python-2714/
-		$ tar -zxf Python-2.7.14.tgz
-		$ cd Python-2.7.14
-	Installation directory will be: ~/opt/Python/python-2.7.14
-		$ export PYTHON_LOCAL=~/opt/Python/python-2.7.14
+-1- Create a normal Python-2.7.15 from its source. 
+	Get Python-2.7.15 from https://www.python.org/downloads/release/python-2715/
+		$ tar -zxf Python-2.7.15.tgz
+		$ cd Python-2.7.15
+	Installation directory will be: ~/opt/Python/python-2.7.15
+		$ export PYTHON_LOCAL=~/opt/Python/python-2.7.15
 		$ ./configure --enable-unicode=ucs4 --prefix=$PYTHON_LOCAL --with-ensurepip=yes
 		If you want a release build with all optimizations active (LTO, PGO, etc),
 		please run ./configure --enable-optimizations
@@ -36,37 +36,37 @@ Used with CentOS-7.4
 		Collecting setuptools
 		Collecting pip
 		Installing collected packages: setuptools, pip
-		Successfully installed pip-9.0.1 setuptools-28.8.0
+		Successfully installed pip-9.0.3 setuptools-39.0.1
 
-	Create a script ~/bin/python2714
+	Create a script ~/bin/python2715
 	activate this python
-		$ source ~/bin/python2714
+		$ source ~/bin/python2715
 	check: 
 		$ python -V
 
 -2- setuptools & pip
 	already installed, see --with-ensurepip=yes above, 
-	but notice that they are 'versioned' in $PYTHON_LOCAL/python-2.7.14/bin
+	but notice that they are 'versioned' in $PYTHON_LOCAL/python-2.7.15/bin
 		easy_install-2.7 pip2.7 python2.7
 
 -3- Add virtualenv
 		$ pip2.7 install virtualenv
-		Successfully installed virtualenv-15.1.0
+		Successfully installed virtualenv-16.0.0
 
 -4- Create a virtualenv python for RusRep somewhere, say in PROJECT
 		$ cd $PROJECT
 	use the created python
-		$ source ~/bin/python2714
-	create a virtualenv python; its top-level directory will be python2714
-		$ virtualenv python2714
-		New python executable in $PROJECT/python2714/bin/python2.7
-		Also creating executable in $PROJECT/python2714/bin/python
+		$ source ~/bin/python2715
+	create a virtualenv python; its top-level directory will be python2715
+		$ virtualenv python2715
+		New python executable in $PROJECT/python2715/bin/python2.7
+		Also creating executable in $PROJECT/python2715/bin/python
 		Installing setuptools, pip, wheel...done.
 
 	use it
-		$ source python2714/bin/activate
-	notice that your prompt is now prefixed with '(python2714)'
+		$ source python2715/bin/activate
+	notice that your prompt is now prefixed with '(python2715)'
 
--5- Add more packages with pip to the new python2714 for your project
+-5- Add more packages with pip to the new python2715 for your project
 
 [eof]
