@@ -20,6 +20,7 @@ FL-13-Aug-2017 Py2/Py3 cleanup
 FL-18-Dec-2017 Keep trailing input '\n' for header lines in translate_csv
 FL-16-Jan-2018 Separate RU & EN tables
 FL-15-May-2018 Rounding of data in value column
+FL-23-Jul-2018 DATATYPE 1.10 => 1.1 ? try to suppress unwanted conversion of DATATYPE
 
 ToDo:
  - replace urllib by requests
@@ -300,7 +301,8 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", co
                         #data_xls = pd.read_excel( filepath, index_col = False,  dtype = str )      # ValueError: Unable to convert column Term_RUS to type <type 'str'>
                         #data_xls = pd.read_excel( filepath, index_col = False,  dtype = object )   # 2018.05.14: large ints become negative!
                         #data_xls = pd.read_excel( filepath, index_col = False )                    # 2018.05.14: large ints become negative!
-                        data_xls = pd.read_excel( filepath, index_col = False, convert_float = False, dtype = str )
+                        #data_xls = pd.read_excel( filepath, index_col = False, convert_float = False, dtype = str )
+                        data_xls = pd.read_excel( filepath, index_col = False, convert_float = False, dtype = str, converters = { 'DATATYPE': str } )
                         
                         data_xls.to_csv( csv_path, encoding = 'utf-8', index = False, **kwargs_pandas )
                         
