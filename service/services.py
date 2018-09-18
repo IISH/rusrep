@@ -12,6 +12,7 @@ FL-04-Apr-2018 rebuilt postgres query
 FL-17-Apr-2018 group pg items by identifier
 FL-07-May-2018 GridFS for large BSON
 FL-08-May-2018 /years URL now with extra classification parameter
+FL-18-Sep-2018 /topics new implementation
 
 def get_configparser():
 def get_connection():
@@ -24,8 +25,9 @@ def collect_docs( params, download_dir, download_key ):
 def load_years( cursor, datatype, classification ):
 def sqlfilter( sql ):
 def sqlconstructor( sql ):
-def topic_counts():
-#def load_topics( qinput ):
+#def topic_counts( schema ):    # obsolete, remove
+#def load_topics( qinput ):     # obsolete, remove
+def topic_counts( language, datatype ):
 def dataset_filter( data, sql_names, classification ):
 def zap_empty_classes( item ):
 def translate_item( item, eng_data ):
@@ -752,7 +754,7 @@ def sqlconstructor( sql ):
     return sql
 
 
-
+"""
 def topic_counts( schema ):
     logging.info( "topic_counts()" )
 
@@ -803,7 +805,7 @@ def topic_counts( schema ):
     connection.close()
 
     return all_cnt_dict
-
+"""
 
 """
 def load_topics( qinput ):
@@ -839,6 +841,30 @@ def load_topics( qinput ):
     
     return entry_list_out
 """
+
+
+def topic_counts( language, datatype ):
+    logging.debug( "topic_counts() datatype: %s" % datatype )
+
+    connection = get_connection()
+    cursor = connection.cursor( cursor_factory = psycopg2.extras.NamedTupleCursor )
+
+    sql_count  = "SELECT base_year, COUNT(*) AS count FROM russianrepo_%s" % language
+    sql_count += " WHERE datatype = '%s'" % datatype
+    sql_count += " GROUP BY base_year ORDER BY base_year"
+    logging.debug( sql_count )
+    
+    cursor.execute( sql_count )
+    sql_count_resp = cursor.fetchall()
+    count_dict = {}
+    for count_rec in sql_count_resp:
+        logging.debug( "count_rec: %s" % str( count_rec ) )
+        count_dict[ count_rec.base_year ] = int( count_rec.count )    # strip trailing 'L'
+    
+    logging.debug( "count_dict: %s" % count_dict )
+    
+    return count_dict
+
 
 
 def dataset_filter( data, sql_names, classification ):
@@ -1487,8 +1513,7 @@ def aggregate_year( params, add_subclasses, value_total = True, value_numerical 
         sql_query  = sql_query[ :-2 ]
         logging.debug( "sql_query 2: %s" % sql_query )
         
-        #sql_query += " FROM russianrepository WHERE %s" % sql[ "where" ]
-        dbtable = "russianrepo_%s"  % language
+        dbtable = "russianrepo_%s" % language
         sql_query += " FROM %s WHERE %s" % ( dbtable, sql[ "where" ] )
         sql_query  = sql_query[ :-4 ]
         logging.debug( "sql_query 3: %s" % sql_query )
@@ -1712,7 +1737,7 @@ def add_unique_items_grouped( language, dict_name, entry_dict_collect, entry_dic
         logging.info( "key: %s\nvalue: %s" % ( key, value ) )
     """
 
-    logging.info( "entry_dict_extra: %s, len: %d"  % ( type( entry_dict_extra ), len( entry_dict_extra ) ) )
+    logging.info( "entry_dict_extra: %s, len: %d" % ( type( entry_dict_extra ), len( entry_dict_extra ) ) )
     for key, entry_extra in entry_dict_extra.iteritems():
         logging.info( "key: %s\nentry_extra: %s" % ( key, entry_extra ) )
         entry_collect = entry_dict_collect.get( key )
@@ -2322,22 +2347,50 @@ def documentation():
 
 
 
-# Topics - Get topics an process them as terms for GUI
+# Topics - Get topics and process them as terms for GUI
 @app.route( "/topics" )
 def topics():
     logging.debug( "/topics" )
     logging.debug( "topics() request.args: %s" % str( request.args ) )
     
+    # Pieter requirement, RUSREPS-216: 
+    # - er per topic een json waarde is met key 'byear_counts', daar zat een array in met als keys de jaartallen en als waarde een count/totaal
+    # - de topic_root geen decimalen heeft, dus '2' ipv '2.0', en '0' ipv '0.0'
+
     language  = request.args.get( "language" )
     datatype  = request.args.get( "datatype" )
     base_year = request.args.get( "basisyear" )
     
-    vocab_type = "topics"
-    data = load_vocabulary( vocab_type, language, datatype, base_year )
+    if not language:
+        language = "ru"
     
+    vocab_type = "topics"
+    topics_dict = load_vocabulary( vocab_type, language, datatype, base_year )
+    logging.debug( "topics_dict: %s" % type( topics_dict ) )
+    logging.debug( "topics_dict: %s" % str( topics_dict ) )
+    
+    topics_array_out = []
+    topics_array = topics_dict[ "data" ]
+    for topic_dict in topics_array:
+        # Pieter wants no decimals in topic_root value string
+        topic_root = topic_dict[ "topic_root" ]
+        try:
+            topic_dict[ "topic_root" ] = str( int( float( topic_root ) ) )
+        except:
+            pass
+        logging.debug( "topic: %s" % str( topic_dict ) )
+        
+        datatype = topic_dict[ "datatype" ]
+        count_dict = topic_counts( language, datatype )
+        
+        topic_dict_out = copy.deepcopy( topic_dict )
+        topic_dict_out[ "byear_counts" ] = count_dict
+        topics_array_out.append( topic_dict_out )
+    
+    topics_dict_out = { "data" : topics_array_out }
     logging.debug( "/topics return Response" )
-    return Response( json.dumps( data ), mimetype = "application/json; charset=utf-8" )
-
+    return Response( json.dumps( topics_dict_out ), mimetype = "application/json; charset=utf-8" )
+    
 
 
 # Years - Get available years for year selection at GUI step 2
@@ -2848,7 +2901,7 @@ def make_query( msg, params, subclasses, value_total, value_numerical ):
             query += ", %s%d" % ( cls, k )
     
     # FROM
-    query += " FROM russianrepo_%s"  % language
+    query += " FROM russianrepo_%s" % language
     
     # WHERE datatype AND base_year
     query += " WHERE datatype = '%s'" % datatype

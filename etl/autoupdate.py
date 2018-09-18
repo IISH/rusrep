@@ -89,13 +89,13 @@ pkey = None
 
 #"""
 handle_names = [ 
-    "hdl_errhs_population",     # ERRHS_1   39 files
+    "hdl_errhs_population",     # ERRHS_1   40 files
     "hdl_errhs_capital",        # 
     "hdl_errhs_industry",       # 
     "hdl_errhs_agriculture",    # ERRHS_4   10 files
-    "hdl_errhs_labour",         # ERRHS_2    5 files
+    "hdl_errhs_labour",         # ERRHS_2   11 files
     "hdl_errhs_services",       # 
-    "hdl_errhs_land"            # ERRHS_7   10 files
+    "hdl_errhs_land"            # ERRHS_7    2 files
 ]
 #"""
 #handle_names = [ "hdl_errhs_agriculture" ]     # test for rounding
