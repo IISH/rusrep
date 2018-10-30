@@ -13,6 +13,7 @@ FL-17-Apr-2018 group pg items by identifier
 FL-07-May-2018 GridFS for large BSON
 FL-08-May-2018 /years URL now with extra classification parameter
 FL-18-Sep-2018 /topics new implementation
+FL-30-Oct-2018 document make_query msg options
 
 def get_configparser():
 def get_connection():
@@ -42,7 +43,7 @@ def execute_year( params, sql_query, key_set, eng_data ):
 def add_unique_items( language, list_name, entry_list_collect, entry_list_none ):
 def add_unique_items_grouped( language, dict_name, entry_dict_collect, entry_dict_none )
 def remove_dups( entry_list_collect ):
-def sort_entries( entry_list_nodups ):
+def sort_entries( datatype, entry_list ):
 #def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None)
 def cleanup_downloads( download_dir, time_limit ):
 def format_secs( seconds ):
@@ -1491,10 +1492,10 @@ def aggregate_year( params, add_subclasses, value_total = True, value_numerical 
     
     sql_query  = "SELECT COUNT(*) AS datarecords" 
     sql_query += ", COUNT(*) - COUNT(value) AS data_active"
-        
+    
     if value_total:
         sql_query += ", SUM(CAST(value AS DOUBLE PRECISION)) AS total"
-        
+    
     if classification == "modern":  # "ter_code" keyword not in qinput, but we always need it
         logging.debug( "modern classification: adding ter_code to SELECT" )
         sql_query += ", ter_code"
@@ -2624,9 +2625,21 @@ def aggregation():
             show_path_dict( path_dict )
             add_subclasses = path_dict[ "subclasses" ]
             
-            params[      "path" ] = path_list        # default query
-            params_ntc[  "path" ] = path_list        # query without ter_code specification
-            params_none[ "path" ] = path_list        # query with only NANs in value response
+            """
+            params      default query with explicit ter_code specification; 
+                        historic:   value_total = True,  value_numerical = True
+                        modern:     not used
+            params_ntc  query without ter_code specification: => all ter_codes requested
+                        historic:   value_total = False, value_numerical = True
+                        modern:     value_total = True,  value_numerical = True
+            params_none hist + modern:  
+                        query with only NANs in value response
+                        historic:   value_total = False, value_numerical = False
+                        modern:     value_total = False, value_numerical = False
+            """
+            params[      "path" ] = path_list
+            params_ntc[  "path" ] = path_list
+            params_none[ "path" ] = path_list
             
             # only for debugging
             #params[      "etype" ] = ""
@@ -2852,6 +2865,13 @@ def group_by_ident( entry_list ):
 
 def make_query( msg, params, subclasses, value_total, value_numerical ):
     logging.info( "make_query() %s " % msg )
+    """
+    The msg can be one of three words, that 'encodes' how the params dict is made. 
+    -1- "total" 
+    -2- "ntc"   
+    -3- "none"  
+    """
+    
     
     language       = params[ "language" ] 
     datatype       = params[ "datatype" ]
