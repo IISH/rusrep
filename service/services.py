@@ -14,6 +14,7 @@ FL-07-May-2018 GridFS for large BSON
 FL-08-May-2018 /years URL now with extra classification parameter
 FL-18-Sep-2018 /topics new implementation
 FL-30-Oct-2018 document make_query msg options
+FL-06-Nov-2018 continue with group_tercodes = True
 
 def get_configparser():
 def get_connection():
@@ -118,6 +119,7 @@ sys.path.insert( 0, os.path.abspath( os.path.join( os.path.dirname( "__file__" )
 use_gridfs = True
 
 forbidden = [ "classification", "action", "language", "path" ]
+entry_debug = False
 vocab_debug = False
 
 #do_translate = True
@@ -2567,8 +2569,12 @@ def aggregation():
     else:
         base_year = str( base_year )
     
-    group_tercodes = True   # group ter_codes with total values per unique path + unit_value
-    #group_tercodes = False  # default situation
+    group_tercodes = False  # default situation
+    #group_tercodes = True   # group ter_codes with total values per unique path + unit_value
+    entry_dict_ig = {}
+    entry_dict_ntc_ig = {}
+    entry_dict_none_ig = {}
+    entry_list_path_ig = {}
     if group_tercodes:
         logging.debug( "grouping ter_codes with total values per unique path + unit_value" )
     
@@ -2653,7 +2659,8 @@ def aggregation():
             #logging.info( "old_query: %s" % old_query )
             eng_data = {}
             entry_list = execute_year( params, sql_query, key_set, eng_data )
-            show_entries( "params -1- = entry_list", entry_list )
+            if entry_debug: 
+                show_entries( "params -1- = entry_list", entry_list )
             if group_tercodes:
                 entry_dict_ig = group_by_ident( entry_list )
             
@@ -2667,7 +2674,8 @@ def aggregation():
                 #logging.info( "old_query_ntc: %s" % old_query_ntc )
                 eng_data_ntc = {}
                 entry_list_ntc = execute_year( params_ntc, sql_query_ntc, key_set, eng_data_ntc )
-                show_entries( "params_ntc -2- = entry_list_ntc", entry_list_ntc )
+                if entry_debug: 
+                    show_entries( "params_ntc -2- = entry_list_ntc", entry_list_ntc )
                 if group_tercodes:
                     entry_dict_ntc_ig = group_by_ident( entry_list_ntc )
             
@@ -2678,15 +2686,19 @@ def aggregation():
             #logging.info( "old_query_none: %s" % old_query_none )
             eng_data_none = {}
             entry_list_none = execute_year( params_none, sql_query_none, key_set, eng_data_none )
-            show_entries( "params -3- = entry_list_none", entry_list_none )
+            if entry_debug: 
+                show_entries( "params -3- = entry_list_none", entry_list_none )
             if group_tercodes:
                 entry_dict_none_ig = group_by_ident( entry_list_none )
             
             # entry_list_path = entry_list + entry_list_ntc
             logging.info( "add_unique_ntcs()" )
             entry_list_path = add_unique_items( language, "entry_list_ntc", entry_list, entry_list_ntc )
+            
             if group_tercodes:
                 entry_list_path_ig = add_unique_items_grouped( language, "entry_dict_ntc", entry_dict_ig, entry_dict_ntc_ig )
+            
+            # TODO: use entry_list_path_ig
             
             # entry_list_collect = entry_list_path + entry_list_none
             logging.info( "add_unique_nones()" )
@@ -2750,16 +2762,28 @@ def aggregation():
                 sql_query_ntc = make_query( "ntc", params_ntc, add_subclasses, value_total = True, value_numerical = True )
                 eng_data_ntc = {}
                 entry_list_ntc = execute_year( params_ntc, sql_query_ntc, key_set, eng_data_ntc )
-                #entry_dict_ntc_ig = group_by_ident( entry_list_ntc )
-                show_entries( "params -1- = entry_list_ntc", entry_list_ntc )
+                if entry_debug: 
+                    show_entries( "params -1- = entry_list_ntc", entry_list_ntc )
+                
+                # TODO
+                #if group_tercodes:
+                #   entry_dict_ntc_ig = group_by_ident( entry_list_ntc )
                 
                 show_params( "params -2- = entry_list_none", params_none )
                 #old_query_none, eng_data_none = aggregate_year( params_none, add_subclasses, value_total = False, value_numerical = False )
                 sql_query_none = make_query( "none", params_none, add_subclasses, value_total = False, value_numerical = False )   # non-numbers
                 eng_data_none = {}
                 entry_list_none = execute_year( params_none, sql_query_none, key_set, eng_data_none )
-                #entry_dict_none_ig = group_by_ident( entry_list_none )
-                show_entries( "params -2- = entry_list_none", entry_list_none )
+                if entry_debug: 
+                    show_entries( "params -2- = entry_list_none", entry_list_none )
+                
+                # TODO
+                #if group_tercodes:
+                #   entry_dict_none_ig = group_by_ident( entry_list_none )
+                
+                #if group_tercodes:
+                #   entry_list_path_ig = add_unique_items_grouped( ...
+                # TODO: use entry_list_path_ig
                 
                 # entry_list_year = entry_list_ntc + entry_list_none
                 logging.info( "add_unique_nones()" )
@@ -2836,7 +2860,7 @@ def group_by_ident( entry_list ):
         # identifier must be immutable
         #identifier = frozenset( ident_dict.items() )
         identifier = json.dumps( ident_dict.items(), encoding = "utf-8" )
-        logging.info( "identifier %s " % str( identifier ) )
+        logging.debug( "identifier %s " % str( identifier ) )
         
         try:
             line_dict = table_dict[ identifier ]
@@ -2857,7 +2881,7 @@ def group_by_ident( entry_list ):
     
     logging.info( "%d entries in dict" % len( table_dict ) )
     for key, value in table_dict.iteritems():
-        logging.info( "key: %s, \nvalue: %s" % ( key, str( value )) )
+        logging.debug( "key: %s, \nvalue: %s" % ( key, str( value )) )
     
     return table_dict
 
