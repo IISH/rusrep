@@ -43,7 +43,7 @@ def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
 def aggregate_year( params, add_subclasses, value_total = True, value_numerical = True  ):
 def execute_year( params, sql_query, key_set, eng_data ):
 def execute_only( sql_query ):
-def collect_records( sql_resp, params, key_set, eng_data ):
+def collect_records( sql_names, sql_resp, params, key_set, eng_data ):
 def add_unique_items( language, list_name, entry_list_collect, entry_list_none ):
 def add_unique_items_grouped( language, dict_name, entry_dict_collect, entry_dict_none )
 def remove_dups( entry_list_collect ):
@@ -1676,11 +1676,11 @@ def execute_only( sql_query ):
     str_elapsed = format_secs( time() - time0 )
     logging.info( "execute_only() took %s" % str_elapsed )
 
-    return sql_resp
+    return sql_names, sql_resp
 
 
 
-def collect_records( sql_resp, params, key_set, eng_data ):
+def collect_records( sql_names, sql_resp, params, key_set, eng_data ):
     # sql_resp from execute_only()
     
     time0 = time()      # seconds since the epoch
@@ -2751,8 +2751,8 @@ def aggregation():
             #logging.info( "old_query: %s" % old_query )
             eng_data = {}
             #entry_list = execute_year( params, sql_query, key_set, eng_data )
-            sql_resp = execute_only ( sql_query )
-            entry_list = collect_records( sql_resp, params, key_set, eng_data )
+            sql_names, sql_resp = execute_only ( sql_query )
+            entry_list = collect_records( sql_names, sql_resp, params, key_set, eng_data )
             
             if entry_debug: 
                 show_entries( "params -1- = entry_list", entry_list )
