@@ -12,6 +12,10 @@ FL-04-Apr-2018 rebuilt postgres query
 FL-17-Apr-2018 group pg items by identifier
 FL-07-May-2018 GridFS for large BSON
 FL-08-May-2018 /years URL now with extra classification parameter
+FL-18-Sep-2018 /topics new implementation
+FL-30-Oct-2018 document make_query msg options
+FL-06-Nov-2018 continue with group_tercodes = True
+FL-19-Nov-2018 RUSREPS-216
 
 def get_configparser():
 def get_connection():
@@ -24,8 +28,9 @@ def collect_docs( params, download_dir, download_key ):
 def load_years( cursor, datatype, classification ):
 def sqlfilter( sql ):
 def sqlconstructor( sql ):
-def topic_counts():
-#def load_topics( qinput ):
+#def topic_counts( schema ):    # obsolete, remove
+#def load_topics( qinput ):     # obsolete, remove
+def topic_counts( language, datatype ):
 def dataset_filter( data, sql_names, classification ):
 def zap_empty_classes( item ):
 def translate_item( item, eng_data ):
@@ -37,10 +42,12 @@ def filecat_subtopic( qinput, cursor, datatype, base_year ):
 def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
 def aggregate_year( params, add_subclasses, value_total = True, value_numerical = True  ):
 def execute_year( params, sql_query, key_set, eng_data ):
+def execute_only( sql_query ):
+def collect_records( sql_resp, params, key_set, eng_data ):
 def add_unique_items( language, list_name, entry_list_collect, entry_list_none ):
 def add_unique_items_grouped( language, dict_name, entry_dict_collect, entry_dict_none )
 def remove_dups( entry_list_collect ):
-def sort_entries( entry_list_nodups ):
+def sort_entries( datatype, entry_list ):
 #def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None)
 def cleanup_downloads( download_dir, time_limit ):
 def format_secs( seconds ):
@@ -115,6 +122,7 @@ sys.path.insert( 0, os.path.abspath( os.path.join( os.path.dirname( "__file__" )
 use_gridfs = True
 
 forbidden = [ "classification", "action", "language", "path" ]
+entry_debug = False
 vocab_debug = False
 
 #do_translate = True
@@ -184,9 +192,9 @@ def class_collector( keywords, key_list ):
         else:
             normal_dict[ item ] = keywords[ item ]
     
-    # key_list contains all path keys from the input query
+    # key_list contains all path keys from the input query. 
     # append items with empty path keys if they are 'missing'; 
-    # missing path elements disturb sorting
+    # because missing path elements disturb sorting
     class_keys = class_dict.keys()
     if len( class_keys ) < nkeys:
         for key in key_list:
@@ -752,7 +760,7 @@ def sqlconstructor( sql ):
     return sql
 
 
-
+"""
 def topic_counts( schema ):
     logging.info( "topic_counts()" )
 
@@ -803,7 +811,7 @@ def topic_counts( schema ):
     connection.close()
 
     return all_cnt_dict
-
+"""
 
 """
 def load_topics( qinput ):
@@ -839,6 +847,30 @@ def load_topics( qinput ):
     
     return entry_list_out
 """
+
+
+def topic_counts( language, datatype ):
+    logging.debug( "topic_counts() datatype: %s" % datatype )
+
+    connection = get_connection()
+    cursor = connection.cursor( cursor_factory = psycopg2.extras.NamedTupleCursor )
+
+    sql_count  = "SELECT base_year, COUNT(*) AS count FROM russianrepo_%s" % language
+    sql_count += " WHERE datatype = '%s'" % datatype
+    sql_count += " GROUP BY base_year ORDER BY base_year"
+    logging.debug( sql_count )
+    
+    cursor.execute( sql_count )
+    sql_count_resp = cursor.fetchall()
+    count_dict = {}
+    for count_rec in sql_count_resp:
+        logging.debug( "count_rec: %s" % str( count_rec ) )
+        count_dict[ count_rec.base_year ] = int( count_rec.count )    # strip trailing 'L'
+    
+    logging.debug( "count_dict: %s" % count_dict )
+    
+    return count_dict
+
 
 
 def dataset_filter( data, sql_names, classification ):
@@ -1465,10 +1497,10 @@ def aggregate_year( params, add_subclasses, value_total = True, value_numerical 
     
     sql_query  = "SELECT COUNT(*) AS datarecords" 
     sql_query += ", COUNT(*) - COUNT(value) AS data_active"
-        
+    
     if value_total:
         sql_query += ", SUM(CAST(value AS DOUBLE PRECISION)) AS total"
-        
+    
     if classification == "modern":  # "ter_code" keyword not in qinput, but we always need it
         logging.debug( "modern classification: adding ter_code to SELECT" )
         sql_query += ", ter_code"
@@ -1487,8 +1519,7 @@ def aggregate_year( params, add_subclasses, value_total = True, value_numerical 
         sql_query  = sql_query[ :-2 ]
         logging.debug( "sql_query 2: %s" % sql_query )
         
-        #sql_query += " FROM russianrepository WHERE %s" % sql[ "where" ]
-        dbtable = "russianrepo_%s"  % language
+        dbtable = "russianrepo_%s" % language
         sql_query += " FROM %s WHERE %s" % ( dbtable, sql[ "where" ] )
         sql_query  = sql_query[ :-4 ]
         logging.debug( "sql_query 3: %s" % sql_query )
@@ -1559,7 +1590,7 @@ def execute_year( params, sql_query, key_set, eng_data = {} ):
     logging.info( "execute_year()" )
     
     time0 = time()      # seconds since the epoch
-    logging.debug( "query execute start: %s" % datetime.datetime.now() )
+    logging.debug( "execute_year() start: %s" % datetime.datetime.now() )
     
     connection = get_connection()
     cursor = connection.cursor()
@@ -1612,6 +1643,81 @@ def execute_year( params, sql_query, key_set, eng_data = {} ):
     str_elapsed = format_secs( time() - time0 )
     logging.info( "execute_year() took %s" % str_elapsed )
     
+    return entry_list
+
+
+
+def execute_only( sql_query ):
+    logging.info( "execute_only ()" )
+    # only sql execute part, response handling separate collect_records()
+
+    time0 = time()      # seconds since the epoch
+    logging.debug( "execute_only() start: %s" % datetime.datetime.now() )
+
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = cursor.mogrify( sql_query )     # needed if single quote has been escaped by repeating it
+    cursor.execute( sql_query )
+    
+    logging.debug( "query execute stop: %s" % datetime.datetime.now() )
+    str_elapsed = format_secs( time() - time0 )
+    logging.debug( "execute_year() sql_query took %s" % str_elapsed )
+    
+    sql_names = [ desc[ 0 ] for desc in cursor.description ]
+    logging.debug( "%d sql_names:" % len( sql_names ) )
+    logging.debug( sql_names )
+    
+    sql_resp = cursor.fetchall()
+    logging.debug( "result # of data records: %d" % len( sql_resp ) )
+    
+    cursor.close()
+    connection.close()
+
+    str_elapsed = format_secs( time() - time0 )
+    logging.info( "execute_only() took %s" % str_elapsed )
+
+    return sql_resp
+
+
+
+def collect_records( sql_resp, params, key_set, eng_data ):
+    # sql_resp from execute_only()
+    
+    time0 = time()      # seconds since the epoch
+    logging.debug( "collect_records() start: %s" % datetime.datetime.now() )
+    
+    final_data = []
+    for idx, item in enumerate( sql_resp ):
+        logging.debug( "%d: %s" % ( idx, item ) )
+        final_item = []
+        for i, column_name in enumerate( sql_names ):
+            value = item[ i ]
+            if value == ". ":
+                #logging.debug( "i: %d, name: %s, value: %s" % ( i, column_name, value ) )
+                pass           # ". " marks a trailing dot in histclass or class: skip
+                
+                # No: do not set empty value, that sometimes gives complete empty indicator columns
+                #value = ''      # keep as empty element: otherwise sorting by path is disrupted, i.e. not what we want
+            
+            if value in eng_data:
+                value = value.encode( "utf-8" )
+                value = eng_data[ value ]
+                
+            if column_name not in forbidden:
+                if column_name == "base_year":
+                    value = str( value )        # switch to strings
+                
+                final_item.append( value )
+        
+        logging.debug( "final_item: %s" % final_item )
+        final_data.append( final_item )
+    
+    params_ = copy.deepcopy( params )       # params path sometimes disrupted by json_generator() ???
+    entry_list = json_generator( params_, sql_names, "data", final_data, key_set )
+    
+    str_elapsed = format_secs( time() - time0 )
+    logging.info( "collect_records() took %s" % str_elapsed )
+
     return entry_list
 
 
@@ -1712,7 +1818,7 @@ def add_unique_items_grouped( language, dict_name, entry_dict_collect, entry_dic
         logging.info( "key: %s\nvalue: %s" % ( key, value ) )
     """
 
-    logging.info( "entry_dict_extra: %s, len: %d"  % ( type( entry_dict_extra ), len( entry_dict_extra ) ) )
+    logging.info( "entry_dict_extra: %s, len: %d" % ( type( entry_dict_extra ), len( entry_dict_extra ) ) )
     for key, entry_extra in entry_dict_extra.iteritems():
         logging.info( "key: %s\nentry_extra: %s" % ( key, entry_extra ) )
         entry_collect = entry_dict_collect.get( key )
@@ -2322,22 +2428,64 @@ def documentation():
 
 
 
-# Topics - Get topics an process them as terms for GUI
+# Topics - Get topics and process them as terms for GUI
 @app.route( "/topics" )
 def topics():
     logging.debug( "/topics" )
     logging.debug( "topics() request.args: %s" % str( request.args ) )
     
+    # Pieter requirement, RUSREPS-216: 
+    # - er per topic een json waarde is met key 'byear_counts', daar zat een array in met als keys de jaartallen en als waarde een count/totaal
+    # - de topic_root geen decimalen heeft, dus '2' ipv '2.0', en '0' ipv '0.0'
+    # for TOPIC_ROOT = 0, the DATATYPE values are integers [1...7]. 
+    # Due to the xslx-to-csv conversion, the values become [1.0, 2.0 ...7.0]
+    # Strip the unwanted ".0" here, but only for TOPIC_ROOT = 0
+    
     language  = request.args.get( "language" )
     datatype  = request.args.get( "datatype" )
     base_year = request.args.get( "basisyear" )
     
-    vocab_type = "topics"
-    data = load_vocabulary( vocab_type, language, datatype, base_year )
+    if not language:
+        language = "ru"
     
+    vocab_type = "topics"
+    topics_dict = load_vocabulary( vocab_type, language, datatype, base_year )
+    logging.debug( "topics_dict: %s" % type( topics_dict ) )
+    logging.debug( "topics_dict: %s" % str( topics_dict ) )
+    
+    topics_array_out = []
+    topics_array = topics_dict[ "data" ]
+    
+    for topic_dict in topics_array:
+        # Pieter wants no decimals in topic_root value string
+        topic_root = topic_dict[ "topic_root" ]
+        topic_id   = topic_dict[ "topic_id" ]
+        
+        try:
+            topic_root = str( int( float( topic_root ) ) )
+            topic_dict[ "topic_root" ] = topic_root
+        except:
+            pass
+        logging.debug( "topic: %s" % str( topic_dict ) )
+        
+        datatype = topic_dict[ "datatype" ]
+        count_dict = topic_counts( language, datatype )
+        
+        if topic_root == "0":   # pseudo topic, datatype as integer
+            datatype = str( int( float( datatype ) ) )
+            topic_dict[ "datatype" ] = datatype
+        
+        topic_id = str( int( float( topic_id ) ) )
+        topic_dict[ "topic_id" ] = topic_id 
+        
+        topic_dict_out = copy.deepcopy( topic_dict )
+        topic_dict_out[ "byear_counts" ] = count_dict
+        topics_array_out.append( topic_dict_out )
+    
+    topics_dict_out = { "data" : topics_array_out }
     logging.debug( "/topics return Response" )
-    return Response( json.dumps( data ), mimetype = "application/json; charset=utf-8" )
-
+    return Response( json.dumps( topics_dict_out ), mimetype = "application/json; charset=utf-8" )
+    
 
 
 # Years - Get available years for year selection at GUI step 2
@@ -2513,8 +2661,12 @@ def aggregation():
     else:
         base_year = str( base_year )
     
-    group_tercodes = True   # group ter_codes with total values per unique path + unit_value
-    #group_tercodes = False  # default situation
+    group_tercodes = False  # default situation
+    #group_tercodes = True   # group ter_codes with total values per unique path + unit_value
+    entry_dict_ig = {}
+    entry_dict_ntc_ig = {}
+    entry_dict_none_ig = {}
+    entry_list_path_ig = {}
     if group_tercodes:
         logging.debug( "grouping ter_codes with total values per unique path + unit_value" )
     
@@ -2571,9 +2723,21 @@ def aggregation():
             show_path_dict( path_dict )
             add_subclasses = path_dict[ "subclasses" ]
             
-            params[      "path" ] = path_list        # default query
-            params_ntc[  "path" ] = path_list        # query without ter_code specification
-            params_none[ "path" ] = path_list        # query with only NANs in value response
+            """
+            params      default query with explicit ter_code specification; 
+                        historic:   value_total = True,  value_numerical = True
+                        modern:     not used
+            params_ntc  query without ter_code specification: => all ter_codes requested
+                        historic:   value_total = False, value_numerical = True
+                        modern:     value_total = True,  value_numerical = True
+            params_none hist + modern:  
+                        query with only NANs in value response
+                        historic:   value_total = False, value_numerical = False
+                        modern:     value_total = False, value_numerical = False
+            """
+            params[      "path" ] = path_list
+            params_ntc[  "path" ] = path_list
+            params_none[ "path" ] = path_list
             
             # only for debugging
             #params[      "etype" ] = ""
@@ -2586,8 +2750,12 @@ def aggregation():
             #old_query, eng_data = aggregate_year( params, add_subclasses, value_total = True, value_numerical = True )
             #logging.info( "old_query: %s" % old_query )
             eng_data = {}
-            entry_list = execute_year( params, sql_query, key_set, eng_data )
-            show_entries( "params -1- = entry_list", entry_list )
+            #entry_list = execute_year( params, sql_query, key_set, eng_data )
+            sql_resp = execute_only ( sql_query )
+            entry_list = collect_records( sql_resp, params, key_set, eng_data )
+            
+            if entry_debug: 
+                show_entries( "params -1- = entry_list", entry_list )
             if group_tercodes:
                 entry_dict_ig = group_by_ident( entry_list )
             
@@ -2601,7 +2769,8 @@ def aggregation():
                 #logging.info( "old_query_ntc: %s" % old_query_ntc )
                 eng_data_ntc = {}
                 entry_list_ntc = execute_year( params_ntc, sql_query_ntc, key_set, eng_data_ntc )
-                show_entries( "params_ntc -2- = entry_list_ntc", entry_list_ntc )
+                if entry_debug: 
+                    show_entries( "params_ntc -2- = entry_list_ntc", entry_list_ntc )
                 if group_tercodes:
                     entry_dict_ntc_ig = group_by_ident( entry_list_ntc )
             
@@ -2612,15 +2781,19 @@ def aggregation():
             #logging.info( "old_query_none: %s" % old_query_none )
             eng_data_none = {}
             entry_list_none = execute_year( params_none, sql_query_none, key_set, eng_data_none )
-            show_entries( "params -3- = entry_list_none", entry_list_none )
+            if entry_debug: 
+                show_entries( "params -3- = entry_list_none", entry_list_none )
             if group_tercodes:
                 entry_dict_none_ig = group_by_ident( entry_list_none )
             
             # entry_list_path = entry_list + entry_list_ntc
             logging.info( "add_unique_ntcs()" )
             entry_list_path = add_unique_items( language, "entry_list_ntc", entry_list, entry_list_ntc )
+            
             if group_tercodes:
                 entry_list_path_ig = add_unique_items_grouped( language, "entry_dict_ntc", entry_dict_ig, entry_dict_ntc_ig )
+            
+            # TODO: use entry_list_path_ig
             
             # entry_list_collect = entry_list_path + entry_list_none
             logging.info( "add_unique_nones()" )
@@ -2684,16 +2857,28 @@ def aggregation():
                 sql_query_ntc = make_query( "ntc", params_ntc, add_subclasses, value_total = True, value_numerical = True )
                 eng_data_ntc = {}
                 entry_list_ntc = execute_year( params_ntc, sql_query_ntc, key_set, eng_data_ntc )
-                #entry_dict_ntc_ig = group_by_ident( entry_list_ntc )
-                show_entries( "params -1- = entry_list_ntc", entry_list_ntc )
+                if entry_debug: 
+                    show_entries( "params -1- = entry_list_ntc", entry_list_ntc )
+                
+                # TODO
+                #if group_tercodes:
+                #   entry_dict_ntc_ig = group_by_ident( entry_list_ntc )
                 
                 show_params( "params -2- = entry_list_none", params_none )
                 #old_query_none, eng_data_none = aggregate_year( params_none, add_subclasses, value_total = False, value_numerical = False )
                 sql_query_none = make_query( "none", params_none, add_subclasses, value_total = False, value_numerical = False )   # non-numbers
                 eng_data_none = {}
                 entry_list_none = execute_year( params_none, sql_query_none, key_set, eng_data_none )
-                #entry_dict_none_ig = group_by_ident( entry_list_none )
-                show_entries( "params -2- = entry_list_none", entry_list_none )
+                if entry_debug: 
+                    show_entries( "params -2- = entry_list_none", entry_list_none )
+                
+                # TODO
+                #if group_tercodes:
+                #   entry_dict_none_ig = group_by_ident( entry_list_none )
+                
+                #if group_tercodes:
+                #   entry_list_path_ig = add_unique_items_grouped( ...
+                # TODO: use entry_list_path_ig
                 
                 # entry_list_year = entry_list_ntc + entry_list_none
                 logging.info( "add_unique_nones()" )
@@ -2770,7 +2955,7 @@ def group_by_ident( entry_list ):
         # identifier must be immutable
         #identifier = frozenset( ident_dict.items() )
         identifier = json.dumps( ident_dict.items(), encoding = "utf-8" )
-        logging.info( "identifier %s " % str( identifier ) )
+        logging.debug( "identifier %s " % str( identifier ) )
         
         try:
             line_dict = table_dict[ identifier ]
@@ -2791,7 +2976,7 @@ def group_by_ident( entry_list ):
     
     logging.info( "%d entries in dict" % len( table_dict ) )
     for key, value in table_dict.iteritems():
-        logging.info( "key: %s, \nvalue: %s" % ( key, str( value )) )
+        logging.debug( "key: %s, \nvalue: %s" % ( key, str( value )) )
     
     return table_dict
 
@@ -2799,6 +2984,13 @@ def group_by_ident( entry_list ):
 
 def make_query( msg, params, subclasses, value_total, value_numerical ):
     logging.info( "make_query() %s " % msg )
+    """
+    The msg can be one of three words, that 'encodes' how the params dict is made. 
+    -1- "total" 
+    -2- "ntc"   
+    -3- "none"  
+    """
+    
     
     language       = params[ "language" ] 
     datatype       = params[ "datatype" ]
@@ -2848,7 +3040,7 @@ def make_query( msg, params, subclasses, value_total, value_numerical ):
             query += ", %s%d" % ( cls, k )
     
     # FROM
-    query += " FROM russianrepo_%s"  % language
+    query += " FROM russianrepo_%s" % language
     
     # WHERE datatype AND base_year
     query += " WHERE datatype = '%s'" % datatype
