@@ -15,6 +15,7 @@ FL-08-May-2018 /years URL now with extra classification parameter
 FL-18-Sep-2018 /topics new implementation
 FL-30-Oct-2018 document make_query msg options
 FL-06-Nov-2018 continue with group_tercodes = True
+FL-19-Nov-2018 RUSREPS-216
 
 def get_configparser():
 def get_connection():
@@ -41,6 +42,8 @@ def filecat_subtopic( qinput, cursor, datatype, base_year ):
 def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
 def aggregate_year( params, add_subclasses, value_total = True, value_numerical = True  ):
 def execute_year( params, sql_query, key_set, eng_data ):
+def execute_only( sql_query ):
+def collect_records( sql_resp, params, key_set, eng_data ):
 def add_unique_items( language, list_name, entry_list_collect, entry_list_none ):
 def add_unique_items_grouped( language, dict_name, entry_dict_collect, entry_dict_none )
 def remove_dups( entry_list_collect ):
@@ -189,9 +192,9 @@ def class_collector( keywords, key_list ):
         else:
             normal_dict[ item ] = keywords[ item ]
     
-    # key_list contains all path keys from the input query
+    # key_list contains all path keys from the input query. 
     # append items with empty path keys if they are 'missing'; 
-    # missing path elements disturb sorting
+    # because missing path elements disturb sorting
     class_keys = class_dict.keys()
     if len( class_keys ) < nkeys:
         for key in key_list:
@@ -1587,7 +1590,7 @@ def execute_year( params, sql_query, key_set, eng_data = {} ):
     logging.info( "execute_year()" )
     
     time0 = time()      # seconds since the epoch
-    logging.debug( "query execute start: %s" % datetime.datetime.now() )
+    logging.debug( "execute_year() start: %s" % datetime.datetime.now() )
     
     connection = get_connection()
     cursor = connection.cursor()
@@ -1640,6 +1643,81 @@ def execute_year( params, sql_query, key_set, eng_data = {} ):
     str_elapsed = format_secs( time() - time0 )
     logging.info( "execute_year() took %s" % str_elapsed )
     
+    return entry_list
+
+
+
+def execute_only( sql_query ):
+    logging.info( "execute_only ()" )
+    # only sql execute part, response handling separate collect_records()
+
+    time0 = time()      # seconds since the epoch
+    logging.debug( "execute_only() start: %s" % datetime.datetime.now() )
+
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = cursor.mogrify( sql_query )     # needed if single quote has been escaped by repeating it
+    cursor.execute( sql_query )
+    
+    logging.debug( "query execute stop: %s" % datetime.datetime.now() )
+    str_elapsed = format_secs( time() - time0 )
+    logging.debug( "execute_year() sql_query took %s" % str_elapsed )
+    
+    sql_names = [ desc[ 0 ] for desc in cursor.description ]
+    logging.debug( "%d sql_names:" % len( sql_names ) )
+    logging.debug( sql_names )
+    
+    sql_resp = cursor.fetchall()
+    logging.debug( "result # of data records: %d" % len( sql_resp ) )
+    
+    cursor.close()
+    connection.close()
+
+    str_elapsed = format_secs( time() - time0 )
+    logging.info( "execute_only() took %s" % str_elapsed )
+
+    return sql_resp
+
+
+
+def collect_records( sql_resp, params, key_set, eng_data ):
+    # sql_resp from execute_only()
+    
+    time0 = time()      # seconds since the epoch
+    logging.debug( "collect_records() start: %s" % datetime.datetime.now() )
+    
+    final_data = []
+    for idx, item in enumerate( sql_resp ):
+        logging.debug( "%d: %s" % ( idx, item ) )
+        final_item = []
+        for i, column_name in enumerate( sql_names ):
+            value = item[ i ]
+            if value == ". ":
+                #logging.debug( "i: %d, name: %s, value: %s" % ( i, column_name, value ) )
+                pass           # ". " marks a trailing dot in histclass or class: skip
+                
+                # No: do not set empty value, that sometimes gives complete empty indicator columns
+                #value = ''      # keep as empty element: otherwise sorting by path is disrupted, i.e. not what we want
+            
+            if value in eng_data:
+                value = value.encode( "utf-8" )
+                value = eng_data[ value ]
+                
+            if column_name not in forbidden:
+                if column_name == "base_year":
+                    value = str( value )        # switch to strings
+                
+                final_item.append( value )
+        
+        logging.debug( "final_item: %s" % final_item )
+        final_data.append( final_item )
+    
+    params_ = copy.deepcopy( params )       # params path sometimes disrupted by json_generator() ???
+    entry_list = json_generator( params_, sql_names, "data", final_data, key_set )
+    
+    str_elapsed = format_secs( time() - time0 )
+    logging.info( "collect_records() took %s" % str_elapsed )
+
     return entry_list
 
 
@@ -2359,7 +2437,10 @@ def topics():
     # Pieter requirement, RUSREPS-216: 
     # - er per topic een json waarde is met key 'byear_counts', daar zat een array in met als keys de jaartallen en als waarde een count/totaal
     # - de topic_root geen decimalen heeft, dus '2' ipv '2.0', en '0' ipv '0.0'
-
+    # for TOPIC_ROOT = 0, the DATATYPE values are integers [1...7]. 
+    # Due to the xslx-to-csv conversion, the values become [1.0, 2.0 ...7.0]
+    # Strip the unwanted ".0" here, but only for TOPIC_ROOT = 0
+    
     language  = request.args.get( "language" )
     datatype  = request.args.get( "datatype" )
     base_year = request.args.get( "basisyear" )
@@ -2374,17 +2455,28 @@ def topics():
     
     topics_array_out = []
     topics_array = topics_dict[ "data" ]
+    
     for topic_dict in topics_array:
         # Pieter wants no decimals in topic_root value string
         topic_root = topic_dict[ "topic_root" ]
+        topic_id   = topic_dict[ "topic_id" ]
+        
         try:
-            topic_dict[ "topic_root" ] = str( int( float( topic_root ) ) )
+            topic_root = str( int( float( topic_root ) ) )
+            topic_dict[ "topic_root" ] = topic_root
         except:
             pass
         logging.debug( "topic: %s" % str( topic_dict ) )
         
         datatype = topic_dict[ "datatype" ]
         count_dict = topic_counts( language, datatype )
+        
+        if topic_root == "0":   # pseudo topic, datatype as integer
+            datatype = str( int( float( datatype ) ) )
+            topic_dict[ "datatype" ] = datatype
+        
+        topic_id = str( int( float( topic_id ) ) )
+        topic_dict[ "topic_id" ] = topic_id 
         
         topic_dict_out = copy.deepcopy( topic_dict )
         topic_dict_out[ "byear_counts" ] = count_dict
@@ -2658,7 +2750,10 @@ def aggregation():
             #old_query, eng_data = aggregate_year( params, add_subclasses, value_total = True, value_numerical = True )
             #logging.info( "old_query: %s" % old_query )
             eng_data = {}
-            entry_list = execute_year( params, sql_query, key_set, eng_data )
+            #entry_list = execute_year( params, sql_query, key_set, eng_data )
+            sql_resp = execute_only ( sql_query )
+            entry_list = collect_records( sql_resp, params, key_set, eng_data )
+            
             if entry_debug: 
                 show_entries( "params -1- = entry_list", entry_list )
             if group_tercodes:
