@@ -16,6 +16,7 @@ FL-18-Sep-2018 /topics new implementation
 FL-30-Oct-2018 document make_query msg options
 FL-06-Nov-2018 continue with group_tercodes = True
 FL-19-Nov-2018 RUSREPS-216
+FL-26-Nov-2018 collect_fields() & collect_records()
 
 def get_configparser():
 def get_connection():
@@ -43,6 +44,7 @@ def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
 def aggregate_year( params, add_subclasses, value_total = True, value_numerical = True  ):
 def execute_year( params, sql_query, key_set, eng_data ):
 def execute_only( sql_query ):
+def collect_fields( sql_names, sql_resp, params, key_set, eng_data ):
 def collect_records( sql_names, sql_resp, params, key_set, eng_data ):
 def add_unique_items( language, list_name, entry_list_collect, entry_list_none ):
 def add_unique_items_grouped( language, dict_name, entry_dict_collect, entry_dict_none )
@@ -1649,7 +1651,7 @@ def execute_year( params, sql_query, key_set, eng_data = {} ):
 
 def execute_only( sql_query ):
     logging.info( "execute_only ()" )
-    # only sql execute part, response handling separate collect_records()
+    # only sql execute part, response handling separate collect_fields()
 
     time0 = time()      # seconds since the epoch
     logging.debug( "execute_only() start: %s" % datetime.datetime.now() )
@@ -1680,16 +1682,17 @@ def execute_only( sql_query ):
 
 
 
-def collect_records( sql_names, sql_resp, params, key_set, eng_data ):
-    # sql_resp from execute_only()
+def collect_fields( sql_names, sql_resp, params, key_set, eng_data ):
+    # sql_names & sql_resp from execute_only()
     
     time0 = time()      # seconds since the epoch
-    logging.debug( "collect_records() start: %s" % datetime.datetime.now() )
+    logging.debug( "collect_fields() start: %s" % datetime.datetime.now() )
     
     final_data = []
     for idx, item in enumerate( sql_resp ):
         logging.debug( "%d: %s" % ( idx, item ) )
         final_item = []
+        
         for i, column_name in enumerate( sql_names ):
             value = item[ i ]
             if value == ". ":
@@ -1716,8 +1719,28 @@ def collect_records( sql_names, sql_resp, params, key_set, eng_data ):
     entry_list = json_generator( params_, sql_names, "data", final_data, key_set )
     
     str_elapsed = format_secs( time() - time0 )
-    logging.info( "collect_records() took %s" % str_elapsed )
+    logging.info( "collect_fields() took %s" % str_elapsed )
 
+    return entry_list
+
+
+
+def collect_records( sql_names, sql_resp, params, key_set, eng_data ):
+    # sql_names & sql_resp from execute_only()
+    
+    time0 = time()      # seconds since the epoch
+    logging.debug( "collect_records() start: %s" % datetime.datetime.now() )
+    
+    final_data = []
+    for idx, item in enumerate( sql_resp ):
+        logging.debug( "%d: %s" % ( idx, item ) )
+        final_item = []
+    
+    
+    
+    str_elapsed = format_secs( time() - time0 )
+    logging.info( "collect_records() took %s" % str_elapsed )
+    
     return entry_list
 
 
@@ -2749,10 +2772,15 @@ def aggregation():
             sql_query = make_query( "total", params, add_subclasses, value_total = True, value_numerical = True  )
             #old_query, eng_data = aggregate_year( params, add_subclasses, value_total = True, value_numerical = True )
             #logging.info( "old_query: %s" % old_query )
+            
             eng_data = {}
             #entry_list = execute_year( params, sql_query, key_set, eng_data )
-            sql_names, sql_resp = execute_only ( sql_query )
-            entry_list = collect_records( sql_names, sql_resp, params, key_set, eng_data )
+            sql_names, sql_resp = execute_only( sql_query )
+            redundant = True
+            if redundant:   # old
+                entry_list = collect_fields( sql_names, sql_resp, params, key_set, eng_data )
+            else:           # new
+                entry_list = collect_records( sql_names, sql_resp, params, key_set, eng_data )
             
             if entry_debug: 
                 show_entries( "params -1- = entry_list", entry_list )
