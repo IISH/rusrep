@@ -16,7 +16,7 @@ FL-18-Sep-2018 /topics new implementation
 FL-30-Oct-2018 document make_query msg options
 FL-06-Nov-2018 continue with group_tercodes = True
 FL-19-Nov-2018 RUSREPS-216
-FL-26-Nov-2018 collect_fields() & collect_records()
+FL-27-Nov-2018 collect_fields() & collect_records()
 
 def get_configparser():
 def get_connection():
@@ -41,11 +41,11 @@ def get_sql_where( name, value ):
 def loadjson( json_dataurl ):
 def filecat_subtopic( qinput, cursor, datatype, base_year ):
 def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
-def aggregate_year( params, add_subclasses, value_total = True, value_numerical = True  ):
+def aggregate_year( params, add_subclasses, value_total = True, value_numerical = True ):
 def execute_year( params, sql_query, key_set, eng_data ):
-def execute_only( sql_query ):
-def collect_fields( sql_names, sql_resp, params, key_set, eng_data ):
-def collect_records( sql_names, sql_resp, params, key_set, eng_data ):
+def execute_only( sql_query, dict_cursor = False ):
+def collect_fields(  sql_names, sql_resp, params, key_set, eng_data ):
+def collect_records( sql_names, sql_resp, params, key_set, eng_data, path_dict ):
 def add_unique_items( language, list_name, entry_list_collect, entry_list_none ):
 def add_unique_items_grouped( language, dict_name, entry_dict_collect, entry_dict_none )
 def remove_dups( entry_list_collect ):
@@ -1036,7 +1036,7 @@ def load_vocabulary( vocab_type, language, datatype, base_year ):
     client = MongoClient()
     db_name = "vocabulary"
     if "classes" in vocab_name:
-        db_name +=  ( '_' + language )
+        db_name += ( '_' + language )
     logging.debug( "db_name: %s" % db_name )
     
     db = client.get_database( db_name )     # get the vocabulary db
@@ -1307,7 +1307,7 @@ def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
         xlsx_filename = root + ".xlsx"
         xlsx_pathname = os.path.join( download_dir, xlsx_filename )
         
-        writer = pd.ExcelWriter( xlsx_pathname  )
+        writer = pd.ExcelWriter( xlsx_pathname )
         df1.to_excel( writer, "Table", encoding = "utf-8", index = False )
         
         # Create a Pandas dataframe from the data.
@@ -1596,7 +1596,7 @@ def execute_year( params, sql_query, key_set, eng_data = {} ):
     
     connection = get_connection()
     cursor = connection.cursor()
-    query = cursor.mogrify( sql_query )     # needed if single quote has been escaped by repeating it
+    sql_query = cursor.mogrify( sql_query )     # needed if single quote has been escaped by repeating it
     cursor.execute( sql_query )
     
     logging.debug( "query execute stop: %s" % datetime.datetime.now() )
@@ -1649,16 +1649,21 @@ def execute_year( params, sql_query, key_set, eng_data = {} ):
 
 
 
-def execute_only( sql_query ):
-    logging.info( "execute_only ()" )
+def execute_only( sql_query, dict_cursor = False ):
+    logging.info( "execute_only () cursor_dict: %s" % dict_cursor )
     # only sql execute part, response handling separate collect_fields()
 
     time0 = time()      # seconds since the epoch
     logging.debug( "execute_only() start: %s" % datetime.datetime.now() )
 
     connection = get_connection()
-    cursor = connection.cursor()
-    query = cursor.mogrify( sql_query )     # needed if single quote has been escaped by repeating it
+    
+    if dict_cursor:
+        cursor = connection.cursor( cursor_factory = psycopg2.extras.DictCursor )
+    else:
+        cursor = connection.cursor()
+    
+    sql_query = cursor.mogrify( sql_query )     # needed if single quote has been escaped by repeating it
     cursor.execute( sql_query )
     
     logging.debug( "query execute stop: %s" % datetime.datetime.now() )
@@ -1669,7 +1674,10 @@ def execute_only( sql_query ):
     logging.debug( "%d sql_names:" % len( sql_names ) )
     logging.debug( sql_names )
     
-    sql_resp = cursor.fetchall()
+    if dict_cursor:
+        sql_resp = [ json.dumps( dict( record ) ) for record in cursor ]    # it calls .fetchone() in loop
+    else:
+        sql_resp = cursor.fetchall()
     logging.debug( "result # of data records: %d" % len( sql_resp ) )
     
     cursor.close()
@@ -1725,18 +1733,27 @@ def collect_fields( sql_names, sql_resp, params, key_set, eng_data ):
 
 
 
-def collect_records( sql_names, sql_resp, params, key_set, eng_data ):
+def collect_records( sql_names, sql_resp, params, key_set, eng_data, path_dict ):
     # sql_names & sql_resp from execute_only()
     
     time0 = time()      # seconds since the epoch
     logging.debug( "collect_records() start: %s" % datetime.datetime.now() )
     
-    final_data = []
+    nkeys = path_dict[ "nkeys" ]
+    
+    entry_list = []
+    path_prev = None
+    path = {}
     for idx, item in enumerate( sql_resp ):
         logging.debug( "%d: %s" % ( idx, item ) )
-        final_item = []
+        
+        for key in key_set:
+            logging.debug( "key: %s" % key )
+            path[ key ] = dict( item )[ key ]
+        logging.debug( "path: %s" % path )
     
-    
+    #params_ = copy.deepcopy( params )       # params path sometimes disrupted by json_generator() ???
+    #entry_list = json_generator( params_, sql_names, "data", final_data, key_set )
     
     str_elapsed = format_secs( time() - time0 )
     logging.info( "collect_records() took %s" % str_elapsed )
@@ -2349,7 +2366,7 @@ def test():
 @app.route( "/documentation" )
 def documentation():
     logging.debug( "/documentation" )
-    logging.debug( "Python version: %s" % sys.version  )
+    logging.debug( "Python version: %s" % sys.version )
 
     configparser   = get_configparser()
     dv_host        = configparser.get( "config", "dataverse_root" )
@@ -2769,7 +2786,7 @@ def aggregation():
             
             #logging.info( "-1- = entry_list" )
             show_params( "params -1- = entry_list", params )
-            sql_query = make_query( "total", params, add_subclasses, value_total = True, value_numerical = True  )
+            sql_query = make_query( "total", params, add_subclasses, value_total = True, value_numerical = True )
             #old_query, eng_data = aggregate_year( params, add_subclasses, value_total = True, value_numerical = True )
             #logging.info( "old_query: %s" % old_query )
             
@@ -2778,9 +2795,11 @@ def aggregation():
             sql_names, sql_resp = execute_only( sql_query )
             redundant = True
             if redundant:   # old
+                sql_names, sql_resp = execute_only( sql_query )
                 entry_list = collect_fields( sql_names, sql_resp, params, key_set, eng_data )
             else:           # new
-                entry_list = collect_records( sql_names, sql_resp, params, key_set, eng_data )
+                sql_names, sql_resp = execute_only( sql_query, dict_cursor = True )
+                entry_list = collect_records( sql_names, sql_resp, params, key_set, eng_data, path_dict )
             
             if entry_debug: 
                 show_entries( "params -1- = entry_list", entry_list )
@@ -3200,7 +3219,7 @@ def extend_nodups( tot_list, add_list ):
 
 
 # Filecatalog - Create filecatalog download link
-@app.route( "/filecatalogdata", methods = [ "POST", "GET" ]  )
+@app.route( "/filecatalogdata", methods = [ "POST", "GET" ] )
 def filecatalogdata():
     logging.debug( "/filecatalogdata" )
     logging.debug( "request: %s"           % str( request ) )
