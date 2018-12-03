@@ -17,6 +17,7 @@ FL-30-Oct-2018 document make_query msg options
 FL-06-Nov-2018 continue with group_tercodes = True
 FL-19-Nov-2018 RUSREPS-216
 FL-27-Nov-2018 collect_fields() & collect_records()
+FL-03-Dec-2018 handle /documentation exception
 
 def get_configparser():
 def get_connection():
@@ -1650,7 +1651,7 @@ def execute_year( params, sql_query, key_set, eng_data = {} ):
 
 
 def execute_only( sql_query, dict_cursor = False ):
-    logging.info( "execute_only () cursor_dict: %s" % dict_cursor )
+    logging.info( "execute_only () dict_cursor: %s" % dict_cursor )
     # only sql execute part, response handling separate collect_fields()
 
     time0 = time()      # seconds since the epoch
@@ -1739,11 +1740,13 @@ def collect_records( sql_names, sql_resp, params, key_set, eng_data, path_dict )
     time0 = time()      # seconds since the epoch
     logging.debug( "collect_records() start: %s" % datetime.datetime.now() )
     
-    nkeys = path_dict[ "nkeys" ]
+    logging.debug( "sql_resp: %s" % type( sql_resp ) )
     
+    nkeys = path_dict[ "nkeys" ]
     entry_list = []
     path_prev = None
     path = {}
+    
     for idx, item in enumerate( sql_resp ):
         logging.debug( "%d: %s" % ( idx, item ) )
         
@@ -2377,9 +2380,17 @@ def documentation():
     
     logging.info( "dv_host: %s" % dv_host )
     logging.info( "ristat_key: %s" % ristat_key )
-    connection = Connection( dv_host, ristat_key )
     
     papers = []
+    
+    try:
+        connection = Connection( dv_host, ristat_key )
+    except:
+        type_, value, tb = sys.exc_info()
+        logging.error( "%s" % value )
+        return Response( json.dumps( papers ), mimetype = "application/json; charset=utf-8" )
+    
+    
     dataverse = connection.get_dataverse( ristat_name )
     if not dataverse:
         logging.info( "ristat_key: %s" % ristat_key )
@@ -2797,7 +2808,7 @@ def aggregation():
             if redundant:   # old
                 sql_names, sql_resp = execute_only( sql_query )
                 entry_list = collect_fields( sql_names, sql_resp, params, key_set, eng_data )
-            else:           # new
+            else:           # new, redundant = False
                 sql_names, sql_resp = execute_only( sql_query, dict_cursor = True )
                 entry_list = collect_records( sql_names, sql_resp, params, key_set, eng_data, path_dict )
             
