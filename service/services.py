@@ -253,6 +253,8 @@ def strip_subclasses( path ):
         keys = stripped_entry.keys()
         for k in keys:
             key_set.add( k )
+        
+    key_set = sorted( key_set )     # like them [hist]class1, 2, 3 ...
     
     logging.debug( "new path: (%s) %s" % ( type( path_stripped ), str( path_stripped ) ) )
     logging.debug( "key_set: %s" % key_set )
@@ -1660,7 +1662,7 @@ def execute_only( sql_query, dict_cursor = False ):
     connection = get_connection()
     
     if dict_cursor:
-        cursor = connection.cursor( cursor_factory = psycopg2.extras.DictCursor )
+        cursor = connection.cursor( cursor_factory = psycopg2.extras.RealDictCursor )
     else:
         cursor = connection.cursor()
     
@@ -1740,20 +1742,71 @@ def collect_records( sql_names, sql_resp, params, key_set, eng_data, path_dict )
     time0 = time()      # seconds since the epoch
     logging.debug( "collect_records() start: %s" % datetime.datetime.now() )
     
-    logging.debug( "sql_resp: %s" % type( sql_resp ) )
+    logging.debug( "sql_resp type: %s" % type( sql_resp ) )
     
     nkeys = path_dict[ "nkeys" ]
-    entry_list = []
     path_prev = None
-    path = {}
+    path_dict = collections.OrderedDict()
     
-    for idx, item in enumerate( sql_resp ):
-        logging.debug( "%d: %s" % ( idx, item ) )
+    gui_resp = {}
+    gui_resp[ "language" ]       = params.get( "language" )
+    gui_resp[ "classification" ] = params.get( "classification" )
+    gui_resp[ "datatype" ]       = params.get( "datatype" )
+    gui_resp[ "base_year" ]      = params.get( "base_year" )
+    
+    data = []
+    path_list = []      # unique paths
+    
+    for r, record in enumerate( sql_resp ):
+        logging.debug( "%d, %s: %s" % ( r, type( record ), record ) )
+        record_dict = json.loads( record )
+        #logging.debug( "%d, %s" % ( r, type( record_dict ) ) )
         
+        path_dict = {}
         for key in key_set:
-            logging.debug( "key: %s" % key )
-            path[ key ] = dict( item )[ key ]
-        logging.debug( "path: %s" % path )
+            #logging.debug( "key: %s" % key )
+            path_dict[ key ] = record_dict[ key ]
+        
+        path_str = json.dumps( path_dict )
+        #logging.debug( "path: %s" % path_str )
+        
+        if path_str not in path_list:
+            logging.debug( "new path: %s" % path_str )
+            path_list.append( path_str )
+            
+            if r == 0:        # start first row_dict
+                row_dict = {}
+                row_dict[ "path" ] = path_dict
+                row_dict[ "value_unit" ] = record_dict[ "value_unit" ]
+                ter_codes = []
+            else:                       # add complete row_dict to data
+                row_dict[ "ter_codes" ] = ter_codes
+                logging.debug( "append row_dict" )
+                data.append( row_dict )
+            
+            # start new row_dict
+            row_dict = {}
+            row_dict[ "path" ] = path_dict
+            row_dict[ "value_unit" ] = record_dict[ "value_unit" ]
+            ter_codes = []
+        
+        # append to ter_code list
+        ter_codes.append ( { 
+            "ter_code" : record_dict[ "ter_code" ], 
+            "total"    : record_dict[ "total" ]
+        } )
+    
+    # add last row_dict to data
+    row_dict[ "ter_codes" ] = ter_codes
+    data.append( row_dict )
+    
+    logging.info( "paths in path_list %d" % len( path_list ) )
+    logging.info( "rows in gui data %d" % len( data ) )
+    for r, row_dict in enumerate( data ):
+        logging.debug( "%d, %s" % ( r, str( row_dict ) ) )
+    
+    # add data list to gui_resp
+    gui_resp[ "data" ] = data
     
     #params_ = copy.deepcopy( params )       # params path sometimes disrupted by json_generator() ???
     #entry_list = json_generator( params_, sql_names, "data", final_data, key_set )
@@ -1761,7 +1814,8 @@ def collect_records( sql_names, sql_resp, params, key_set, eng_data, path_dict )
     str_elapsed = format_secs( time() - time0 )
     logging.info( "collect_records() took %s" % str_elapsed )
     
-    return entry_list
+    #return gui_resp
+    return []
 
 
 
