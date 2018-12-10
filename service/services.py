@@ -17,7 +17,7 @@ FL-30-Oct-2018 document make_query msg options
 FL-06-Nov-2018 continue with group_tercodes = True
 FL-19-Nov-2018 RUSREPS-216
 FL-27-Nov-2018 collect_fields() & collect_records()
-FL-03-Dec-2018 handle /documentation exception
+FL-10-Dec-2018 handle /documentation exception
 
 def get_configparser():
 def get_connection():
@@ -43,10 +43,10 @@ def loadjson( json_dataurl ):
 def filecat_subtopic( qinput, cursor, datatype, base_year ):
 def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
 def aggregate_year( params, add_subclasses, value_total = True, value_numerical = True ):
-def execute_year( params, sql_query, key_set, eng_data ):
+def execute_year( key_set, params, sql_query, eng_data ):
 def execute_only( sql_query, dict_cursor = False ):
-def collect_fields(  sql_names, sql_resp, params, key_set, eng_data ):
-def collect_records( sql_names, sql_resp, params, key_set, eng_data, path_dict ):
+def collect_fields(  key_set, params, eng_data, sql_names, sql_resp ):
+def collect_records( key_set, path_dict, params, eng_data, sql_names, sql_resp ):
 def add_unique_items( language, list_name, entry_list_collect, entry_list_none ):
 def add_unique_items_grouped( language, dict_name, entry_dict_collect, entry_dict_none )
 def remove_dups( entry_list_collect ):
@@ -1591,7 +1591,7 @@ def aggregate_year( params, add_subclasses, value_total = True, value_numerical 
 
 
 
-def execute_year( params, sql_query, key_set, eng_data = {} ):
+def execute_year( key_set, params, sql_query, eng_data = {} ):
     logging.info( "execute_year()" )
     
     time0 = time()      # seconds since the epoch
@@ -1669,9 +1669,9 @@ def execute_only( sql_query, dict_cursor = False ):
     sql_query = cursor.mogrify( sql_query )     # needed if single quote has been escaped by repeating it
     cursor.execute( sql_query )
     
-    logging.debug( "query execute stop: %s" % datetime.datetime.now() )
+    logging.debug( "query execute_only stop: %s" % datetime.datetime.now() )
     str_elapsed = format_secs( time() - time0 )
-    logging.debug( "execute_year() sql_query took %s" % str_elapsed )
+    logging.debug( "query execute_only() sql_query took %s" % str_elapsed )
     
     sql_names = [ desc[ 0 ] for desc in cursor.description ]
     logging.debug( "%d sql_names:" % len( sql_names ) )
@@ -1693,7 +1693,7 @@ def execute_only( sql_query, dict_cursor = False ):
 
 
 
-def collect_fields( sql_names, sql_resp, params, key_set, eng_data ):
+def collect_fields( key_set, params, eng_data, sql_names, sql_resp ):
     # sql_names & sql_resp from execute_only()
     
     time0 = time()      # seconds since the epoch
@@ -1736,7 +1736,7 @@ def collect_fields( sql_names, sql_resp, params, key_set, eng_data ):
 
 
 
-def collect_records( sql_names, sql_resp, params, key_set, eng_data, path_dict ):
+def collect_records( key_set, path_dict, params, eng_data, sql_names, sql_resp ):
     # sql_names & sql_resp from execute_only()
     
     time0 = time()      # seconds since the epoch
@@ -1755,29 +1755,38 @@ def collect_records( sql_names, sql_resp, params, key_set, eng_data, path_dict )
     gui_resp[ "base_year" ]      = params.get( "base_year" )
     
     data = []
-    path_list = []      # unique paths
+    #path_list = []          # unique path list
+    path_unit_list = []     # unique path+unit list
     
     for r, record in enumerate( sql_resp ):
         logging.debug( "%d, %s: %s" % ( r, type( record ), record ) )
         record_dict = json.loads( record )
         #logging.debug( "%d, %s" % ( r, type( record_dict ) ) )
         
-        path_dict = {}
+        #path_dict = {}
+        path_unit_dict = {}
         for key in key_set:
             #logging.debug( "key: %s" % key )
-            path_dict[ key ] = record_dict[ key ]
+            #path_dict[ key ] = record_dict[ key ]
+            path_unit_dict[ key ] = record_dict[ key ]
         
-        path_str = json.dumps( path_dict )
+        #path_str = json.dumps( path_dict )
+        value_unit = record_dict[ "value_unit" ]
+        path_unit_dict[ "value_unit" ] = value_unit
+        path_unit_str = json.dumps( path_unit_dict )
         #logging.debug( "path: %s" % path_str )
         
-        if path_str not in path_list:
-            logging.debug( "new path: %s" % path_str )
-            path_list.append( path_str )
+        #if path_str not in path_list:
+        if path_unit_str not in path_unit_list:
+            #logging.debug( "new path: %s" % path_str )
+            #path_list.append( path_str )
+            logging.debug( "new path+unit: %s" % path_unit_str )
+            path_unit_list.append( path_unit_str )
             
             if r == 0:        # start first row_dict
                 row_dict = {}
                 row_dict[ "path" ] = path_dict
-                row_dict[ "value_unit" ] = record_dict[ "value_unit" ]
+                row_dict[ "value_unit" ] = value_unit
                 ter_codes = []
             else:                       # add complete row_dict to data
                 row_dict[ "ter_codes" ] = ter_codes
@@ -1787,23 +1796,27 @@ def collect_records( sql_names, sql_resp, params, key_set, eng_data, path_dict )
             # start new row_dict
             row_dict = {}
             row_dict[ "path" ] = path_dict
-            row_dict[ "value_unit" ] = record_dict[ "value_unit" ]
+            row_dict[ "value_unit" ] = value_unit
             ter_codes = []
         
         # append to ter_code list
         ter_codes.append ( { 
             "ter_code" : record_dict[ "ter_code" ], 
-            "total"    : record_dict[ "total" ]
+            "total"    : record_dict.get( "total" ) # not always present
         } )
     
-    # add last row_dict to data
-    row_dict[ "ter_codes" ] = ter_codes
-    data.append( row_dict )
+    try:
+        # add last row_dict to data
+        row_dict[ "ter_codes" ] = ter_codes
+        data.append( row_dict )
+    except:
+        pass
     
-    logging.info( "paths in path_list %d" % len( path_list ) )
+    #logging.info( "paths in path_list %d" % len( path_list ) )
+    logging.info( "paths in path_unit_list %d" % len( path_unit_list ) )
     logging.info( "rows in gui data %d" % len( data ) )
     for r, row_dict in enumerate( data ):
-        logging.debug( "%d, %s" % ( r, str( row_dict ) ) )
+        logging.info( "%d, %s" % ( r, str( row_dict ) ) )
     
     # add data list to gui_resp
     gui_resp[ "data" ] = data
@@ -1814,8 +1827,7 @@ def collect_records( sql_names, sql_resp, params, key_set, eng_data, path_dict )
     str_elapsed = format_secs( time() - time0 )
     logging.info( "collect_records() took %s" % str_elapsed )
     
-    #return gui_resp
-    return []
+    return gui_resp
 
 
 
@@ -2849,74 +2861,103 @@ def aggregation():
             #params_ntc[  "etype" ] = "ntc"
             #params_none[ "etype" ] = "none"
             
-            #logging.info( "-1- = entry_list" )
+            logging.info( "-1- = entry_list" )
             show_params( "params -1- = entry_list", params )
             sql_query = make_query( "total", params, add_subclasses, value_total = True, value_numerical = True )
             #old_query, eng_data = aggregate_year( params, add_subclasses, value_total = True, value_numerical = True )
             #logging.info( "old_query: %s" % old_query )
             
             eng_data = {}
-            #entry_list = execute_year( params, sql_query, key_set, eng_data )
-            sql_names, sql_resp = execute_only( sql_query )
-            redundant = True
+            #entry_list = execute_year( key_set, params, eng_datas, sql_query )
+            
+            redundant = False
+            
             if redundant:   # old
                 sql_names, sql_resp = execute_only( sql_query )
-                entry_list = collect_fields( sql_names, sql_resp, params, key_set, eng_data )
+                entry_list = collect_fields( key_set, params, eng_data, sql_names, sql_resp )
+                
+                if entry_debug: 
+                    show_entries( "params -1- = entry_list", entry_list )
+                if group_tercodes:
+                    entry_dict_ig = group_by_ident( entry_list )
             else:           # new, redundant = False
                 sql_names, sql_resp = execute_only( sql_query, dict_cursor = True )
-                entry_list = collect_records( sql_names, sql_resp, params, key_set, eng_data, path_dict )
+                record_list = collect_records( key_set, path_dict, params, eng_data, sql_names, sql_resp )
             
-            if entry_debug: 
-                show_entries( "params -1- = entry_list", entry_list )
-            if group_tercodes:
-                entry_dict_ig = group_by_ident( entry_list )
-            
-            #logging.info( "-2- = entry_list_ntc" )
             entry_list_ntc = []
-            if datatype != "1.02":      # not needed for 1.02 (and much data)
+            if datatype == "1.02":      # not needed for 1.02 (and much data)
+                logging.info( "SKIPPING -2- = entry_list_ntc" )
+            else:                       # not needed for 1.02 (and much data)
+                logging.info( "-2- = entry_list_ntc" )
                 logging.info( "path_list: %s" % params_ntc[ "path" ] )
                 show_params( "params_ntc -2- = entry_list_ntc", params_ntc )
                 sql_query_ntc = make_query( "ntc", params_ntc, add_subclasses, value_total = False, value_numerical = True )
                 #old_query_ntc, eng_data_ntc = aggregate_year( params_ntc, add_subclasses, value_total = False, value_numerical = True )
                 #logging.info( "old_query_ntc: %s" % old_query_ntc )
+                
                 eng_data_ntc = {}
-                entry_list_ntc = execute_year( params_ntc, sql_query_ntc, key_set, eng_data_ntc )
-                if entry_debug: 
-                    show_entries( "params_ntc -2- = entry_list_ntc", entry_list_ntc )
-                if group_tercodes:
-                    entry_dict_ntc_ig = group_by_ident( entry_list_ntc )
+                #entry_list_ntc = execute_year( key_set, params_ntc, sql_query_ntc, eng_data_ntc )
+                
+                if redundant:   # old
+                    sql_names_ntc, sql_resp_ntc = execute_only( sql_query_ntc )
+                    entry_list_ntc = collect_fields( key_set, params_ntc, eng_data_ntc, sql_names_ntc, sql_resp_ntc )
+                    
+                    if entry_debug: 
+                        show_entries( "params_ntc -2- = entry_list_ntc", entry_list_ntc )
+                    if group_tercodes:
+                        entry_dict_ntc_ig = group_by_ident( entry_list_ntc )
+                else:           # new, redundant = False
+                    sql_names_ntc, sql_resp_ntc = execute_only( sql_query_ntc, dict_cursor = True )
+                    record_list_ntc = collect_records( key_set, path_dict, params_ntc, eng_data_ntc, sql_names_ntc, sql_resp_ntc )
             
-            #logging.info( "-3- = entry_list_none" )
+            logging.info( "-3- = entry_list_none" )
             show_params( "params -3- = entry_list_none", params_none )
             sql_query_none = make_query( "none", params_none, add_subclasses, value_total = False, value_numerical = False )   # non-numbers
             #old_query_none, eng_data_none = aggregate_year( params_none, add_subclasses, value_total = False, value_numerical = False )   # non-numbers
             #logging.info( "old_query_none: %s" % old_query_none )
+            
             eng_data_none = {}
-            entry_list_none = execute_year( params_none, sql_query_none, key_set, eng_data_none )
-            if entry_debug: 
-                show_entries( "params -3- = entry_list_none", entry_list_none )
-            if group_tercodes:
-                entry_dict_none_ig = group_by_ident( entry_list_none )
+            #entry_list_none = execute_year( key_set, params_none, sql_query_none, eng_data_none )
             
-            # entry_list_path = entry_list + entry_list_ntc
-            logging.info( "add_unique_ntcs()" )
-            entry_list_path = add_unique_items( language, "entry_list_ntc", entry_list, entry_list_ntc )
+            if redundant:   # old
+                sql_names_none, sql_resp_none = execute_only( sql_query_none )
+                entry_list_none = collect_fields( key_set, params_none, eng_data_none, sql_names_none, sql_resp_none )
+                
+                if entry_debug: 
+                    show_entries( "params -3- = entry_list_none", entry_list_none )
+                if group_tercodes:
+                    entry_dict_none_ig = group_by_ident( entry_list_none )
+            else:           # new, redundant = False
+                sql_names_none, sql_resp_none = execute_only( sql_query_none, dict_cursor = True )
+                record_list_none = collect_records( key_set, path_dict, params_none, eng_data_none, sql_names_none, sql_resp_none )
             
-            if group_tercodes:
-                entry_list_path_ig = add_unique_items_grouped( language, "entry_dict_ntc", entry_dict_ig, entry_dict_ntc_ig )
             
-            # TODO: use entry_list_path_ig
-            
-            # entry_list_collect = entry_list_path + entry_list_none
-            logging.info( "add_unique_nones()" )
-            entry_list_collect = add_unique_items( language, "entry_list_none", entry_list_path, entry_list_none )
-            logging.info( "entry_list_collect: %d items" % len( entry_list_collect ) )
-            
-            # entry_list_total = entry_list_total + entry_list_collect
-            entry_list_total.extend( entry_list_collect )      # different path_dict, so no duplicates
-            #entry_list_total = extend_nodups( entry_list_total, entry_list_collect )   # avoid duplicates
-            logging.info( "entry_list_total: %d items" % len( entry_list_total ) )
-        
+            if redundant:   # old
+                # entry_list_path = entry_list + entry_list_ntc
+                logging.info( "add_unique_ntcs()" )
+                entry_list_path = add_unique_items( language, "entry_list_ntc", entry_list, entry_list_ntc )
+                
+                if group_tercodes:
+                    entry_list_path_ig = add_unique_items_grouped( language, "entry_dict_ntc", entry_dict_ig, entry_dict_ntc_ig )
+                
+                # TODO: use entry_list_path_ig
+                
+                # entry_list_collect = entry_list_path + entry_list_none
+                logging.info( "add_unique_nones()" )
+                entry_list_collect = add_unique_items( language, "entry_list_none", entry_list_path, entry_list_none )
+                logging.info( "entry_list_collect: %d items" % len( entry_list_collect ) )
+                
+                # entry_list_total = entry_list_total + entry_list_collect
+                entry_list_total.extend( entry_list_collect )      # different path_dict, so no duplicates
+                #entry_list_total = extend_nodups( entry_list_total, entry_list_collect )   # avoid duplicates
+                logging.info( "entry_list_total: %d items" % len( entry_list_total ) )
+            else:           # new, redundant = False
+                # record_list_path = record_list + record_list_ntc
+                record_list_path = record_list
+                # record_list_collect = record_list_path + record_list_none
+                record_list_collect = record_list_path
+                
+                
         entry_list_sorted = sort_entries( datatype, entry_list_total )   # sort by path, value_unit
         logging.debug( "entry_list_sorted: %d items" % len( entry_list_sorted ) )
         
@@ -2968,7 +3009,7 @@ def aggregation():
                 #old_query_ntc, eng_data_ntc = aggregate_year( params_ntc, add_subclasses, value_total = True, value_numerical = True )
                 sql_query_ntc = make_query( "ntc", params_ntc, add_subclasses, value_total = True, value_numerical = True )
                 eng_data_ntc = {}
-                entry_list_ntc = execute_year( params_ntc, sql_query_ntc, key_set, eng_data_ntc )
+                entry_list_ntc = execute_year( key_set, params_ntc, sql_query_ntc, eng_data_ntc )
                 if entry_debug: 
                     show_entries( "params -1- = entry_list_ntc", entry_list_ntc )
                 
@@ -2980,7 +3021,7 @@ def aggregation():
                 #old_query_none, eng_data_none = aggregate_year( params_none, add_subclasses, value_total = False, value_numerical = False )
                 sql_query_none = make_query( "none", params_none, add_subclasses, value_total = False, value_numerical = False )   # non-numbers
                 eng_data_none = {}
-                entry_list_none = execute_year( params_none, sql_query_none, key_set, eng_data_none )
+                entry_list_none = execute_year( key_set, params_none, sql_query_none, eng_data_none )
                 if entry_debug: 
                     show_entries( "params -2- = entry_list_none", entry_list_none )
                 
