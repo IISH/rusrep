@@ -1789,7 +1789,7 @@ def collect_records( key_set, path_dict, params, eng_data, sql_names, sql_resp )
         """
         
         path_unit_dict = collections.OrderedDict()
-        for hc in range( 1, 10 ):
+        for hc in range( 1, 11 ):   # [1,...,10]
             key = "%s%d" % ( class_prefix, hc )
             value = record_dict.get( key )
             if not value or value == ". ":
