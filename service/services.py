@@ -1740,47 +1740,70 @@ def collect_records( key_set, path_dict, params, eng_data, sql_names, sql_resp )
     # sql_names & sql_resp from execute_only()
     
     time0 = time()      # seconds since the epoch
-    logging.debug( "collect_records() start: %s" % datetime.datetime.now() )
+    logging.info( "collect_records() start: %s" % datetime.datetime.now() )
     
-    logging.debug( "sql_resp type: %s" % type( sql_resp ) )
+    logging.info( "key_set: %s" % str( key_set ) )
+    logging.info( "sql_names: %s" % str( sql_names ) )
+    logging.info( "# of items: %d" % len( sql_resp ) )
     
     nkeys = path_dict[ "nkeys" ]
     path_prev = None
     path_dict = collections.OrderedDict()
     
+    language       = params.get( "language" )
+    classification = params.get( "classification" )
+    
     gui_resp = {}
-    gui_resp[ "language" ]       = params.get( "language" )
-    gui_resp[ "classification" ] = params.get( "classification" )
+    gui_resp[ "language" ]       = language
+    gui_resp[ "classification" ] = classification
     gui_resp[ "datatype" ]       = params.get( "datatype" )
     gui_resp[ "base_year" ]      = params.get( "base_year" )
     
+    class_prefix = "class"
+    if classification == "historical":
+        class_prefix = "hist" + class_prefix 
+    
+    # value strings for empty and combined fields
+    value_na   = ""
+    value_none = ""
+    if language.upper() == "EN":
+        value_na   = "na"
+        value_none = "cannot aggregate at this level"
+    elif language.upper() == "RU":
+        value_na   = "нет данных"
+        value_none = "агрегация на этом уровне невозможна"
+    
     data = []
-    #path_list = []          # unique path list
     path_unit_list = []     # unique path+unit list
     
     for r, record in enumerate( sql_resp ):
-        logging.debug( "%d, %s: %s" % ( r, type( record ), record ) )
+        logging.info( "%d, %s: %s" % ( r, type( record ), record ) )
         record_dict = json.loads( record )
         #logging.debug( "%d, %s" % ( r, type( record_dict ) ) )
         
-        #path_dict = {}
+        """
         path_unit_dict = {}
         for key in key_set:
             #logging.debug( "key: %s" % key )
-            #path_dict[ key ] = record_dict[ key ]
             path_unit_dict[ key ] = record_dict[ key ]
+        """
         
-        #path_str = json.dumps( path_dict )
+        path_unit_dict = collections.OrderedDict()
+        for hc in range( 1, 10 ):
+            key = "%s%d" % ( class_prefix, hc )
+            value = record_dict.get( key )
+            if not value or value == ". ":
+                break           # ". " marks a trailing dot in histclass or class: skip remains
+            else:
+                path_unit_dict[ key ] = record_dict[ key ]
+        
         value_unit = record_dict[ "value_unit" ]
         path_unit_dict[ "value_unit" ] = value_unit
         path_unit_str = json.dumps( path_unit_dict )
-        #logging.debug( "path: %s" % path_str )
+        #logging.debug( "path: %s" % path_unit_str )
         
-        #if path_str not in path_list:
         if path_unit_str not in path_unit_list:
-            #logging.debug( "new path: %s" % path_str )
-            #path_list.append( path_str )
-            logging.debug( "new path+unit: %s" % path_unit_str )
+            logging.info( "new path+unit: %s" % path_unit_str )
             path_unit_list.append( path_unit_str )
             
             if r == 0:        # start first row_dict
@@ -1798,11 +1821,20 @@ def collect_records( key_set, path_dict, params, eng_data, sql_names, sql_resp )
             row_dict[ "path" ] = path_dict
             row_dict[ "value_unit" ] = value_unit
             ter_codes = []
+        else:
+            logging.info( "old path+unit: %s" % path_unit_str )
         
-        # append to ter_code list
+        # append to ter_code + value to ter_codes list
+        total = record_dict.get( "total" )
+        try:
+            float( total )
+            #total = value_none     # when to use this value?
+        except:
+            total = value_na
+        
         ter_codes.append ( { 
             "ter_code" : record_dict[ "ter_code" ], 
-            "total"    : record_dict.get( "total" ) # not always present
+            "total"    : total
         } )
     
     try:
