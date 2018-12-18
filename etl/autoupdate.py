@@ -21,10 +21,29 @@ FL-18-Dec-2017 Keep trailing input '\n' for header lines in translate_csv
 FL-16-Jan-2018 Separate RU & EN tables
 FL-15-May-2018 Rounding of data in value column
 FL-23-Jul-2018 DATATYPE 1.10 => 1.1 ? try to suppress unwanted conversion of DATATYPE
+FL-18-Dec-2018 Rounding of float values in filter_csv() was not active
 
 ToDo:
- - replace urllib by requests
+- replace urllib by requests
+- update the extra packages in site_packages
 
+- running this script from the command line gives the following terminal output:
+$ ./autoupdate.sh 
+/home/dpe/python2715/lib/python2.7/site-packages/psycopg2/__init__.py:144: UserWarning: 
+The psycopg2 wheel package will be renamed from release 2.8; in order to keep installing from binary please use "pip install psycopg2-binary" instead. For details see: <http://initd.org/psycopg/docs/install.html#binary-install-from-pypi>.
+
+/home/dpe/python2715/lib/python2.7/site-packages/pandas/io/excel.py:329: ParserWarning: Both a converter and dtype were specified for column DATATYPE - only the converter will be used
+  **kwds)
+/home/dpe/rusrep/etl/vocab.py:82: FutureWarning: Sorting because non-concatenation axis is not aligned. A future version
+of pandas will change to not sort by default.
+
+To accept the future behavior, pass 'sort=False'.
+
+To retain the current behavior and silence the warning, pass 'sort=True'.
+
+  return pd.concat( lexicon )
+
+--------------------------------------------------------------------------------
 def load_json( apiurl ):
 def empty_dir( dst_dir ):
 def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", copy_local = False, to_csv = False, remove_xlsx = True ):
@@ -880,32 +899,30 @@ def filter_csv( config_parser, csv_dir, in_filename ):
             value_unit_pos = csv_header_names.index( "value_unit" )
             value_unit = fields[ value_unit_pos ]
             
+            decimals = 0
             try:
                 decimals = int( vocab_units[ value_unit ] )
-                #logging.debug( "value: %s, value_unit: %s, decimals: %s" % ( value_str, value_unit, decimals ) )
-                if value_str.isdigit():
-                    pass    # all digits, no change
-                else:
-                    try:
-                        value_float = float( value_str )
-                        value_round = round( value_float, decimals )
-                        if decimals == 0:
-                            value_new = str( long( round( value_float, decimals ) ) )
-                        else:
-                            value_new = str( round( value_float, decimals ) )
-                        
-                        if value_new != value_str:
-                            nfiltered += 1
-                            #logging.debug( line )
-                            #logging.debug( "value: %s, value_unit: %s, decimals: %s" % ( value_str, value_unit, decimals ) )
-                            #if in_filename == "ERRHS_4_01_data_1897-en.csv":
-                            #if in_filename == "ERRHS_7_03_data_1897-en.csv":
-                            #    logging.info( "nline: %d, value: %s => %s (%s, %d decimals)" % ( nline, value_str, value_new, value_unit, decimals ) )
-                            #    fields[ value_pos ] = value_new     # replace
-                    except:
-                        pass    # no change
+                logging.debug( "value: %s, value_unit: %s, decimals: %s" % ( value_str, value_unit, decimals ) )
             except:
+                decimals = 0
                 pass
+                
+            if value_str.isdigit():
+                pass    # all digits, no change
+            else:
+                try:
+                    value_float = float( value_str )
+                    value_round = round( value_float, decimals )
+                    if decimals == 0:
+                        value_new = str( long( round( value_float, decimals ) ) )
+                    else:
+                        value_new = str( round( value_float, decimals ) )
+                    
+                    if value_new != value_str:
+                        nfiltered += 1
+                        fields[ value_pos ] = value_new     # replace
+                except:
+                    pass    # no change
         
         #print( "|".join( fields ) )
         if ndiff > 0:
