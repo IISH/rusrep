@@ -47,6 +47,7 @@ def execute_year( key_set, params, sql_query, eng_data ):
 def execute_only( sql_query, dict_cursor = False ):
 def collect_fields(  key_set, params, eng_data, sql_names, sql_resp ):
 def collect_records( key_set, path_dict, params, eng_data, sql_names, sql_resp ):
+def merge_records( record_list, record_list_ntc, record_list_none ):
 def add_unique_items( language, list_name, entry_list_collect, entry_list_none ):
 def add_unique_items_grouped( language, dict_name, entry_dict_collect, entry_dict_none )
 def remove_dups( entry_list_collect ):
@@ -71,7 +72,7 @@ def format_secs( seconds ):
 """
 
 
-# future-0.16.0 imports for Python 2/3 compatibility
+# future-0.17.1 imports for Python 2/3 compatibility
 from __future__ import ( absolute_import, division, print_function, unicode_literals )
 from builtins import ( ascii, bytes, chr, dict, filter, hex, input, int, list, map, 
     next, object, oct, open, pow, range, round, super, str, zip )
@@ -1742,9 +1743,9 @@ def collect_records( key_set, path_dict, params, eng_data, sql_names, sql_resp )
     time0 = time()      # seconds since the epoch
     logging.info( "collect_records() start: %s" % datetime.datetime.now() )
     
-    logging.info( "key_set: %s" % str( key_set ) )
+    logging.info( "key_set:   %s" % str( key_set ) )
     logging.info( "sql_names: %s" % str( sql_names ) )
-    logging.info( "# of items: %d" % len( sql_resp ) )
+    logging.info( "sql_resp:  %d records" % len( sql_resp ) )
     
     nkeys = path_dict[ "nkeys" ]
     path_prev = None
@@ -1777,7 +1778,7 @@ def collect_records( key_set, path_dict, params, eng_data, sql_names, sql_resp )
     path_unit_list = []     # unique path+unit list
     
     for r, record in enumerate( sql_resp ):
-        logging.info( "%d, %s: %s" % ( r, type( record ), record ) )
+        logging.info( "sql_resp %d, %s: %s" % ( r, type( record ), record ) )
         record_dict = json.loads( record )
         #logging.debug( "%d, %s" % ( r, type( record_dict ) ) )
         
@@ -1860,6 +1861,29 @@ def collect_records( key_set, path_dict, params, eng_data, sql_names, sql_resp )
     logging.info( "collect_records() took %s" % str_elapsed )
     
     return gui_resp
+
+
+
+def merge_records( record_dict_std, record_dict_ntc, record_dict_none ):
+    time0 = time()      # seconds since the epoch
+    logging.info( "merge_records() start: %s" % datetime.datetime.now() )
+    
+    record_list_total = []
+    
+    record_list_std  = record_dict_std[ "data" ]
+    record_list_ntc  = record_dict_ntc[ "data" ]
+    record_list_none = record_dict_none[ "data" ]
+    
+    logging.info( "record_list_std  %d" % len( record_list_std ) )
+    logging.info( "record_list_ntc  %d" % len( record_list_ntc ) )
+    logging.info( "record_list_none %d" % len( record_list_none ) )
+    
+    
+    
+    str_elapsed = format_secs( time() - time0 )
+    logging.info( "merge_records() took %s" % str_elapsed )
+    
+    return record_dict_total
 
 
 
@@ -2849,9 +2873,11 @@ def aggregation():
     cache_except = None
     
     if classification == "historical":
-        # historical classification  has base_year from qinput
+        # historical classification has base_year from qinput
         
-        entry_list_total = []
+        redundant = False
+        entry_list_total  = []      # old: redundant = True
+        record_list_total = []      # new: redundant = False
                 
         params[ "base_year" ] = base_year
         
@@ -2865,6 +2891,7 @@ def aggregation():
         params[ "ter_codes" ] = ter_codes       # with ter_codes
         params_none = copy.deepcopy( params )   # with ter_codes
         
+        # loop over the equal length path subgroups
         for pd, path_dict in enumerate( path_lists, start = 1 ):
             path_list = path_dict[ "path_list" ]
             logging.info( "" )
@@ -2902,8 +2929,6 @@ def aggregation():
             eng_data = {}
             #entry_list = execute_year( key_set, params, eng_datas, sql_query )
             
-            redundant = False
-            
             if redundant:   # old
                 sql_names, sql_resp = execute_only( sql_query )
                 entry_list = collect_fields( key_set, params, eng_data, sql_names, sql_resp )
@@ -2914,7 +2939,7 @@ def aggregation():
                     entry_dict_ig = group_by_ident( entry_list )
             else:           # new, redundant = False
                 sql_names, sql_resp = execute_only( sql_query, dict_cursor = True )
-                record_list = collect_records( key_set, path_dict, params, eng_data, sql_names, sql_resp )
+                record_dict_std = collect_records( key_set, path_dict, params, eng_data, sql_names, sql_resp )
             
             entry_list_ntc = []
             if datatype == "1.02":      # not needed for 1.02 (and much data)
@@ -2940,7 +2965,7 @@ def aggregation():
                         entry_dict_ntc_ig = group_by_ident( entry_list_ntc )
                 else:           # new, redundant = False
                     sql_names_ntc, sql_resp_ntc = execute_only( sql_query_ntc, dict_cursor = True )
-                    record_list_ntc = collect_records( key_set, path_dict, params_ntc, eng_data_ntc, sql_names_ntc, sql_resp_ntc )
+                    record_dict_ntc = collect_records( key_set, path_dict, params_ntc, eng_data_ntc, sql_names_ntc, sql_resp_ntc )
             
             logging.info( "-3- = entry_list_none" )
             show_params( "params -3- = entry_list_none", params_none )
@@ -2961,9 +2986,9 @@ def aggregation():
                     entry_dict_none_ig = group_by_ident( entry_list_none )
             else:           # new, redundant = False
                 sql_names_none, sql_resp_none = execute_only( sql_query_none, dict_cursor = True )
-                record_list_none = collect_records( key_set, path_dict, params_none, eng_data_none, sql_names_none, sql_resp_none )
+                record_dict_none = collect_records( key_set, path_dict, params_none, eng_data_none, sql_names_none, sql_resp_none )
             
-            
+            # merge the entries from the 3 lists
             if redundant:   # old
                 # entry_list_path = entry_list + entry_list_ntc
                 logging.info( "add_unique_ntcs()" )
@@ -2984,14 +3009,16 @@ def aggregation():
                 #entry_list_total = extend_nodups( entry_list_total, entry_list_collect )   # avoid duplicates
                 logging.info( "entry_list_total: %d items" % len( entry_list_total ) )
             else:           # new, redundant = False
-                # record_list_path = record_list + record_list_ntc
-                record_list_path = record_list
-                # record_list_collect = record_list_path + record_list_none
-                record_list_collect = record_list_path
-                
-                
-        entry_list_sorted = sort_entries( datatype, entry_list_total )   # sort by path, value_unit
-        logging.debug( "entry_list_sorted: %d items" % len( entry_list_sorted ) )
+                record_dict_path = merge_records( record_dict_std, record_dict_ntc, record_dict_none )
+                #record_list_total.append( record_dict_path )
+        
+        if redundant:   # old
+            # sort the entries by path, value_unit
+            entry_list_sorted = sort_entries( datatype, entry_list_total )
+            logging.debug( "entry_list_sorted: %d items" % len( entry_list_sorted ) )
+        else:
+            logging.info( "record_list_total: %d records" % len( record_list_total ) )
+            entry_list_sorted = []
         
         """
         json_string, cache_except = json_cache( entry_list_sorted, language, "data", download_key, params )
