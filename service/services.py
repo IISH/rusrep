@@ -47,7 +47,7 @@ def execute_year( key_set, params, sql_query, eng_data ):
 def execute_only( sql_query, dict_cursor = False ):
 def collect_fields(  key_set, params, eng_data, sql_names, sql_resp ):
 def collect_records( prefix, key_set, path_dict, params, eng_data, sql_names, sql_resp ):
-def merge_3records( record_dict_std, record_dict_ntc, record_dict_none ):
+def merge_3records( record_dict_num, record_dict_ntc, record_dict_none ):
 def merge_2records( record_dict_total, record_dict_path ):
 def show_record_dict( dict_name, record_dict, sort = False ):
 def show_record_list( list_name, record_list ):
@@ -1755,6 +1755,9 @@ def collect_records( prefix, key_set, path_dict, params, eng_data, sql_names, sq
     
     language       = params.get( "language" )
     classification = params.get( "classification" )
+    ter_codes_req  = params.get( "ter_codes" )      # requested ter_codes (only historical)
+    
+    logging.info( "collect_records() requested ter_codes: %s" % str( ter_codes_req ) )
     
     class_prefix = "class"
     if classification == "historical":
@@ -1782,7 +1785,7 @@ def collect_records( prefix, key_set, path_dict, params, eng_data, sql_names, sq
             key = "%s%d" % ( class_prefix, hc )
             value = rec_dict.get( key )
             if not value or value == ". ":
-                break           # ". " marks a trailing dot in histclass or class: skip remains
+                break               # ". " marks a trailing dot in histclass or class: skip remains
             else:
                 path_unit_dict[ key ] = rec_dict[ key ]
         
@@ -1790,10 +1793,11 @@ def collect_records( prefix, key_set, path_dict, params, eng_data, sql_names, sq
         path_unit_dict[ "value_unit" ] = value_unit
         path_unit_str = json.dumps( path_unit_dict )
         
-        if path_unit_str not in path_unit_set:
+        if path_unit_str not in path_unit_set:          # new path+unit combi
+            logging.info( "add path_unit_str (%d->%d) %s" % ( len(path_unit_set), 1 + len(path_unit_set), path_unit_str ) )
             path_unit_set.add( path_unit_str )
             ter_codes = []
-            records_dict[ path_unit_str ] = ter_codes
+            records_dict[ path_unit_str ] = ter_codes   # add list for the ter_code_dicts
         
         """
         if path_unit_str not in path_unit_list:
@@ -1819,20 +1823,30 @@ def collect_records( prefix, key_set, path_dict, params, eng_data, sql_names, sq
             logging.warn( "existing path+unit: %s" % path_unit_str )
         """
         
-        # append to ter_code + value to ter_codes list
-        total = rec_dict.get( "total" )
-        try:
-            float( total )
-            #total = value_none     # when to use this value?
-        except:
-            total = value_na
-        
-        ter_code_dict =  { 
-            "ter_code" : rec_dict[ "ter_code" ], 
-            "total"    : total
-        }
-        
-        records_dict[ path_unit_str ].append( ter_code_dict )
+        # ter_codes
+        ter_code = rec_dict[ "ter_code" ]
+        #logging.info( "collect_records() ter_codes: %s" % ter_codes_req )
+        #logging.info( "collect_records() ter_code: %s" % ter_code )
+        if classification == "historical":      # only add requested ter_codes
+            if ter_code in ter_codes_req:       # append to ter_code + value to ter_codes list
+                logging.info( "add ter_code %s" % ter_code )
+                total = rec_dict.get( "total" )
+                try:
+                    float( total )
+                    #total = value_none     # when to use this value?
+                except:
+                    total = value_na
+                
+                ter_code_dict =  { 
+                    "ter_code" : ter_code, 
+                    "total"    : total
+                }
+                
+                records_dict[ path_unit_str ].append( ter_code_dict )
+            else:
+                logging.info( "skip ter_code %s" % ter_code )
+        else:
+            logging.info( "skip path_unit_str %s" % path_unit_str )
     
     """
     # add last row_dict to record_list
@@ -1858,15 +1872,15 @@ def collect_records( prefix, key_set, path_dict, params, eng_data, sql_names, sq
 
 
 
-def merge_3records( record_dict_std, record_dict_ntc, record_dict_none ):
+def merge_3records( record_dict_num, record_dict_ntc, record_dict_none ):
     time0 = time()      # seconds since the epoch
     logging.info( "merge_2records() start: %s" % datetime.datetime.now() )
     
-    show_record_dict( "record_dict_std", record_dict_std )
+    show_record_dict( "record_dict_num", record_dict_num )
     show_record_dict( "record_dict_ntc", record_dict_ntc )
     show_record_dict( "record_dict_none", record_dict_none )
     
-    record_dict = copy.deepcopy( record_dict_std )
+    record_dict = copy.deepcopy( record_dict_num )
     
     for key, val in record_dict_ntc.items():
         try:        # old key: append list
@@ -2862,7 +2876,7 @@ def aggregation():
     logging.debug( "aggregation start: %s" % datetime.datetime.now() )
     
     qinput = simplejson.loads( request.data )
-    logging.debug( "qinput: %s" % str( qinput ) )
+    logging.info( "qinput: %s" % str( qinput ) )
     
     language = qinput.get( "language" )
     classification = qinput.get( "classification" )
@@ -2887,6 +2901,7 @@ def aggregation():
     
     group_tercodes = False  # default situation
     #group_tercodes = True   # group ter_codes with total values per unique path + unit_value
+    
     entry_dict_ig = {}
     entry_dict_ntc_ig = {}
     entry_dict_none_ig = {}
@@ -2932,51 +2947,38 @@ def aggregation():
         
         params[ "base_year" ] = base_year
         
-        ter_codes = qinput.get( "ter_code" )
+        ter_codes = qinput.get( "ter_code", [] )
         logging.info( "ter_codes: %s" % ter_codes )
-        
-        # 2 sets of parameters: 
-        # - for query without ter_code (actually implies all ter_code's) for all wanted rows
-        # - for query with ter_codes for the wanted regions
-        params_ntc = copy.deepcopy( params )    # without ter_codes
         params[ "ter_codes" ] = ter_codes       # with ter_codes
-        params_none = copy.deepcopy( params )   # with ter_codes
         
         # loop over the equal length path subgroups
         for pd, path_dict in enumerate( path_lists, start = 1 ):
             path_list = path_dict[ "path_list" ]
+            params[ "path" ] = path_list
+            
+            nkeys = path_dict[ "nkeys" ]
             logging.info( "" )
-            logging.info( "path subgroup %d-of-%d, %d different paths of length %d" % ( pd, nlists, len( path_list ), len( path_list[ 0 ].keys() ) ) )
+            logging.info( "path subgroup %d-of-%d, %d different paths of length %d" % ( pd, nlists, len( path_list ), nkeys ) )
             show_path_dict( path_dict )
             add_subclasses = path_dict[ "subclasses" ]
             
             """
-            params      default query with explicit ter_code specification; 
-                        historic:   value_total = True,  value_numerical = True
-                        modern:     not used
-            params_ntc  query without ter_code specification: => all ter_codes requested
-                        historic:   value_total = False, value_numerical = True
-                        modern:     value_total = True,  value_numerical = True
-            params_none hist + modern:  
-                        query with only NANs in value response
-                        historic:   value_total = False, value_numerical = False
-                        modern:     value_total = False, value_numerical = False
+            prefix = num    default query with explicit ter_code specification; 
+                            historic:   value_total = True,  value_numerical = True
+                            modern:     not used
+            prefix = ntc    query without ter_code specification: => all ter_codes requested
+                            historic:   value_total = False, value_numerical = True
+                            modern:     value_total = True,  value_numerical = True
+            prefix = none   hist + modern:  
+                            query with only NANs in value response
+                            historic:   value_total = False, value_numerical = False
+                            modern:     value_total = False, value_numerical = False
             """
-            params[      "path" ] = path_list
-            params_ntc[  "path" ] = path_list
-            params_none[ "path" ] = path_list
             
-            # only for debugging
-            #params_std[  "etype" ] = "std"
-            #params_ntc[  "etype" ] = "ntc"
-            #params_none[ "etype" ] = "none"
-            
-            prefix = "total"
+            prefix = "num"
             logging.info( "-1- = entry_list_total" )
             show_params( "params -1- = entry_list_total", params )
             sql_query = make_query( prefix, params, add_subclasses, value_total = True, value_numerical = True )
-            #old_query, eng_data = aggregate_year( params, add_subclasses, value_total = True, value_numerical = True )
-            #logging.info( "old_query: %s" % old_query )
             
             eng_data = {}
             #entry_list = execute_year( key_set, params, eng_datas, sql_query )
@@ -2991,7 +2993,7 @@ def aggregation():
                     entry_dict_ig = group_by_ident( entry_list )
             else:           # new, redundant = False
                 sql_names, sql_resp = execute_only( sql_query, dict_cursor = True )
-                record_dict_std = collect_records( prefix, key_set, path_dict, params, eng_data, sql_names, sql_resp )
+                record_dict_num = collect_records( prefix, key_set, path_dict, params, eng_data, sql_names, sql_resp )
             
             
             prefix = "ntc"
@@ -3001,41 +3003,35 @@ def aggregation():
             else:                       # not needed for 1.02 (and much data)
                 prefix = "ntc"
                 logging.info( "-2- = entry_list_%s" % prefix )
-                logging.info( "path_list: %s" % params_ntc[ "path" ] )
-                show_params( "params_ntc -2- = entry_list_ntc", params_ntc )
-                sql_query_ntc = make_query( prefix, params_ntc, add_subclasses, value_total = False, value_numerical = True )
-                #old_query_ntc, eng_data_ntc = aggregate_year( params_ntc, add_subclasses, value_total = False, value_numerical = True )
-                #logging.info( "old_query_ntc: %s" % old_query_ntc )
+                logging.info( "path_list: %s" % params[ "path" ] )
+                show_params( "prefix=ntc -2- = entry_list_ntc", params )
+                sql_query_ntc = make_query( prefix, params, add_subclasses, value_total = False, value_numerical = True )
                 
                 eng_data_ntc = {}
-                #entry_list_ntc = execute_year( key_set, params_ntc, sql_query_ntc, eng_data_ntc )
                 
                 if redundant:   # old
                     sql_names_ntc, sql_resp_ntc = execute_only( sql_query_ntc )
-                    entry_list_ntc = collect_fields( key_set, params_ntc, eng_data_ntc, sql_names_ntc, sql_resp_ntc )
+                    entry_list_ntc = collect_fields( key_set, params, eng_data_ntc, sql_names_ntc, sql_resp_ntc )
                     
                     if entry_debug: 
-                        show_entries( "params_ntc -2- = entry_list_ntc", entry_list_ntc )
+                        show_entries( "prefix=ntc -2- = entry_list_ntc", entry_list_ntc )
                     if group_tercodes:
                         entry_dict_ntc_ig = group_by_ident( entry_list_ntc )
                 else:           # new, redundant = False
                     sql_names_ntc, sql_resp_ntc = execute_only( sql_query_ntc, dict_cursor = True )
-                    record_dict_ntc = collect_records( prefix, key_set, path_dict, params_ntc, eng_data_ntc, sql_names_ntc, sql_resp_ntc )
+                    record_dict_ntc = collect_records( prefix, key_set, path_dict, params, eng_data_ntc, sql_names_ntc, sql_resp_ntc )
             
             
             prefix = "none"
             logging.info( "-3- = entry_list_none" )
-            show_params( "params -3- = entry_list_none", params_none )
-            sql_query_none = make_query( prefix, params_none, add_subclasses, value_total = False, value_numerical = False )   # non-numbers
-            #old_query_none, eng_data_none = aggregate_year( params_none, add_subclasses, value_total = False, value_numerical = False )   # non-numbers
-            #logging.info( "old_query_none: %s" % old_query_none )
+            show_params( "prefix=none -3- = entry_list_none", params )
+            sql_query_none = make_query( prefix, params, add_subclasses, value_total = False, value_numerical = False )   # non-numbers
             
             eng_data_none = {}
-            #entry_list_none = execute_year( key_set, params_none, sql_query_none, eng_data_none )
             
             if redundant:   # old
                 sql_names_none, sql_resp_none = execute_only( sql_query_none )
-                entry_list_none = collect_fields( key_set, params_none, eng_data_none, sql_names_none, sql_resp_none )
+                entry_list_none = collect_fields( key_set, params, eng_data_none, sql_names_none, sql_resp_none )
                 
                 if entry_debug: 
                     show_entries( "params -3- = entry_list_none", entry_list_none )
@@ -3043,7 +3039,7 @@ def aggregation():
                     entry_dict_none_ig = group_by_ident( entry_list_none )
             else:           # new, redundant = False
                 sql_names_none, sql_resp_none = execute_only( sql_query_none, dict_cursor = True )
-                record_dict_none = collect_records( prefix, key_set, path_dict, params_none, eng_data_none, sql_names_none, sql_resp_none )
+                record_dict_none = collect_records( prefix, key_set, path_dict, params, eng_data_none, sql_names_none, sql_resp_none )
             
             
             # merge the the lists
@@ -3067,7 +3063,7 @@ def aggregation():
                 #entry_list_total = extend_nodups( entry_list_total, entry_list_collect )   # avoid duplicates
                 logging.info( "entry_list_total: %d items" % len( entry_list_total ) )
             else:           # new, redundant = False
-                record_dict_path  = merge_3records( record_dict_std, record_dict_ntc, record_dict_none )
+                record_dict_path  = merge_3records( record_dict_num, record_dict_ntc, record_dict_none )
                 record_dict_total = merge_2records( record_dict_total, record_dict_path )
         
         if redundant:   # old
@@ -3253,8 +3249,8 @@ def group_by_ident( entry_list ):
 
 
 
-def make_query( msg, params, subclasses, value_total, value_numerical ):
-    logging.info( "make_query() %s " % msg )
+def make_query( prefix, params, subclasses, value_total, value_numerical ):
+    logging.info( "make_query() %s " % prefix )
     """
     The msg can be one of three words, that 'encodes' how the params dict is made. 
     -1- "total" 
@@ -3268,7 +3264,7 @@ def make_query( msg, params, subclasses, value_total, value_numerical ):
     classification = params[ "classification" ]
     base_year      = params[ "base_year" ]
     path_list      = params[ "path" ]
-    ter_codes      = params.get( "ter_codes" )
+    ter_codes      = params[ "ter_codes" ]
     
     logging.debug( "language:        %s" % language )
     logging.debug( "datatype:        %s" % datatype )
@@ -3346,7 +3342,7 @@ def make_query( msg, params, subclasses, value_total, value_numerical ):
     query += " )"
     
     # AND ter_codes
-    if ter_codes:
+    if prefix == "num":
         l =  len( ter_codes )
         query += " AND ter_code in ("
         
@@ -3385,7 +3381,7 @@ def make_query( msg, params, subclasses, value_total, value_numerical ):
     
     query += ", value_unit"
     
-    if ter_codes:
+    if prefix == "num":
         query += ", ter_code"
     
     query += ";"
