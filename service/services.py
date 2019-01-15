@@ -18,6 +18,7 @@ FL-06-Nov-2018 continue with group_tercodes = True
 FL-19-Nov-2018 RUSREPS-216
 FL-27-Nov-2018 collect_fields() & collect_records()
 FL-10-Dec-2018 handle /documentation exception
+FL-15-Jan-2019 install/use sortedcontainers
 
 def get_configparser():
 def get_connection():
@@ -46,7 +47,9 @@ def aggregate_year( params, add_subclasses, value_total = True, value_numerical 
 def execute_year( key_set, params, sql_query, eng_data ):
 def execute_only( sql_query, dict_cursor = False ):
 def collect_fields(  key_set, params, eng_data, sql_names, sql_resp ):
-def collect_records( prefix, key_set, path_dict, params, eng_data, sql_names, sql_resp ):
+def collect_records( record_dict_total, prefix, key_set, path_dict, params, eng_data, sql_names, sql_resp ):
+def add_missing( record_dict_total, params ):
+def records2entries( record_dict_total, params ):
 def merge_3records( record_dict_num, record_dict_ntc, record_dict_none ):
 def merge_2records( record_dict_total, record_dict_path ):
 def show_record_dict( dict_name, record_dict, sort = False ):
@@ -115,6 +118,7 @@ from jsonmerge import merge
 from operator import itemgetter
 from pymongo import MongoClient
 from socket import gethostname
+from sortedcontainers import SortedDict
 from StringIO import StringIO
 from sys import exc_info
 from time import ctime, time, localtime
@@ -1740,15 +1744,18 @@ def collect_fields( key_set, params, eng_data, sql_names, sql_resp ):
 
 
 
-def collect_records( prefix, key_set, path_dict, params, eng_data, sql_names, sql_resp ):
+def collect_records( records_dict, sql_prefix, key_set, path_dict, params, eng_data, sql_names, sql_resp ):
+    logging.info( "collect_records() sql_prefix: %s" % sql_prefix )
     # sql_names & sql_resp from execute_only()
+    logging.info( "sql_resp:  %d records" % len( sql_resp ) )
+    if len( sql_resp ) == 0:
+        return
     
     time0 = time()      # seconds since the epoch
-    logging.info( "collect_records() start: %s" % datetime.datetime.now() )
+    #logging.info( "collect_records() start: %s" % datetime.datetime.now() )
     
     logging.info( "key_set:   %s" % str( key_set ) )
     logging.info( "sql_names: %s" % str( sql_names ) )
-    logging.info( "sql_resp:  %d records" % len( sql_resp ) )
     
     nkeys = path_dict[ "nkeys" ]
     path_prev = None
@@ -1773,13 +1780,13 @@ def collect_records( prefix, key_set, path_dict, params, eng_data, sql_names, sq
         value_na   = "нет данных"
         value_none = "агрегация на этом уровне невозможна"
     
-    path_unit_set = set()
-    records_dict = {}
+    #path_unit_set = set()
     
     for r, rec in enumerate( sql_resp ):
         logging.info( "sql_resp %d, %s: %s" % ( r, type( rec ), rec ) )
         rec_dict = json.loads( rec )
         
+        # path+unit combinations in sql record
         path_unit_dict = collections.OrderedDict()
         for hc in range( 1, 11 ):   # [1,...,10]
             key = "%s%d" % ( class_prefix, hc )
@@ -1793,11 +1800,16 @@ def collect_records( prefix, key_set, path_dict, params, eng_data, sql_names, sq
         path_unit_dict[ "value_unit" ] = value_unit
         path_unit_str = json.dumps( path_unit_dict )
         
-        if path_unit_str not in path_unit_set:          # new path+unit combi
-            logging.info( "add path_unit_str (%d->%d) %s" % ( len(path_unit_set), 1 + len(path_unit_set), path_unit_str ) )
-            path_unit_set.add( path_unit_str )
-            ter_codes = []
-            records_dict[ path_unit_str ] = ter_codes   # add list for the ter_code_dicts
+        #if path_unit_str not in path_unit_set:          # new path+unit combi
+        if path_unit_str not in records_dict.keys():    # new path+unit combi
+            #logging.info( "add path_unit_str (%d->%d) %s" % ( len(path_unit_set), 1 + len(path_unit_set), path_unit_str ) )
+            logging.info( "add path_unit_str: %s" % path_unit_str )
+            #path_unit_set.add( path_unit_str )
+            #ter_code_list = []
+            #records_dict[ path_unit_str ] = []   # add list for the ter_code_dicts
+            records_dict[ path_unit_str ] = SortedDict()    # add dict for the { ter_code : value } pairs
+        
+        ter_code_dict = records_dict[ path_unit_str ]
         
         """
         if path_unit_str not in path_unit_list:
@@ -1837,12 +1849,24 @@ def collect_records( prefix, key_set, path_dict, params, eng_data, sql_names, sq
                 except:
                     total = value_na
                 
+                """
                 ter_code_dict =  { 
                     "ter_code" : ter_code, 
                     "total"    : total
                 }
                 
-                records_dict[ path_unit_str ].append( ter_code_dict )
+                if sql_prefix == "node":
+                    # TODO check for duplicate!...
+                    pass
+                ter_code_list.append( ter_code_dict )
+                """
+                try:
+                    ter_code_dict[ ter_code ]
+                    logging.warn( "duplicate ter_code %s" % ter_code )
+                    total = value_none
+                except:
+                    ter_code_dict[ ter_code ] = total
+                 
             else:
                 logging.info( "skip ter_code %s" % ter_code )
         else:
@@ -1857,18 +1881,89 @@ def collect_records( prefix, key_set, path_dict, params, eng_data, sql_names, sq
         pass
     """
     
-    logging.info( "paths in path_unit_set %d" % len( path_unit_set ) )
-    show_record_dict( "record_dict_" + prefix, records_dict )
-    
-    """
-    for r, rec_dict in enumerate( records_dict ):
-        logging.info( "%d, %s" % ( r, json.dumps( rec_dict ) ) )
-    """
+    #logging.info( "paths in path_unit_set %d" % len( path_unit_set ) )
+    logging.info( "paths in records_dict %d" % len( records_dict.keys() ) )
+    show_record_dict( sql_prefix, records_dict )
     
     str_elapsed = format_secs( time() - time0 )
     logging.info( "collect_records() took %s" % str_elapsed )
     
     return records_dict
+
+
+
+def add_missing( records_dict, params ):
+    time0 = time()      # seconds since the epoch
+    logging.info( "add_missing_tc() start: %s" % datetime.datetime.now() )
+
+    # value strings for empty fields
+    language = params.get( "language" )
+    value_na   = ""
+    value_none = ""
+    if language.upper() == "EN":
+        value_na = "na"
+    elif language.upper() == "RU":
+        value_na = "нет данных"
+
+    ter_codes_req = params.get( "ter_codes" )      # requested ter_codes (only historical)
+
+    for path_unit_str in records_dict:
+        ter_code_dict = records_dict[ path_unit_str ]
+        for ter_code in ter_codes_req:
+            try:
+                ter_code_dict[ ter_code ]
+            except:
+                ter_code_dict[ ter_code ] = value_na
+    
+    logging.info( "final paths in records_dict %d" % len( records_dict.keys() ) )
+    show_record_dict( "all", records_dict )
+    
+    str_elapsed = format_secs( time() - time0 )
+    logging.info( "add_missing() took %s" % str_elapsed )
+    
+    return records_dict
+
+
+
+def records2entries( records_dict, params ): 
+    time0 = time()      # seconds since the epoch
+    logging.info( "records2entries() start: %s" % datetime.datetime.now() )
+
+    datatype  = params[ "datatype" ]
+    base_year = params[ "base_year" ]
+
+    entry_list = []
+    
+    for path_unit_str in records_dict:
+        logging.info( "records2entries() path_unit_str: %s" % path_unit_str )
+        path_unit_dict = json.loads( path_unit_str )
+        
+        value_unit = path_unit_dict[ "value_unit" ]
+        path = path_unit_dict
+        del path[ "value_unit" ]
+        
+        ter_code_dict = records_dict[ path_unit_str ]
+        for ter_code in ter_code_dict:
+            #total = ter_code_dict[ ter_code ]
+            total = ter_code_dict.get( ter_code )
+            
+            logging.info( "records2entries() type: %s" % type( total ) )
+            
+            entry = {}
+            entry[ "base_year" ]  = base_year,
+            entry[ "datatype" ]   = datatype,
+            entry[ "path" ]       = path, 
+            entry[ "ter_code" ]   = ter_code,
+            entry[ "total" ]      = total, 
+            entry[ "value_unit" ] = value_unit
+            entry_list.append( entry )
+    
+    logging.info( "records2entries() # %d" % len( entry_list ) )
+    
+    str_elapsed = format_secs( time() - time0 )
+    logging.info( "records2entries() took %s" % str_elapsed )
+    
+    return entry_list
 
 
 
@@ -1925,9 +2020,9 @@ def merge_2records( record_dict, record_dict_path ):
 
 
 
-def show_record_dict( dict_name, record_dict, sort = False ):
+def show_record_dict( prefix, record_dict, sort = False ):
     logging.info( "show_record_dict() sort %s" % sort )
-    logging.info( "%s # of records: %d" % ( dict_name, len( record_dict ) ) )
+    logging.info( "%s # of records: %d" % ( prefix, len( record_dict ) ) )
     
     if sort:
         record_list = sorted( record_dict.items() )
@@ -2942,8 +3037,8 @@ def aggregation():
         # historical classification has base_year from qinput
         
         redundant = False
-        entry_list_total  = []      # old: redundant = True
-        record_dict_total = {}      # new: redundant = False
+        entry_list_total  = []              # old: redundant = True
+        record_dict_total = SortedDict()    # new: redundant = False
         
         params[ "base_year" ] = base_year
         
@@ -2993,7 +3088,7 @@ def aggregation():
                     entry_dict_ig = group_by_ident( entry_list )
             else:           # new, redundant = False
                 sql_names, sql_resp = execute_only( sql_query, dict_cursor = True )
-                record_dict_num = collect_records( prefix, key_set, path_dict, params, eng_data, sql_names, sql_resp )
+                collect_records( record_dict_total, prefix, key_set, path_dict, params, eng_data, sql_names, sql_resp )
             
             
             prefix = "ntc"
@@ -3019,7 +3114,7 @@ def aggregation():
                         entry_dict_ntc_ig = group_by_ident( entry_list_ntc )
                 else:           # new, redundant = False
                     sql_names_ntc, sql_resp_ntc = execute_only( sql_query_ntc, dict_cursor = True )
-                    record_dict_ntc = collect_records( prefix, key_set, path_dict, params, eng_data_ntc, sql_names_ntc, sql_resp_ntc )
+                    record_dict_ntc = collect_records( record_dict_total, prefix, key_set, path_dict, params, eng_data_ntc, sql_names_ntc, sql_resp_ntc )
             
             
             prefix = "none"
@@ -3039,7 +3134,7 @@ def aggregation():
                     entry_dict_none_ig = group_by_ident( entry_list_none )
             else:           # new, redundant = False
                 sql_names_none, sql_resp_none = execute_only( sql_query_none, dict_cursor = True )
-                record_dict_none = collect_records( prefix, key_set, path_dict, params, eng_data_none, sql_names_none, sql_resp_none )
+                record_dict_none = collect_records( record_dict_total, prefix, key_set, path_dict, params, eng_data_none, sql_names_none, sql_resp_none )
             
             
             # merge the the lists
@@ -3062,20 +3157,22 @@ def aggregation():
                 entry_list_total.extend( entry_list_collect )      # different path_dict, so no duplicates
                 #entry_list_total = extend_nodups( entry_list_total, entry_list_collect )   # avoid duplicates
                 logging.info( "entry_list_total: %d items" % len( entry_list_total ) )
-            else:           # new, redundant = False
-                record_dict_path  = merge_3records( record_dict_num, record_dict_ntc, record_dict_none )
-                record_dict_total = merge_2records( record_dict_total, record_dict_path )
+            #else:           # new, redundant = False
+            #    record_dict_path  = merge_3records( record_dict_num, record_dict_ntc, record_dict_none )
+            #    record_dict_total = merge_2records( record_dict_total, record_dict_path )
         
         if redundant:   # old
             # sort the entries by path, value_unit
             entry_list_sorted = sort_entries( datatype, entry_list_total )
             logging.debug( "entry_list_sorted: %d items" % len( entry_list_sorted ) )
         else:           # new_entry
-            sort = True
-            show_record_dict( "record_dict_total", record_dict_total, sort )
-            entry_list_sorted = []
+            #sort = True
+            #show_record_dict( "record_dict_total", record_dict_total, sort )
+            add_missing( record_dict_total, params )
+            entry_list_sorted = records2entries( record_dict_total, params )
         
-        """
+        show_entries( "all", entry_list_sorted )
+        
         json_string, cache_except = json_cache( entry_list_sorted, language, "data", download_key, params )
         
         if cache_except is not None:
@@ -3085,7 +3182,7 @@ def aggregation():
         logging.debug( "aggregated json_string: \n%s" % json_string )
         
         collect_docs( params, download_dir, download_key )  # collect doc files in download dir
-        """
+    
     elif classification == "modern":
         # modern classification does not have base_year or ter_code from qinput
         
@@ -3341,18 +3438,31 @@ def make_query( prefix, params, subclasses, value_total, value_numerical ):
     
     query += " )"
     
-    # AND ter_codes
+    # AND ter_codes IN / NOT IN
     if prefix == "num":
         l =  len( ter_codes )
-        query += " AND ter_code in ("
-        
-        for t, ter_code in enumerate( ter_codes ):
-            query += " '%s'" % ter_code
+        if l > 0:
+            query += " AND ter_code IN ("
             
-            if t + 1 < l:
-                query += ", "
-        
-        query += ")"
+            for t, ter_code in enumerate( ter_codes ):
+                query += " '%s'" % ter_code
+                
+                if t + 1 < l:
+                    query += ", "
+            
+            query += ")"
+    elif prefix == "ntc":
+        l =  len( ter_codes )
+        if l > 0:
+            query += " AND ter_code NOT IN ("
+            
+            for t, ter_code in enumerate( ter_codes ):
+                query += " '%s'" % ter_code
+                
+                if t + 1 < l:
+                    query += ", "
+            
+            query += ")"
     
     # GROUP BY
     query += " GROUP BY datatype, base_year, "
@@ -3422,10 +3532,10 @@ def show_params( info, params ):
 
 def show_entries( info, entries ):
     logging.info( "show_entries() %s" % info )
-    logging.debug( "%d items" % len( entries ) )
+    logging.info( "%d items" % len( entries ) )
     nentries = len( entries )
     for e, entry in enumerate( entries ):
-        logging.debug( "%d-of-%d: %s" % ( e+1, nentries, str( entry ) ) )
+        logging.info( "%d-of-%d: %s" % ( e+1, nentries, str( entry ) ) )
 
 
 
