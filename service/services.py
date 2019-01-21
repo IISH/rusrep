@@ -19,6 +19,7 @@ FL-19-Nov-2018 RUSREPS-216
 FL-27-Nov-2018 collect_fields() & collect_records()
 FL-10-Dec-2018 handle /documentation exception
 FL-15-Jan-2019 install/use sortedcontainers
+FL-21-Jan-2019 
 
 def get_configparser():
 def get_connection():
@@ -26,7 +27,7 @@ def class_collector( keywords ):
 def strip_subclasses( path ):
 def path_levels = group_levels( path ):
 def json_generator( params, sql_names, json_dataname, data, key_set = None ):
-def json_cache( entry_list, language, json_dataname, download_key, params = {} ):
+def json_cache( entry_list, params, download_key ):
 def collect_docs( params, download_dir, download_key ):
 def load_years( cursor, datatype, classification ):
 def sqlfilter( sql ):
@@ -512,23 +513,24 @@ def json_generator( params, sql_names, json_dataname, data, qkey_set = None ):
 
 
 
-
-def json_cache( entry_list, language, json_dataname, download_key, params = {} ):
+def json_cache( entry_list, params, download_key ):
     # cache entry_list in mongodb with download_key as key
     logging.info( "json_cache() # entries in entry_list: %d" %  len( entry_list ) )
     
-    #for e, entry in enumerate( entry_list ):
-    #    logging.info( "%d: %s" % ( e, str( entry ) ) )
+    logging.info( "json_cache() params: %s" % str( params ) )
     
-    if params:
-        logging.info( "json_cache() params: %s" % str( params ) )
-                 
     configparser = get_configparser()
     root = configparser.get( "config", "root" )
     
     json_hash = {}
-    json_hash[ "language" ] = language
+    json_hash[ "language" ] = params[ "language" ]
+    json_dataname = "data"
     json_hash[ json_dataname ] = entry_list
+    
+    if not params[ "redundant" ]:   # new
+        json_hash[ "classification" ] = params[ "classification" ]
+        json_hash[ "datatype" ]       = params[ "datatype" ]
+        json_hash[ "base_year" ]      = params[ "base_year" ]
     
     json_hash[ "url" ] = "%s/service/download?key=%s" % ( root, download_key )
     logging.debug( "json_hash: %s" % json_hash )
@@ -1787,7 +1789,8 @@ def collect_records( records_dict, sql_prefix, key_set, path_dict, params, eng_d
         rec_dict = json.loads( rec )
         
         # path+unit combinations in sql record
-        path_unit_dict = collections.OrderedDict()
+        #path_unit_dict = collections.OrderedDict()      # json: dicts => tuples
+        path_unit_dict = {}
         for hc in range( 1, 11 ):   # [1,...,10]
             key = "%s%d" % ( class_prefix, hc )
             value = rec_dict.get( key )
@@ -1807,7 +1810,8 @@ def collect_records( records_dict, sql_prefix, key_set, path_dict, params, eng_d
             #path_unit_set.add( path_unit_str )
             #ter_code_list = []
             #records_dict[ path_unit_str ] = []   # add list for the ter_code_dicts
-            records_dict[ path_unit_str ] = SortedDict()    # add dict for the { ter_code : value } pairs
+            #records_dict[ path_unit_str ] = SortedDict()    # json: dicts => tuples
+            records_dict[ path_unit_str ] = {}              # add dict for the { ter_code : value } pairs
         
         ter_code_dict = records_dict[ path_unit_str ]
         
@@ -1924,10 +1928,48 @@ def add_missing( records_dict, params ):
     return records_dict
 
 
-
-def records2entries( records_dict, params ): 
+def records2entries( records_dict, params ):
     time0 = time()      # seconds since the epoch
     logging.info( "records2entries() start: %s" % datetime.datetime.now() )
+    
+    entry_list = []
+    
+    path_unit_strs = records_dict.keys()
+    path_unit_strs = sorted( path_unit_strs )
+    
+    for path_unit_str in path_unit_strs:
+        logging.info( "records2oldentries() path_unit_str: %s" % path_unit_str )
+        path_unit_dict = json.loads( path_unit_str )
+        
+        value_unit = path_unit_dict[ "value_unit" ]
+        path = path_unit_dict
+        del path[ "value_unit" ]
+        
+        ter_code_dict = records_dict[ path_unit_str ]
+        ter_code_list = []
+        for ter_code in ter_code_dict:
+            tc_dict = { "ter_code" : ter_code, "total" : ter_code_dict.get( ter_code ) } 
+            ter_code_list.append( tc_dict )
+        
+        record_dict = {
+            "path" : path,
+            "value_unit" : value_unit,
+            "ter_codes" : ter_code_list
+        }
+        
+        entry_list.append( record_dict )
+    
+    str_elapsed = format_secs( time() - time0 )
+    logging.info( "records2entries() took %s" % str_elapsed )
+    
+    return entry_list
+
+
+
+def records2oldentries( records_dict, params ):
+    # compatibility check with old response structure
+    time0 = time()      # seconds since the epoch
+    logging.info( "records2oldentries() start: %s" % datetime.datetime.now() )
 
     datatype  = params[ "datatype" ]
     base_year = params[ "base_year" ]
@@ -1935,7 +1977,7 @@ def records2entries( records_dict, params ):
     entry_list = []
     
     for path_unit_str in records_dict:
-        logging.info( "records2entries() path_unit_str: %s" % path_unit_str )
+        logging.info( "records2oldentries() path_unit_str: %s" % path_unit_str )
         path_unit_dict = json.loads( path_unit_str )
         
         value_unit = path_unit_dict[ "value_unit" ]
@@ -1947,7 +1989,7 @@ def records2entries( records_dict, params ):
             #total = ter_code_dict[ ter_code ]
             total = ter_code_dict.get( ter_code )
             
-            logging.info( "records2entries() type: %s" % type( total ) )
+            logging.info( "records2oldentries() type: %s" % type( total ) )
             
             entry = {}
             entry[ "base_year" ]  = base_year,
@@ -1958,10 +2000,10 @@ def records2entries( records_dict, params ):
             entry[ "value_unit" ] = value_unit
             entry_list.append( entry )
     
-    logging.info( "records2entries() # %d" % len( entry_list ) )
+    logging.info( "records2oldentries() # %d" % len( entry_list ) )
     
     str_elapsed = format_secs( time() - time0 )
-    logging.info( "records2entries() took %s" % str_elapsed )
+    logging.info( "records2oldentries() took %s" % str_elapsed )
     
     return entry_list
 
@@ -2973,10 +3015,16 @@ def aggregation():
     qinput = simplejson.loads( request.data )
     logging.info( "qinput: %s" % str( qinput ) )
     
+    method = qinput.get( "Method" )
+    redundant = True
+    if method == "new":
+        redundant = False
+    logging.info( "method: %s, redundant: %s" % ( method, redundant ) )
+    
     language = qinput.get( "language" )
     classification = qinput.get( "classification" )
     datatype = qinput.get( "datatype" )
-    logging.debug( "language: %s, classification: %s, datatype: %s" % ( language, classification, datatype ) )
+    logging.info( "language: %s, classification: %s, datatype: %s" % ( language, classification, datatype ) )
     
     path = qinput.get( "path" )
     add_subclasses, path_stripped, key_set = strip_subclasses( path )
@@ -3010,7 +3058,8 @@ def aggregation():
         "classification" : classification,
         #"path"           : path_stripped,      # loop over subpaths of equal length
         "add_subclasses" : add_subclasses,
-        "group_tercodes" : group_tercodes
+        "group_tercodes" : group_tercodes,
+        "redundant"      : redundant
     }
     
     uuid4 = str( uuid.uuid4() )
@@ -3036,9 +3085,10 @@ def aggregation():
     if classification == "historical":
         # historical classification has base_year from qinput
         
-        redundant = False
         entry_list_total  = []              # old: redundant = True
-        record_dict_total = SortedDict()    # new: redundant = False
+        
+        #record_dict_total = SortedDict()    # new: json: dicts => tuples
+        record_dict_total = {}              # new: redundant = False
         
         params[ "base_year" ] = base_year
         
@@ -3137,7 +3187,7 @@ def aggregation():
                 record_dict_none = collect_records( record_dict_total, prefix, key_set, path_dict, params, eng_data_none, sql_names_none, sql_resp_none )
             
             
-            # merge the the lists
+            # merge the the 3 lists (num, ntc, none)
             if redundant:   # old
                 # entry_list_path = entry_list + entry_list_ntc
                 logging.info( "add_unique_ntcs()" )
@@ -3173,6 +3223,8 @@ def aggregation():
         
         show_entries( "all", entry_list_sorted )
         
+        """
+        # combined for historical and modern
         json_string, cache_except = json_cache( entry_list_sorted, language, "data", download_key, params )
         
         if cache_except is not None:
@@ -3182,6 +3234,7 @@ def aggregation():
         logging.debug( "aggregated json_string: \n%s" % json_string )
         
         collect_docs( params, download_dir, download_key )  # collect doc files in download dir
+        """
     
     elif classification == "modern":
         # modern classification does not have base_year or ter_code from qinput
@@ -3259,6 +3312,7 @@ def aggregation():
         logging.debug( "entry_list_sorted: %d items" % len( entry_list_sorted ) )
         
         """
+        # combined for historical and modern
         json_string, cache_except = json_cache( entry_list_sorted, language, "data", download_key, params )
         
         if cache_except is not None:
@@ -3271,7 +3325,7 @@ def aggregation():
         """
     # end classification
     
-    json_string, cache_except = json_cache( entry_list_sorted, language, "data", download_key, params )
+    json_string, cache_except = json_cache( entry_list_sorted, params, download_key )
     
     if cache_except is not None:
         logging.error( "caching of aggregation data failed" )
