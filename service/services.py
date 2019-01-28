@@ -19,7 +19,7 @@ FL-19-Nov-2018 RUSREPS-216
 FL-27-Nov-2018 collect_fields() & collect_records()
 FL-10-Dec-2018 handle /documentation exception
 FL-15-Jan-2019 install/use sortedcontainers
-FL-22-Jan-2019 changed
+FL-28-Jan-2019 adapt sql_query: suppress records with subsequent trailing ". ": only 1 allowed
 
 def get_configparser():
 def get_connection():
@@ -607,6 +607,8 @@ def json_cache( entry_list, params, download_key ):
 
 def collect_docs( qinput, download_dir, download_key ):
     # collect the accompanying docs in the download dir
+    time0 = time()      # seconds since the epoch
+    logging.debug( "collect_docs() start: %s" % datetime.datetime.now() )
     logging.info( "collect_docs() key = %s, dir = %s" % ( download_key, download_dir ) )
     
     for key in qinput:
@@ -694,6 +696,10 @@ def collect_docs( qinput, download_dir, download_key ):
     for doc in get_list:
         doc_path = os.path.join( doc_dir, doc )
         shutil.copy2( doc_path, download_dir )
+
+    logging.debug( "stop: %s" % datetime.datetime.now() )
+    str_elapsed = format_secs( time() - time0 )
+    logging.info( "collect_docs() caching took %s" % str_elapsed )
 
 
 
@@ -1627,14 +1633,15 @@ def execute_year( key_set, params, sql_query, eng_data = {} ):
     logging.debug( sql_names )
     
     sql_resp = cursor.fetchall()
-    logging.debug( "result # of data records: %d" % len( sql_resp ) )
+    nsql_resp = len( sql_resp )
+    logging.debug( "result # of data records: %d" % nsql_resp )
     
     cursor.close()
     connection.close()
     
     final_data = []
     for idx, item in enumerate( sql_resp ):
-        logging.debug( "%d: %s" % ( idx, item ) )
+        logging.debug( "%d-of-%d: %s" % ( idx+1, nsql_resp, item ) )
         final_item = []
         for i, column_name in enumerate( sql_names ):
             value = item[ i ]
@@ -1788,8 +1795,9 @@ def collect_records( records_dict, sql_prefix, key_set, path_dict, params, eng_d
     if classification == "historical":
         class_prefix = "hist" + class_prefix 
     
+    nsql_resp = len( sql_resp )
     for r, rec in enumerate( sql_resp ):
-        logging.debug( "sql_resp %d, %s: %s" % ( r, type( rec ), rec ) )
+        logging.debug( "sql_resp %d-of-%d, %s: %s" % ( r+1, nsql_resp, type( rec ), rec ) )
         rec_dict = json.loads( rec )
         
         # path+unit combinations in sql record
@@ -1852,13 +1860,14 @@ def collect_records( records_dict, sql_prefix, key_set, path_dict, params, eng_d
         else:
             logging.debug( "modern: skip path_unit_str %s" % path_unit_str )
     
-    logging.debug( "paths in records_dict %d" % len( records_dict.keys() ) )
+    nrecords = len( records_dict.keys() )
+    logging.debug( "paths in records_dict %d" % nrecords )
     #show_record_dict( sql_prefix, records_dict )
     
     str_elapsed = format_secs( time() - time0 )
     logging.info( "collect_records() took %s" % str_elapsed )
     
-    return records_dict
+    return nrecords
 
 
 
@@ -3107,7 +3116,7 @@ def aggregation():
                     entry_dict_ig = group_by_ident( entry_list )
             else:           # new, redundant = False
                 sql_names, sql_resp = execute_only( sql_query, dict_cursor = True )
-                collect_records( record_dict_total, prefix, key_set, path_dict, params, eng_data, sql_names, sql_resp )
+                nrecords = collect_records( record_dict_total, prefix, key_set, path_dict, params, eng_data, sql_names, sql_resp )
             
             
             prefix = "ntc"
@@ -3134,7 +3143,7 @@ def aggregation():
                         entry_dict_ntc_ig = group_by_ident( entry_list_ntc )
                 else:           # new, redundant = False
                     sql_names_ntc, sql_resp_ntc = execute_only( sql_query_ntc, dict_cursor = True )
-                    record_dict_ntc = collect_records( record_dict_total, prefix, key_set, path_dict, params, eng_data_ntc, sql_names_ntc, sql_resp_ntc )
+                    nrecords = collect_records( record_dict_total, prefix, key_set, path_dict, params, eng_data_ntc, sql_names_ntc, sql_resp_ntc )
             
             
             prefix = "none"
@@ -3155,7 +3164,7 @@ def aggregation():
                     entry_dict_none_ig = group_by_ident( entry_list_none )
             else:           # new, redundant = False
                 sql_names_none, sql_resp_none = execute_only( sql_query_none, dict_cursor = True )
-                record_dict_none = collect_records( record_dict_total, prefix, key_set, path_dict, params, eng_data_none, sql_names_none, sql_resp_none )
+                nrecords = collect_records( record_dict_total, prefix, key_set, path_dict, params, eng_data_none, sql_names_none, sql_resp_none )
             
             
             # merge the the 3 lists (num, ntc, none)
@@ -3423,7 +3432,12 @@ def make_query( prefix, params, subclasses, value_total, value_numerical ):
         for pk, key in enumerate( path_keys ):
             val = path_dict[ key ]
             val = val.replace( "'", "''" )      # escape single quote by repeating it [also needs cursor.mogrify()]
-            query += "(%s = '%s' OR %s = '. ')" % ( key, val, key )
+            
+            if pk > 0:      # suppress records with subsequent trailing '. ': only 1 allowed
+                key_prev = path_keys[ pk - 1 ]
+                query += "( %s = '%s' OR (%s <> '. ' AND %s = '. ') )" % ( key, val, key_prev, key )
+            else:
+                query += "(%s = '%s' OR %s = '. ')" % ( key, val, key )
             
             if pk + 1 < len( path_keys ):
                 query += " AND "
