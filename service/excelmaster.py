@@ -4,7 +4,7 @@
 # VT-07-Jul-2016 Latest change by VT
 # FL-18-Apr-2018 handle None cursor
 # FL-24-Apr-2018 GridFS
-# FL-07-may-2018 Changed
+# FL-29-Jan-2019 aggregate_dataset: fields (old) & records (new) versions
 
 import gridfs
 import json
@@ -31,7 +31,7 @@ def preprocessor( use_gridfs, datafilter ):
     
     lex_lands        = {}
     vocab_regs_terms = {}           # regions and terms
-    sheet_header     = []
+    sheet_header     = []           # top rows of download spreadsheet
     topic_name       = ""
     params           = {}
     
@@ -231,8 +231,8 @@ def preprocessor( use_gridfs, datafilter ):
 
 
 
-def aggregate_dataset_old( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header, topic_name, params ):
-    logging.info( "aggregate_dataset_old()" )
+def aggregate_dataset_fields( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header, topic_name, params ):
+    logging.info( "aggregate_dataset_fields()" )
     logging.debug( "key: %s" % key )
     logging.debug( "download_dir: %s" % download_dir )
     logging.debug( "xlsx_name: %s" % xlsx_name )
@@ -291,7 +291,7 @@ def aggregate_dataset_old( key, download_dir, xlsx_name, lex_lands, vocab_regs_t
     
     #logging.debug( "find cached data with key: %s" % key )
     #result = db_cache.data.find( { "key": key } )
-    #logging.info( "aggregate_dataset_old() length of cached dict: %d for key: %s" % ( len( result ), key ) )
+    #logging.info( "aggregate_dataset_fields() length of cached dict: %d for key: %s" % ( len( result ), key ) )
     
     db_vocabulary = clientcache.get_database( 'vocabulary' )   # vocabulary
     
@@ -316,7 +316,7 @@ def aggregate_dataset_old( key, download_dir, xlsx_name, lex_lands, vocab_regs_t
         for level_path in level_paths:
             logging.debug( "level path: %s" % level_path )
     else:
-        logging.error( "aggregate_dataset_old() NO params" )
+        logging.error( "aggregate_dataset_fields() NO params" )
     
     nrecords = []       # number of data records per sheet
     if hist_mod == 'h':
@@ -791,8 +791,8 @@ def aggregate_dataset_old( key, download_dir, xlsx_name, lex_lands, vocab_regs_t
 
 
 
-def aggregate_dataset_new( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header, topic_name, params ):
-    logging.info( "aggregate_dataset_new()" )
+def aggregate_dataset_records( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header, topic_name, params ):
+    logging.info( "aggregate_dataset_records()" )
     logging.debug( "key: %s" % key )
     logging.debug( "download_dir: %s" % download_dir )
     logging.debug( "xlsx_name: %s" % xlsx_name )
@@ -851,7 +851,7 @@ def aggregate_dataset_new( key, download_dir, xlsx_name, lex_lands, vocab_regs_t
     
     #logging.debug( "find cached data with key: %s" % key )
     #result = db_cache.data.find( { "key": key } )
-    #logging.info( "aggregate_dataset_new() length of cached dict: %d for key: %s" % ( len( result ), key ) )
+    #logging.info( "aggregate_dataset_records() length of cached dict: %d for key: %s" % ( len( result ), key ) )
     
     db_vocabulary = clientcache.get_database( 'vocabulary' )   # vocabulary
     
@@ -876,7 +876,7 @@ def aggregate_dataset_new( key, download_dir, xlsx_name, lex_lands, vocab_regs_t
         for level_path in level_paths:
             logging.debug( "level path: %s" % level_path )
     else:
-        logging.error( "aggregate_dataset_new() NO params" )
+        logging.error( "aggregate_dataset_records() NO params" )
     
     nrecords = []       # number of data records per sheet
     if hist_mod == 'h':
@@ -1084,13 +1084,15 @@ def aggregate_dataset_new( key, download_dir, xlsx_name, lex_lands, vocab_regs_t
                         column =  nlevels + 4
                         counts_column = column
                     elif name == "ter_codes":
-                        pass
+                        #pass
+                        continue
                     elif name in skip_list:
                         continue
                     else:
                         logging.debug( "name: %s ???" % name )
                         continue
                     
+                    """
                     if name == "ter_codes":
                         for ter_code_str in ter_codes:
                             logging.debug( "ter_code_str: %s" % ( ter_code_str ) )
@@ -1098,8 +1100,7 @@ def aggregate_dataset_new( key, download_dir, xlsx_name, lex_lands, vocab_regs_t
                             ter_code = ter_code_dict.get( "ter_code" )
                             total    = ter_code_dict.get( "total" )
                             logging.debug( "ter_code: %s, total: %s" % ( ter_code, total ) )
-                        
-                    
+                    """
                     
                     cell = ws.cell( row = row, column = column )
                     column_name = name
@@ -1137,10 +1138,23 @@ def aggregate_dataset_new( key, download_dir, xlsx_name, lex_lands, vocab_regs_t
             column = 1
             logging.debug( "# of names in data chain: %d" % len( chain ) )
             logging.debug( "names in chain: %s" % str( chain ) )
+            
             try:
                 base_year_chain = chain.get( "base_year" )
             except:
                 base_year_chain = '0'
+            logging.info( "base_year_chain: %s" % base_year_chain )
+            
+            # 29-Jan-2019 No base_year
+            logging.info( "params: %s" % str( params ) )
+            logging.info( "hist_mod: %s" % hist_mod )
+            if hist_mod == 'h' and base_year is None:
+                base_year = params.get( "base_year" )
+            logging.info( "base_year: %s" % base_year )
+            
+            # hack
+            if base_year_chain is None:
+                base_year_chain = base_year
             
             if int( base_year ) != int( base_year_chain ):
                 logging.debug( "skip: base_year %s not equal to base_year_chain %s" % ( base_year, base_year_chain ) )

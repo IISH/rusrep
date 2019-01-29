@@ -20,7 +20,7 @@ FL-27-Nov-2018 collect_fields() & collect_records()
 FL-10-Dec-2018 handle /documentation exception
 FL-15-Jan-2019 install/use sortedcontainers
 FL-28-Jan-2019 adapt sql_query: suppress records with subsequent trailing ". ": only 1 allowed
-FL-28-Jan-2019 adapt download
+FL-29-Jan-2019 adapt download
 
 def get_configparser():
 def get_connection():
@@ -126,7 +126,7 @@ from sys import exc_info
 from time import ctime, time, localtime
 
 from dataverse import Connection
-from excelmaster import aggregate_dataset_old, aggregate_dataset_new, preprocessor
+from excelmaster import aggregate_dataset_fields, aggregate_dataset_records, preprocessor
 
 from configutils import DataFilter
 
@@ -3760,9 +3760,9 @@ def download():
     
     redundant = params.get( "redundant", True )
     if redundant:
-        pathname, msg = aggregate_dataset_old( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header, topic_name, params )
+        pathname, msg = aggregate_dataset_fields( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header, topic_name, params )
     else:
-        pathname, msg = aggregate_dataset_new( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header, topic_name, params )
+        pathname, msg = aggregate_dataset_records( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header, topic_name, params )
 
     
     if os.path.isfile( pathname ):
