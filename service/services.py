@@ -26,8 +26,8 @@ def get_configparser():
 def get_connection():
 def class_collector( keywords ):
 def strip_subclasses( path ):
-def path_levels = group_levels( path ):
-def json_generator( params, sql_names, json_dataname, data, key_set = None ):
+def group_levels( path_list ):
+def json_generator( params, sql_names, json_dataname, data, qkey_set = None ):
 def json_cache( entry_list, params, download_key ):
 def collect_docs( params, download_dir, download_key ):
 def load_years( cursor, datatype, classification ):
@@ -43,7 +43,7 @@ def load_vocabulary( vocab_type ):
 def translate_vocabulary( vocab_filter, classification = None ):
 def get_sql_where( name, value ):
 def loadjson( json_dataurl ):
-def filecat_subtopic( qinput, cursor, datatype, base_year ):
+#def filecat_subtopic( qinput, cursor, datatype, base_year ):
 def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
 def aggregate_year( params, add_subclasses, value_total = True, value_numerical = True ):
 def execute_year( key_set, params, sql_query, eng_data ):
@@ -52,6 +52,7 @@ def collect_fields(  key_set, params, eng_data, sql_names, sql_resp ):
 def collect_records( record_dict_total, prefix, key_set, path_dict, params, eng_data, sql_names, sql_resp ):
 def add_missing( record_dict_total, params ):
 def sort_records( record_dict_total, params ):
+def records2oldentries( records_dict, params ):
 #def merge_3records( record_dict_num, record_dict_ntc, record_dict_none ):
 #def merge_2records( record_dict_total, record_dict_path ):
 def show_record_dict( dict_name, record_dict, sort = False ):
@@ -73,6 +74,15 @@ def format_secs( seconds ):
 @app.route( "/classes" )                                        def classes():
 @app.route( "/indicators", methods = [ "POST", "GET" ] )        def indicators():
 @app.route( "/aggregation", methods = ["POST" ] )               def aggregation():
+
+def make_identifier( path, value_unit ):
+def group_by_ident( entry_list ):
+def make_query( prefix, params, subclasses, value_total, value_numerical ):
+def show_path_dict( path_dict ):
+def show_params( info, params ):
+def show_entries( info, entries ):
+def extend_nodups( tot_list, add_list ):
+
 @app.route( "/filecatalogdata", methods = [ 'POST', 'GET' ]  )  def filecatalogdata():
 @app.route( "/filecatalogget", methods = [ 'POST', 'GET' ] )    def filecatalogget():
 @app.route( "/download" )                                       def download():
@@ -3434,11 +3444,14 @@ def make_query( prefix, params, subclasses, value_total, value_numerical ):
             val = path_dict[ key ]
             val = val.replace( "'", "''" )      # escape single quote by repeating it [also needs cursor.mogrify()]
             
-            if pk > 0:      # suppress records with subsequent trailing '. ': only 1 allowed
-                key_prev = path_keys[ pk - 1 ]
-                query += "( %s = '%s' OR (%s <> '. ' AND %s = '. ') )" % ( key, val, key_prev, key )
-            else:
+            if prefix == "num":
                 query += "(%s = '%s' OR %s = '. ')" % ( key, val, key )
+            else:
+                if pk > 0:      # suppress records with subsequent trailing '. ': only 1 allowed
+                    key_prev = path_keys[ pk - 1 ]
+                    query += "( %s = '%s' OR (%s <> '. ' AND %s = '. ') )" % ( key, val, key_prev, key )
+                else:
+                    query += "(%s = '%s' OR %s = '. ')" % ( key, val, key )
             
             if pk + 1 < len( path_keys ):
                 query += " AND "
