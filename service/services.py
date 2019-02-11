@@ -130,7 +130,7 @@ from jsonmerge import merge
 from operator import itemgetter
 from pymongo import MongoClient
 from socket import gethostname
-from sortedcontainers import SortedDict
+#from sortedcontainers import SortedDict
 from StringIO import StringIO
 from sys import exc_info
 from time import ctime, time, localtime
