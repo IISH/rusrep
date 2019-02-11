@@ -19,8 +19,8 @@ FL-19-Nov-2018 RUSREPS-216
 FL-27-Nov-2018 collect_fields() & collect_records()
 FL-10-Dec-2018 handle /documentation exception
 FL-15-Jan-2019 install/use sortedcontainers
-FL-28-Jan-2019 adapt sql_query: suppress records with subsequent trailing ". ": only 1 allowed
-FL-29-Jan-2019 adapt download
+FL-11-Feb-2019 optional suppression of trailing dots in db queries
+FL-11-Feb-2019 adapt download...
 
 def get_configparser():
 def get_connection():
@@ -3064,8 +3064,9 @@ def aggregation():
     
     # split input path in subgroups with the same key length
     path_lists = group_levels( path )       # input path WITH subclasses parameter, NOT path_stripped
-    nlists = len( path_lists )
-    logging.debug( "input path split in %d subgroups of the same number of keys per subgroup" % nlists )
+    num_path_lists = len( path_lists )
+    logging.debug( "input path split in %d subgroups of the same number of keys per subgroup" % num_path_lists )
+    params[ "num_path_lists" ] = num_path_lists
     
     json_string = str( "{}" )
     cache_except = None
@@ -3091,7 +3092,7 @@ def aggregation():
             
             nkeys = path_dict[ "nkeys" ]
             logging.debug( "" )
-            logging.debug( "path subgroup %d-of-%d, %d different paths of length %d" % ( pd, nlists, len( path_list ), nkeys ) )
+            logging.debug( "path subgroup %d-of-%d, %d different paths of length %d" % ( pd, num_path_lists, len( path_list ), nkeys ) )
             show_path_dict( path_dict )
             add_subclasses = path_dict[ "subclasses" ]
             
@@ -3232,7 +3233,7 @@ def aggregation():
             entry_list_year = []
             
             for pd, path_dict in enumerate( path_lists, start = 1 ):
-                logging.info( "path_list %d-of-%d" % ( pd, nlists ) )
+                logging.info( "path_list %d-of-%d" % ( pd, num_path_lists ) )
                 
                 show_path_dict( path_dict )
                 path_list = path_dict[ "path_list" ]
@@ -3377,6 +3378,7 @@ def make_query( prefix, params, subclasses, value_total, value_numerical ):
     classification = params[ "classification" ]
     base_year      = params[ "base_year" ]
     path_list      = params[ "path" ]
+    num_path_lists = params[ "num_path_lists" ]
     ter_codes      = params[ "ter_codes" ]
     
     logging.debug( "language:        %s" % language )
@@ -3442,12 +3444,21 @@ def make_query( prefix, params, subclasses, value_total, value_numerical ):
         
         for pk, key in enumerate( path_keys ):
             val = path_dict[ key ]
-            val = val.replace( "'", "''" )      # escape single quote by repeating it [also needs cursor.mogrify()]
+            val = val.replace( "'", "''" )  # escape single quote by repeating it [also needs cursor.mogrify()]
             
+            # suppress consecutive trailing dots?
             if prefix == "num":
-                query += "(%s = '%s' OR %s = '. ')" % ( key, val, key )
+                if num_path_lists == 1:
+                    suppress = False    # no 'danger' of getting the same value number more than once?
+                else:
+                    suppress = True     # 'danger' of missing certain value numbers?
             else:
-                if pk > 0:      # suppress records with subsequent trailing '. ': only 1 allowed
+                suppress = True         # we only collect unique path strings (ignore value contents)
+            
+            if pk == 0:
+                query += "(%s = '%s')" % ( key, val )
+            else:
+                if pk > 1 and suppress: # consecutive trailing dots
                     key_prev = path_keys[ pk - 1 ]
                     query += "( %s = '%s' OR (%s <> '. ' AND %s = '. ') )" % ( key, val, key_prev, key )
                 else:
