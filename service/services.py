@@ -20,7 +20,7 @@ FL-27-Nov-2018 collect_fields() & collect_records()
 FL-10-Dec-2018 handle /documentation exception
 FL-11-Feb-2019 optional suppression of trailing dots in db queries
 FL-12-Feb-2019 separate functions for old/new historic/modern
-FL-18-Feb-2019 
+FL-19-Feb-2019 main query split by subclasses, other 2 by indicator length
 
 def get_configparser():
 def get_connection():
@@ -81,7 +81,6 @@ def aggregate_modern( params )
 def make_identifier( path, value_unit ):
 def group_by_ident( entry_list ):
 def make_query( prefix, params, add_subclasses, value_total = True, value_numerical = True ):
-def make_query_num( prefix, params, add_subclasses, value_total = True, value_numerical = True ):
 def show_path_dict( num_path_lists, pd, path_dict ):
 def show_params( info, params ):
 def show_entries( info, entries ):
@@ -321,6 +320,7 @@ def group_levels( path_list ):
         elif nkeys == 5:    # now 4, subclasses has been dropped
             path_list5.append( path )
     
+    """
     logging.debug( "path_list1: %d entries with 1 indicator key" % len( path_list1 ) )
     for p, path in enumerate( path_list1 ):
         logging.debug( "%d: %s" % ( p+1, str( path ) ) )
@@ -340,20 +340,52 @@ def group_levels( path_list ):
     logging.debug( "path_list5: %d entries with 5 indicator keys" % len( path_list5 ) )
     for p, path in enumerate( path_list5 ):
         logging.debug( "%d: %s" % ( p+1, str( path ) ) )
+    """
     
-    path_lists = []
+    path_lists_bylen = []
+    
     if len( path_list1 ) > 0:
-        path_lists.append( { "nkeys" : 1, "subclasses" : False,  "path_list" : path_list1 } )
+        path_lists_bylen.append( { "nkeys" : 1, "subclasses" : False, "path_list" : path_list1 } )
     if len( path_list2 ) > 0:
-        path_lists.append( { "nkeys" : 2, "subclasses" : False,  "path_list" : path_list2 } )
+        path_lists_bylen.append( { "nkeys" : 2, "subclasses" : False, "path_list" : path_list2 } )
     if len( path_list3 ) > 0:
-        path_lists.append( { "nkeys" : 3, "subclasses" : False,  "path_list" : path_list3 } )
+        path_lists_bylen.append( { "nkeys" : 3, "subclasses" : False, "path_list" : path_list3 } )
     if len( path_list4 ) > 0:
-        path_lists.append( { "nkeys" : 4, "subclasses" : False,  "path_list" : path_list4 } )
+        path_lists_bylen.append( { "nkeys" : 4, "subclasses" : False, "path_list" : path_list4 } )
     if len( path_list5 ) > 0:
-        path_lists.append( { "nkeys" : 5, "subclasses" : True,   "path_list" : path_list5 } )
+        path_lists_bylen.append( { "nkeys" : 5, "subclasses" : True,  "path_list" : path_list5 } )
     
-    return path_lists 
+    path_list_subyes = []
+    path_list_subno = []
+    
+    for path_dict in path_lists_bylen:
+        logging.debug( "%s" % str( path_dict ) )
+        nkeys      = path_dict[ "nkeys" ]
+        subclasses = path_dict[ "subclasses" ]
+        path_list  = path_dict[ "path_list" ]
+        npaths     = len( path_list )
+        
+        logging.debug( "npaths: %d, nkeys: %d, subclasses: %s" % ( npaths, nkeys, subclasses ) )
+        for p, path in enumerate( path_list ):
+            logging.debug( "%d: %s" % ( p+1, str( path ) ) )
+    
+        if subclasses:
+            path_list_subyes.extend( path_list )
+        else:
+            path_list_subno.extend( path_list )
+    
+    
+    logging.debug( "npaths with    subclasses: %d" % len( path_list_subyes ) )
+    logging.debug( "npaths without subclasses: %d" % len( path_list_subno ) )
+    
+    path_lists_bysub = []
+    # "nkeys" : -1 == variable
+    if len( path_list_subyes ) > 0:
+        path_lists_bysub.append( { "nkeys" : -1, "subclasses" : True,  "path_list" : path_list_subyes } )
+    if len( path_list_subno ) > 0:
+        path_lists_bysub.append( { "nkeys" : -1, "subclasses" : False, "path_list" : path_list_subno } )
+    
+    return path_lists_bylen, path_lists_bysub
 
 
 
@@ -3056,11 +3088,11 @@ def aggregation():
         os.makedirs( download_dir )
     
     # split input path in subgroups with the same numbr of keys
-    path_lists = group_levels( path )       # input path WITH subclasses parameter, NOT path_stripped
-    num_path_lists = len( path_lists )
-    logging.debug( "input path split in %d subgroups of the same number of keys per subgroup" % num_path_lists )
-    params[ "path_lists" ] = path_lists
-    params[ "num_path_lists" ] = num_path_lists
+    #path_lists = group_levels( path )       # input path WITH subclasses parameter, NOT path_stripped
+    path_lists_bylen, path_lists_bysub = group_levels( path )
+    
+    params[ "path_lists_bylen" ] = path_lists_bylen
+    params[ "path_lists_bysub" ] = path_lists_bysub
     
     json_string = str( "{}" )
     cache_except = None
@@ -3191,13 +3223,13 @@ def aggregate_historic_redun( params ):
     datatype       = params[ "datatype" ]
     base_year      = params[ "base_year" ]
     group_tercodes = params[ "group_tercodes" ]
-    path_lists     = params[ "path_lists" ]
-    num_path_lists = params[ "num_path_lists" ]
+    path_lists     = params[ "path_lists_bylen" ]
+    
+    #num_path_lists = params[ "num_path_lists" ]
+    num_path_lists = len( path_lists )
     
     entry_list_sorted = []
-    
     entry_list_total  = []              # old: redundant = True
-    
     record_dict_total = {}              # new: redundant = False
     
     # loop over the equal length path subgroups
@@ -3228,7 +3260,6 @@ def aggregate_historic_redun( params ):
         if datatype == "1.02":      # not needed for 1.02 (and much data)
             logging.info( "SKIPPING -2- = entry_list_ntc" )
         else:                       # not needed for 1.02 (and much data)
-            prefix = "ntc"
             logging.debug( "-2- = entry_list_%s" % prefix )
             logging.debug( "path_list: %s" % params[ "path_list" ] )
             #show_params( "prefix=ntc -2- = entry_list_ntc", params )
@@ -3289,28 +3320,30 @@ def aggregate_historic_redun( params ):
 def aggregate_historic( params ):
     logging.info( "aggregate_historic()" )
     
-    datatype       = params[ "datatype" ]
-    base_year      = params[ "base_year" ]
-    path_lists     = params[ "path_lists" ]
-    num_path_lists = params[ "num_path_lists" ]
+    datatype  = params[ "datatype" ]
+    base_year = params[ "base_year" ]
+    
+    
+    path_lists_bysub = params[ "path_lists_bysub" ]
+    
+    #num_path_lists = params[ "num_path_lists" ]
     
     #record_dict_total = SortedDict()    # json: dicts => tuples
     record_dict_total = {}
     
-    # test prefix = "num" with single query: all path elements
-    prefix = "num"
-    sql_query = make_query_num( prefix, params, value_total = True, value_numerical = True )
     
-    # loop over the equal length path subgroups
+    # loop over the 2 yes/no subclassess path subgroups
+    path_lists = params[ "path_lists_bysub" ]
     for pd, path_dict in enumerate( path_lists, start = 1 ):
+        num_path_lists = len( path_lists )
         show_path_dict( num_path_lists, pd, path_dict )
         
-        path_list = path_dict[ "path_list" ]
-        nkeys     = path_dict[ "nkeys" ]
+        path_list      = path_dict[ "path_list" ]
+        nkeys          = path_dict[ "nkeys" ]
         add_subclasses = path_dict[ "subclasses" ]
         
         params[ "path_list" ] = path_list
-        
+        params[ "num_path_lists" ] = num_path_lists
         
         prefix = "num"
         logging.debug( "-1- = entry_list_total" )
@@ -3320,12 +3353,22 @@ def aggregate_historic( params ):
         sql_names, sql_resp = execute_only( sql_query, dict_cursor = True )
         nrecords = collect_records( record_dict_total, prefix, path_dict, params, sql_names, sql_resp )
         
+    # loop over the equal length path subgroups
+    path_lists = params[ "path_lists_bylen" ]
+    for pd, path_dict in enumerate( path_lists, start = 1 ):
+        path_list      = path_dict[ "path_list" ]
+        nkeys          = path_dict[ "nkeys" ]
+        add_subclasses = path_dict[ "subclasses" ]
+        params[ "path_list" ] = path_list
+        
+        num_path_lists = len( path_list )
+        show_path_dict( num_path_lists, pd, path_dict )
+        
         prefix = "ntc"
         entry_list_ntc = []
         if datatype == "1.02":      # not needed for 1.02 (and much data)
             logging.info( "SKIPPING -2- = entry_list_ntc" )
         else:                       # not needed for 1.02 (and much data)
-            prefix = "ntc"
             logging.debug( "-2- = entry_list_%s" % prefix )
             #show_params( "prefix=ntc -2- = entry_list_ntc", params )
             
@@ -3436,7 +3479,6 @@ def make_query( prefix, params, subclasses, value_total, value_numerical ):
     classification = params[ "classification" ]
     base_year      = params[ "base_year" ]
     path_list      = params[ "path_list" ]
-    num_path_lists = params[ "num_path_lists" ]
     ter_codes      = params[ "ter_codes" ]
     
     logging.debug( "language:        %s" % language )
@@ -3498,6 +3540,15 @@ def make_query( prefix, params, subclasses, value_total, value_numerical ):
     # AND path_dicts
     query += " AND ("
     for pd, path_dict in enumerate( path_list ):
+        
+        if prefix == "num":     # now number of keys may vary
+            path_keys = []
+            for k, v in path_dict.iteritems():
+                if k not in path_keys:
+                    path_keys.append( k )
+                    #logging.debug( "key: %s, value: %s" % ( k, v ) )
+            path_keys.sort()
+        
         query += " ( "
         
         for pk, key in enumerate( path_keys ):
@@ -3506,13 +3557,9 @@ def make_query( prefix, params, subclasses, value_total, value_numerical ):
             
             # suppress consecutive trailing dots?
             if prefix == "num":
-                if num_path_lists == 1:
-                    suppress = False    # no 'danger' of getting the same value number more than once?
-                else:
-                    suppress = True     # 'danger' of missing certain value numbers?
-                    #suppress = False   # but we need False for RUSREPS-235
+                suppress = False
             else:
-                suppress = True         # we only collect unique path strings (ignore value contents)
+                suppress = True     # we only collect unique path strings (ignore value contents)
             
             if pk == 0:
                 query += "(%s = '%s')" % ( key, val )
@@ -3591,182 +3638,6 @@ def make_query( prefix, params, subclasses, value_total, value_numerical ):
     query += ";"
     
     logging.debug( "make_query() %s" % query )
-    
-    return query
-
-
-
-def make_query_num( prefix, params, value_total, value_numerical ):
-    logging.debug( "make_query_num() %s " % prefix )
-    """
-    The msg can be one of three words, that 'encodes' how the params dict is made. 
-    -1- "total" 
-    -2- "ntc"   
-    -3- "none"  
-    """
-    
-    language       = params[ "language" ] 
-    datatype       = params[ "datatype" ]
-    classification = params[ "classification" ]
-    base_year      = params[ "base_year" ]
-    path_lists     = params[ "path_lists" ]
-    num_path_lists = params[ "num_path_lists" ]
-    ter_codes      = params[ "ter_codes" ]
-    
-    logging.debug( "language:        %s" % language )
-    logging.debug( "datatype:        %s" % datatype )
-    logging.debug( "classification:  %s" % classification )
-    logging.debug( "base_year:       %s" % base_year )
-    logging.debug( "path_lists:      %s" % str( path_lists ) )
-    logging.debug( "ter_codes:       %s" % str( ter_codes ) )
-    logging.debug( "value_total:     %s" % value_total )
-    logging.debug( "value_numerical: %s" % value_numerical )
-    
-    path_keys = []
-    for pd, path_dict in enumerate( path_lists, start = 1 ):
-        #show_path_dict( num_path_lists, pd, path_dict )
-        path_list = path_dict[ "path_list" ]
-            
-        for pdict in path_list:
-            for k, v in pdict.iteritems():
-                if k not in path_keys:
-                    path_keys.append( k )
-                    #logging.debug( "key: %s, value: %s" % ( k, v ) )
-    path_keys.sort()
-    
-    # SELECT
-    query  = "SELECT COUNT(*) AS datarecords"
-    
-    query += ", COUNT(*) - COUNT(value) AS data_active"
-    
-    if value_total:
-        query += ", SUM(CAST(value AS DOUBLE PRECISION)) AS total"
-    
-    query += ", datatype, base_year, value_unit, ter_code"
-    
-    # paths
-    for key in path_keys:
-        query += ", %s" % key
-    
-    if subclasses:
-        cls = "class"
-        if classification == "historical":
-            cls = "hist" + cls
-        for k in range( 5, 10 ):
-            query += ", %s%d" % ( cls, k )
-    
-    # FROM
-    query += " FROM russianrepo_%s" % language
-    
-    # WHERE datatype AND base_year
-    query += " WHERE datatype = '%s'" % datatype
-    query += " AND base_year = '%s'" % base_year
-
-    # AND value
-    if value_numerical:
-        query += " AND value <> ''"             # suppress empty values
-        query += " AND value <> '.'"            # suppress a 'lone' "optional point", used in the table to flag missing data
-        # plus an optional single . for floating point values, and plus an optional leading sign
-        query += " AND value ~ '^[-+]?\d*\.?\d*$'"
-    else:
-        query += " AND (value = '' OR value = ' ' OR value = '.' OR value = '. ' OR value = NULL)"
-    
-    # AND path_dicts
-    query += " AND ("
-    for pd, path_dict in enumerate( path_list ):
-        query += " ( "
-        
-        for pk, key in enumerate( path_keys ):
-            val = path_dict[ key ]
-            val = val.replace( "'", "''" )  # escape single quote by repeating it [also needs cursor.mogrify()]
-            
-            # suppress consecutive trailing dots?
-            if prefix == "num":
-                if num_path_lists == 1:
-                    suppress = False    # no 'danger' of getting the same value number more than once?
-                else:
-                    suppress = True     # 'danger' of missing certain value numbers?
-                    #suppress = False   # but we need False for RUSREPS-235
-            else:
-                suppress = True         # we only collect unique path strings (ignore value contents)
-            
-            if pk == 0:
-                query += "(%s = '%s')" % ( key, val )
-            else:
-                if pk > 1 and suppress: # consecutive trailing dots
-                    key_prev = path_keys[ pk - 1 ]
-                    query += "( %s = '%s' OR (%s <> '. ' AND %s = '. ') )" % ( key, val, key_prev, key )
-                else:
-                    query += "(%s = '%s' OR %s = '. ')" % ( key, val, key )
-            
-            if pk + 1 < len( path_keys ):
-                query += " AND "
-        
-        query += " )"
-        if pd + 1 < len( path_list ):
-            query += " OR"
-    
-    query += " )"
-    
-    # AND ter_codes IN / NOT IN
-    if prefix == "num":
-        l =  len( ter_codes )
-        if l > 0:
-            query += " AND ter_code IN ("
-            
-            for t, ter_code in enumerate( ter_codes ):
-                query += " '%s'" % ter_code
-                
-                if t + 1 < l:
-                    query += ", "
-            
-            query += ")"
-    elif prefix == "ntc":
-        l =  len( ter_codes )
-        if l > 0:
-            query += " AND ter_code NOT IN ("
-            
-            for t, ter_code in enumerate( ter_codes ):
-                query += " '%s'" % ter_code
-                
-                if t + 1 < l:
-                    query += ", "
-            
-            query += ")"
-    
-    # GROUP BY
-    query += " GROUP BY datatype, base_year, "
-    query += ", ".join( path_keys )
-    
-    if subclasses:
-        cls = "class"
-        if classification == "historical":
-            cls = "hist" + cls
-        for k in range( 5, 10 ):
-            query += ", %s%d" % ( cls, k )
-    
-    query += ", value_unit"
-    query += ", ter_code"
-    
-    # ORDER BY
-    query += " ORDER BY datatype, base_year, "
-    query += ", ".join( path_keys )
-    
-    if subclasses:
-        cls = "class"
-        if classification == "historical":
-            cls = "hist" + cls
-        for k in range( 5, 10 ):
-            query += ", %s%d" % ( cls, k )
-    
-    query += ", value_unit"
-    
-    if prefix == "num":
-        query += ", ter_code"
-    
-    query += ";"
-    
-    logging.debug( "make_query_num() %s" % query )
     
     return query
 
