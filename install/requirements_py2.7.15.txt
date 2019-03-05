@@ -1,4 +1,4 @@
-# FL-11-Feb-2019
+# FL-05-Mar-2019
 
 # pip requirements file for RusRep with a Python-2.7.15
 # setuptools, pip, and virtualenv should already be present in the (virtual) python2.7
@@ -14,18 +14,18 @@ future == 0.17.1        #
 six == 1.12.0           # was 1.11.0
 simplejson == 3.16.0    # was 3.15.0
 jsonmerge == 1.5.2      # also fetched jsonschema-2.6.0 functools32-3.2.3.post2
-ldap == 1.0.2           # also fetched ldap3-2.5 pyasn1-0.4.5
-Flask == 1.0.2          # also fetched Jinja2-2.10 MarkupSafe-1.1.0 Werkzeug-0.14.1 Click-7.0 itsdangerous-1.1.0
+ldap == 1.0.2           # also fetched ldap3-2.5.2 pyasn1-0.4.5
+Flask == 1.0.2          # also fetched Jinja2-2.10 MarkupSafe-1.1.1 Werkzeug-0.14.1 Click-7.0 itsdangerous-1.1.0
 psycopg2 == 2.7.7       # was 2.7.5
 
-#pymongo == 3.5.1        # supports MongoDB 2.4, 2.6, 3.0, 3.2, and 3.4 
-pymongo == 3.6.1        # supports MongoDB 2.6, 3.0, 3.2, 3.4, and 3.6 
+pymongo == 3.5.1        # supports MongoDB 2.4, 2.6, 3.0, 3.2, and 3.4
+#pymongo == 3.7.2        # supports MongoDB 2.6, 3.0, 3.2, 3.4, 3.6 and 4.0
 
-pandas == 0.24.1        # was 0.23.1; also fetched numpy-1.16.1 python-dateutil-2.8.0 pytz-2018.9
-bidict == 0.17.5        # was 0.17.2
-XlsxWriter == 1.1.4     # was 1.0.5
+pandas == 0.24.1        # was 0.23.1; also fetched numpy-1.16.2 python-dateutil-2.8.0 pytz-2018.9
+bidict == 0.18.0        # was 0.17.2
+XlsxWriter == 1.1.5     # was 1.0.5
 xlrd == 1.2.0           # was 1.1.0
-openpyxl == 2.6.0       # was 2.5.4; also fetched et-xmlfile-1.0.1 jdcal-1.4
+openpyxl == 2.6.1       # was 2.5.4; also fetched et-xmlfile-1.0.1 jdcal-1.4
 
 #PyICU == 1.9.6          # 
 PyICU == 2.2          # requires C++11, otherwise use PyICU-1.9.6
@@ -34,7 +34,7 @@ PyICU == 2.2          # requires C++11, otherwise use PyICU-1.9.6
 
 # dataverse-client-python not yet in PyPI, fetch dataverse-0.1.2 from github
 # pip install -e git+https://github.com/IQSS/dataverse-client-python.git#egg=dataverse
-# also fetched bleach-3.1.0 certifi-2018.11.29 chardet-3.0.4 html5lib-1.0.1 idna-2.8 lxml-4.3.1 requests-2.21.0 urllib3-1.24.1 webencodings-0.5.1
+# also fetched bleach-3.1.0 certifi-2018.11.29 chardet-3.0.4 html5lib-1.0.1 idna-2.8 lxml-4.3.2 requests-2.21.0 urllib3-1.24.1 webencodings-0.5.1
 
 
 # [eof]

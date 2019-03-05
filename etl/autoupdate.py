@@ -22,6 +22,7 @@ FL-16-Jan-2018 Separate RU & EN tables
 FL-15-May-2018 Rounding of data in value column
 FL-23-Jul-2018 DATATYPE 1.10 => 1.1 ? try to suppress unwanted conversion of DATATYPE
 FL-18-Dec-2018 Rounding of float values in filter_csv() was not active
+FL-05-Mar-2019 HISTCLASS1 digits try to suppress unwanted string conversion to float
 
 ToDo:
 - replace urllib by requests
@@ -214,8 +215,8 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", co
     kwargs_xlsx2csv = { 
         "delimiter" : '|', 
         "lineterminator" : '\n'
+        ,"quoting" : "csv.QUOTE_NONNUMERIC"
         #,"float_format" : "%.2f"
-        #,"quoting" : "csv.QUOTE_NONNUMERIC"
     }
     
     sep = str(u'|').encode('utf-8')
@@ -321,7 +322,10 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", co
                         #data_xls = pd.read_excel( filepath, index_col = False,  dtype = object )   # 2018.05.14: large ints become negative!
                         #data_xls = pd.read_excel( filepath, index_col = False )                    # 2018.05.14: large ints become negative!
                         #data_xls = pd.read_excel( filepath, index_col = False, convert_float = False, dtype = str )
-                        data_xls = pd.read_excel( filepath, index_col = False, convert_float = False, dtype = str, converters = { 'DATATYPE': str } )
+                        #data_xls = pd.read_excel( filepath, index_col = False, convert_float = False, dtype = str, converters = { 'DATATYPE': str } )
+                        #converters = { 'DATATYPE': str, 'HISTCLASS1': str }
+                        #data_xls = pd.read_excel( filepath, index_col = False, convert_float = False, dtype = str, converters = converters )
+                        data_xls = pd.read_excel( filepath, index_col = False, convert_float = False, dtype = str )
                         
                         data_xls.to_csv( csv_path, encoding = 'utf-8', index = False, **kwargs_pandas )
                         
@@ -837,6 +841,20 @@ def filter_csv( config_parser, csv_dir, in_filename ):
                         fields[ i ] = field_stripped
                         #msg = "stripped: |%s| -> |%s|" % ( field_in, fields[ i ] )
                         #logging.warning( msg ); print( msg )
+                
+                # FL-05-Mar-2019 integer strings became float strings
+                # should be solved when writing csv files, but that did not work!
+                if in_filename.startswith( "ERRHS_1_02_data_1897" ) and csv_header_name in [ "HISTCLASS1", "CLASS2" ]:
+                    in_field = fields[ i ]
+                    try: 
+                        in_field_float = float( in_field )
+                        if str( in_field ).endswith( '.0' ): 
+                            decimals = 0
+                            in_field_round = round( in_field_float, decimals )
+                            in_field_new = str( long( round( in_field_float, decimals ) ) )
+                            fields[ i ] = in_field_new
+                    except:
+                        pass
             
             nzaphc = 0
             for i in reversed( range( nfields ) ):      # histclass fields
@@ -1450,9 +1468,9 @@ def format_secs( seconds ):
 
 
 if __name__ == "__main__":
-    DO_RETRIEVE_DOC   = True     # documentation: dataverse  => local_disk
-    DO_RETRIEVE_VOCAB = True     # vocabulary: dataverse  => mongodb
-    DO_RETRIEVE_ERRHS = True     # ERRHS data: dataverse  => local_disk, xlsx -> csv
+    DO_RETRIEVE_DOC   = False     # documentation: dataverse  => local_disk
+    DO_RETRIEVE_VOCAB = False     # vocabulary: dataverse  => mongodb
+    DO_RETRIEVE_ERRHS = False     # ERRHS data: dataverse  => local_disk, xlsx -> csv
     DO_TRANSLATE_CSV  = True     # translate Russian csv files to English variants
     DO_POSTGRES_DB    = True     # ERRHS data: local_disk => postgresql, csv -> table
     DO_MONGO_DB       = True     # ERRHS data: postgresql => mongodb
