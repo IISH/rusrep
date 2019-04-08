@@ -5,6 +5,7 @@
 # FL-18-Apr-2018 handle None cursor
 # FL-24-Apr-2018 GridFS
 # FL-29-Jan-2019 aggregate_dataset: fields (old) & records (new) versions
+# FL-08-Apr-2019 adapt aggregate_dataset_records for changed data structure
 
 import gridfs
 import json
@@ -223,15 +224,18 @@ def preprocessor( use_gridfs, datafilter ):
     
     logging.debug( "preprocessor (%d) dataset: %s"          % ( len( dataset ),          str( dataset ) ) )
     logging.debug( "preprocessor (%d) ter_codes: %s"        % ( len( ter_codes ),        str( ter_codes ) ) )
+
+    logging.debug( "preprocessor (%d) params: %s"           % ( len( params ),           str( params ) ) )
+    logging.debug( "preprocessor (%d) topic_name: %s"       % ( len( topic_name ),       str( topic_name ) ) )
+    logging.debug( "preprocessor (%d) sheet_header: %s"     % ( len( sheet_header ),     str( sheet_header ) ) )
     logging.debug( "preprocessor (%d) lex_lands: %s"        % ( len( lex_lands ),        str( lex_lands ) ) )
     logging.debug( "preprocessor (%d) vocab_regs_terms: %s" % ( len( vocab_regs_terms ), str( vocab_regs_terms ) ) )
-    logging.debug( "preprocessor (%d) sheet_header: %s"     % ( len( sheet_header ),     str( sheet_header ) ) )
     
-    return lex_lands, vocab_regs_terms, sheet_header, topic_name, params
+    return params, topic_name, sheet_header, lex_lands, vocab_regs_terms
 
 
 
-def aggregate_dataset_fields( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header, topic_name, params ):
+def aggregate_dataset_fields( key, download_dir, xlsx_name, params, topic_name, sheet_header, lex_lands, vocab_regs_terms ):
     logging.info( "aggregate_dataset_fields()" )
     logging.debug( "key: %s" % key )
     logging.debug( "download_dir: %s" % download_dir )
@@ -444,7 +448,7 @@ def aggregate_dataset_fields( key, download_dir, xlsx_name, lex_lands, vocab_reg
         
         logging.debug( "# of names in header_chain: %d" % len( header_chain ) )
         logging.debug( "header names in chain: %s" % str( header_chain ) )
-        logging.debug( "# of names in class_chain: %d" % len( header_chain ) )
+        logging.debug( "# of names in class_chain: %d" % len( class_chain ) )
         logging.debug( "class names in chain: %s" % str( class_chain ) )
         
         nlevels = 0
@@ -454,6 +458,7 @@ def aggregate_dataset_fields( key, download_dir, xlsx_name, lex_lands, vocab_reg
         logging.debug( "levels in header_chain: %d" % nlevels )
         
         # sheet_header line here; lines above for legend
+        logging.debug( "SHEET HEADER" )
         legend_offset = 9
         row = legend_offset 
         logging.debug( "# of itemchains in lex_lands: %d" % len( lex_lands ) )
@@ -562,6 +567,7 @@ def aggregate_dataset_fields( key, download_dir, xlsx_name, lex_lands, vocab_reg
             counts_Denom  = len( reg_names )    # updated below
             
             # data records
+            logging.debug( "DATA RECORDS" )
             column = 1
             logging.debug( "# of names in data chain: %d" % len( chain ) )
             logging.debug( "names in chain: %s" % str( chain ) )
@@ -791,7 +797,7 @@ def aggregate_dataset_fields( key, download_dir, xlsx_name, lex_lands, vocab_reg
 
 
 
-def aggregate_dataset_records( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header, topic_name, params ):
+def aggregate_dataset_records( key, download_dir, xlsx_name, params, topic_name, sheet_header, lex_lands, vocab_regs_terms ):
     logging.info( "aggregate_dataset_records()" )
     logging.debug( "key: %s" % key )
     logging.debug( "download_dir: %s" % download_dir )
@@ -809,6 +815,8 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, lex_lands, vocab_re
 
     xlsx_pathname = os.path.abspath( os.path.join( download_dir, xlsx_name ) )
     logging.debug( "full_path: %s" % xlsx_pathname )
+    
+    datatype = params.get( "datatype" )
     
     lang = ""
     hist_mod = ""
@@ -980,10 +988,19 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, lex_lands, vocab_re
         header_chain = set()
         class_chain  = set()
         lex_lands_list0 = []
+        
+        # add first 2 columns for non-redundant data
+        header_chain.add( "base_year" )
+        header_chain.add( "datatype" )
+        
         for itemchain in lex_lands:
             chain = json.loads( itemchain )
             lex_lands_list0.append( chain )
             
+            # add first 2 columns for non-redundant data
+            #class_chain.add( "base_year" )
+            #class_chain.add( "datatype" )
+        
             for name in sorted( chain ):
                 header_chain.add( name )
                 if "class" in name:
@@ -991,6 +1008,10 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, lex_lands, vocab_re
         
         lex_lands_list = []
         for chain in lex_lands_list0:
+            # add first 2 columns for non-redundant data
+            #lex_lands_list.append( { "base_year": base_year } )
+            #lex_lands_list.append( { "datatype" : datatype } )
+            
             for class_ in class_chain:
                 if not chain.get( class_ ):
                     chain[ class_ ] = ''
@@ -998,13 +1019,13 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, lex_lands, vocab_re
             logging.debug( "chain: %s" % str( chain ) )
         
         #max_columns = len( header_chain )
-        #max_columns = 1 + len( header_chain )       # +1: for count column
-        max_columns = 2 + len( header_chain )       # +2: for unit + count columns
+        max_columns = 1 + len( header_chain )       # +1: for count column
+        #max_columns = 2 + len( header_chain )       # +2: for unit + count columns
         add_counts = True      # ToDo
         
         logging.debug( "# of names in header_chain: %d" % len( header_chain ) )
         logging.debug( "header names in chain: %s" % str( header_chain ) )
-        logging.debug( "# of names in class_chain: %d" % len( header_chain ) )
+        logging.debug( "# of names in class_chain: %d" % len( class_chain ) )
         logging.debug( "class names in chain: %s" % str( class_chain ) )
         
         nlevels = 0
@@ -1014,6 +1035,7 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, lex_lands, vocab_re
         logging.debug( "levels in header_chain: %d" % nlevels )
         
         # sheet_header line here; lines above for legend
+        logging.debug( "SHEET HEADER" )
         legend_offset = 9
         row = legend_offset 
         logging.debug( "# of itemchains in lex_lands: %d" % len( lex_lands ) )
@@ -1135,6 +1157,7 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, lex_lands, vocab_re
             counts_Denom  = len( reg_names )    # updated below
             
             # data records
+            logging.debug( "DATA RECORDS - LEVELS" )
             column = 1
             logging.debug( "# of names in data chain: %d" % len( chain ) )
             logging.debug( "names in chain: %s" % str( chain ) )
@@ -1172,12 +1195,22 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, lex_lands, vocab_re
             lex_key = json.dumps( ordered_dict )                 # lex_key as string
             logging.debug( "lex_key: %s" % lex_key )
             
+            # FL-08-Apr-2019
+            ter_code_list = ter_data = ordered_dict.get( "ter_codes" )
+            logging.debug( "ter_code_list: %s: " % str( ter_code_list ) )
+            ter_code_dict = {}
+            for d in ter_code_list:
+                ter_code_dict[ d[ "ter_code" ] ] = d[ "total" ]
+            logging.debug( "ter_code_dict: %s: " % str( ter_code_dict ) )
+            
+            """
             ter_data = lex_lands.get( lex_key )
             if not ter_data:    # => 'na'
                 logging.debug( "No ter_data from lex_key:\n%s" % lex_key )
                 for l, lex_land in enumerate( lex_lands):
                     logging.debug( "%d: lex_land: %s" % ( l, lex_land ) )
                 ter_data = []
+            """
             
             logging.debug( "ter_data: %s: " % str( ter_data ) )
             nclasses = 0
@@ -1186,6 +1219,19 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, lex_lands, vocab_re
                 row = db_row + legend_offset + 1    # +1: skip table header
                 counts_row = row
                 logging.debug( "db_row in chain: %d" % db_row )
+            
+            # FL-08-Apr-2019 fill first 2 columns for non-redundant data records
+            name = "base_year"
+            column =  1
+            logging.debug( "row: %d, column: %d, name: %s" % ( row, column, name ) )
+            cell = ws.cell( row = row, column = column )
+            cell.value = base_year
+            
+            name = "datatype"
+            column =  2
+            logging.debug( "row: %d, column: %d, name: %s" % ( row, column, name ) )
+            cell = ws.cell( row = row, column = column )
+            cell.value = datatype
             
             for n, name in enumerate( sorted( chain ) ):
                 logging.debug( "%d: name: %s" % ( n, name ) )
@@ -1238,13 +1284,16 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, lex_lands, vocab_re
                 logging.debug( "row: %d, column: %d, name: %s, value: %s" % ( row, column, name, value ) )
             
             # display region names sorted alphabetically
+            logging.debug( "DATA RECORDS - REGIONS" )
             column = max_columns
             num_regions = len( sorted_regions )
             logging.debug( "number of sorted regions: %d" % num_regions )
             for idx, ter_name in enumerate( sorted_regions ):
                 ter_code = regions[ ter_name ]
-                if ter_code in ter_data:
-                    ter_value = ter_data[ ter_code ]
+                #if ter_code in ter_data:
+                if ter_code in ter_code_dict:
+                    #ter_value = ter_data[ ter_code ]
+                    ter_value = ter_code_dict[ ter_code ]
                     ter_value = re.sub( r'\.0', '', str( ter_value ) )
                     try:
                         float( ter_value  )

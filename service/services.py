@@ -1912,7 +1912,7 @@ def collect_records( records_dict, sql_prefix, path_dict, params, sql_names, sql
 
 def add_missing( records_dict, params ):
     time0 = time()      # seconds since the epoch
-    logging.debug( "add_missing_tc() start: %s" % datetime.datetime.now() )
+    logging.debug( "add_missing() start: %s" % datetime.datetime.now() )
 
     # value strings for empty fields
     language = params.get( "language" )
@@ -1933,7 +1933,7 @@ def add_missing( records_dict, params ):
             except:
                 ter_code_dict[ ter_code ] = value_na
     
-    logging.debug( "final paths in records_dict %d" % len( records_dict.keys() ) )
+    logging.debug( "add_missing() final # of paths in records_dict %d" % len( records_dict.keys() ) )
     #show_record_dict( "all", records_dict )
     
     str_elapsed = format_secs( time() - time0 )
@@ -1943,8 +1943,11 @@ def add_missing( records_dict, params ):
 
 
 def sort_records( records_dict, params ):
+    # input: dict (+ params)
+    # output: list
     time0 = time()      # seconds since the epoch
     logging.debug( "sort_records() start: %s" % datetime.datetime.now() )
+    logging.debug( "sort_records() sorting %d records" % len( records_dict ) )
     
     entry_list = []
     
@@ -3311,7 +3314,7 @@ def aggregate_historic_redun( params ):
     # sort the entries by path + value_unit
     entry_list_sorted = sort_entries( datatype, entry_list_total )
     logging.debug( "entry_list_sorted: %d items" % len( entry_list_sorted ) )
-    #show_entries( "all", entry_list_sorted )
+    show_entries( "all", entry_list_sorted )
 
     return entry_list_sorted
 
@@ -3385,8 +3388,10 @@ def aggregate_historic( params ):
         nrecords = collect_records( record_dict_total, prefix, path_dict, params, sql_names_none, sql_resp_none )
     
     add_missing( record_dict_total, params )
+    
+    # input: data as dict, output: data as list
     entry_list_sorted = sort_records( record_dict_total, params )
-    #show_entries( "all", entry_list_sorted )
+    show_entries( "all", entry_list_sorted )
 
     return entry_list_sorted
 
@@ -3889,15 +3894,15 @@ def download():
     
     datafilter = {}
     datafilter[ "key" ] = key
-    lex_lands, vocab_regs_terms, sheet_header, topic_name, params = preprocessor( use_gridfs, datafilter )
+    params, topic_name, sheet_header, lex_lands, vocab_regs_terms = preprocessor( use_gridfs, datafilter )
     
     xlsx_name = "%s.xlsx" % key
     
     redundant = params.get( "redundant", True )
     if redundant:
-        pathname, msg = aggregate_dataset_fields( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header, topic_name, params )
+        pathname, msg = aggregate_dataset_fields( key, download_dir, xlsx_name, params, topic_name, sheet_header, lex_lands, vocab_regs_terms )
     else:
-        pathname, msg = aggregate_dataset_records( key, download_dir, xlsx_name, lex_lands, vocab_regs_terms, sheet_header, topic_name, params )
+        pathname, msg = aggregate_dataset_records( key, download_dir, xlsx_name, params, topic_name, sheet_header, lex_lands, vocab_regs_terms )
 
     
     if os.path.isfile( pathname ):
