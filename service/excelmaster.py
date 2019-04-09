@@ -5,7 +5,7 @@
 # FL-18-Apr-2018 handle None cursor
 # FL-24-Apr-2018 GridFS
 # FL-29-Jan-2019 aggregate_dataset: fields (old) & records (new) versions
-# FL-08-Apr-2019 adapt aggregate_dataset_records for changed data structure
+# FL-09-Apr-2019 adapt aggregate_dataset_records for changed data structure
 
 import gridfs
 import json
@@ -867,12 +867,12 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, params, topic_name,
     if params:
         for k in params:
             logging.debug( "key: %s, value: %s" % ( k, params[ k ] ) )
-    
+        
         try:
             ter_code_list = params[ "ter_codes" ]
         except:
             ter_code_list = []
-    
+        
         logging.debug( "ter_code_list: %s, %s" % ( str( ter_code_list ), type( ter_code_list ) ) )
         
         try:
@@ -996,10 +996,6 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, params, topic_name,
         for itemchain in lex_lands:
             chain = json.loads( itemchain )
             lex_lands_list0.append( chain )
-            
-            # add first 2 columns for non-redundant data
-            #class_chain.add( "base_year" )
-            #class_chain.add( "datatype" )
         
             for name in sorted( chain ):
                 header_chain.add( name )
@@ -1008,13 +1004,11 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, params, topic_name,
         
         lex_lands_list = []
         for chain in lex_lands_list0:
-            # add first 2 columns for non-redundant data
-            #lex_lands_list.append( { "base_year": base_year } )
-            #lex_lands_list.append( { "datatype" : datatype } )
             
             for class_ in class_chain:
                 if not chain.get( class_ ):
                     chain[ class_ ] = ''
+            
             lex_lands_list.append( chain )
             logging.debug( "chain: %s" % str( chain ) )
         
@@ -1046,9 +1040,6 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, params, topic_name,
         logging.debug( "class names in list: %s" % str( classes ) )
         
         logging.debug( "# of items in lex_lands_list: %d" % len( lex_lands_list ) )
-        #for i, item in enumerate( lex_lands_list ):
-        #    logging.debug( "%d: item: %s" % ( i, str( sorted( item, key = itemgetter( *classes ) ) ) ) )
-        
         try:
             # *classes: unpack classes list as individual variables, to be used as sort keys
             lex_lands_sorted = sorted( lex_lands_list, key = itemgetter( *classes ) )
@@ -1059,11 +1050,9 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, params, topic_name,
         
         ndatarows = 0
         nitemchain = 0
-        #for itemchain in lex_lands:
         for l, chain in enumerate( lex_lands_sorted ):
             #logging.debug( "itemchain %d: %s, %s" % ( nitemchain, itemchain, type( itemchain ) ) )
             nitemchain += 1
-            #chain = json.loads( itemchain )
             logging.debug( "%d: chain: %s" %  ( l, str( chain ) ) )
             
             column = 1
@@ -1071,8 +1060,6 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, params, topic_name,
             if row == legend_offset:        # table header row
                 logging.debug( "# of names in header_chain: %d" % len( header_chain ) )
                 logging.debug( "names in header_chain: %s" % str( header_chain ) )
-                #row_name = 0
-                #column_in_use = []
                 
                 for n, name in enumerate( sorted( header_chain ) ):
                     logging.debug( "%d: name: %s" % ( n, name ) )
@@ -1113,16 +1100,6 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, params, topic_name,
                     else:
                         logging.debug( "name: %s ???" % name )
                         continue
-                    
-                    """
-                    if name == "ter_codes":
-                        for ter_code_str in ter_codes:
-                            logging.debug( "ter_code_str: %s" % ( ter_code_str ) )
-                            ter_code_dict = json.loads( ter_code_str )
-                            ter_code = ter_code_dict.get( "ter_code" )
-                            total    = ter_code_dict.get( "total" )
-                            logging.debug( "ter_code: %s, total: %s" % ( ter_code, total ) )
-                    """
                     
                     cell = ws.cell( row = row, column = column )
                     column_name = name
@@ -1184,42 +1161,7 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, params, topic_name,
                 continue
             else:
                 byear_counts[ str( base_year ) ] = 1 + byear_counts[ str( base_year ) ]
-            
-            #ter_data = lex_lands[ itemchain ]
-            #lex_key = json.dumps( chain )       # this way the keys were made in preprocessor()
-            
-            # lex_key as stringyfied ordered dict
-            keys = sorted( chain.iterkeys() )                    # sorted keys
-            tuples = [ ( key, chain[ key ] ) for key in keys ]   # tuple list ordered by keys
-            ordered_dict = OrderedDict( tuples )                 # dict ordered by keys
-            lex_key = json.dumps( ordered_dict )                 # lex_key as string
-            logging.debug( "lex_key: %s" % lex_key )
-            
-            # FL-08-Apr-2019
-            ter_code_list = ter_data = ordered_dict.get( "ter_codes" )
-            logging.debug( "ter_code_list: %s: " % str( ter_code_list ) )
-            ter_code_dict = {}
-            for d in ter_code_list:
-                ter_code_dict[ d[ "ter_code" ] ] = d[ "total" ]
-            logging.debug( "ter_code_dict: %s: " % str( ter_code_dict ) )
-            
-            """
-            ter_data = lex_lands.get( lex_key )
-            if not ter_data:    # => 'na'
-                logging.debug( "No ter_data from lex_key:\n%s" % lex_key )
-                for l, lex_land in enumerate( lex_lands):
-                    logging.debug( "%d: lex_land: %s" % ( l, lex_land ) )
-                ter_data = []
-            """
-            
-            logging.debug( "ter_data: %s: " % str( ter_data ) )
-            nclasses = 0
-            db_row = chain.get( "db_row" )
-            if db_row is not None:
-                row = db_row + legend_offset + 1    # +1: skip table header
-                counts_row = row
-                logging.debug( "db_row in chain: %d" % db_row )
-            
+
             # FL-08-Apr-2019 fill first 2 columns for non-redundant data records
             name = "base_year"
             column =  1
@@ -1288,12 +1230,23 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, params, topic_name,
             column = max_columns
             num_regions = len( sorted_regions )
             logging.debug( "number of sorted regions: %d" % num_regions )
+            
+            # FL-09-Apr-2019
+            keys = sorted( chain.iterkeys() )                    # sorted keys
+            tuples = [ ( key, chain[ key ] ) for key in keys ]   # tuple list ordered by keys
+            ordered_dict = OrderedDict( tuples )                 # dict ordered by keys
+            tc_list = ordered_dict.get( "ter_codes" )
+            logging.debug( "tc_list: %s: " % str( tc_list ) )
+            
+            tc_dict = {}
+            for d in tc_list:
+                tc_dict[ d[ "ter_code" ] ] = d[ "total" ]
+            logging.debug( "tc_dict: %s: " % str( tc_dict ) )
+            
             for idx, ter_name in enumerate( sorted_regions ):
                 ter_code = regions[ ter_name ]
-                #if ter_code in ter_data:
-                if ter_code in ter_code_dict:
-                    #ter_value = ter_data[ ter_code ]
-                    ter_value = ter_code_dict[ ter_code ]
+                if ter_code in tc_dict:
+                    ter_value = tc_dict[ ter_code ]
                     ter_value = re.sub( r'\.0', '', str( ter_value ) )
                     try:
                         float( ter_value  )
@@ -1311,11 +1264,7 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, params, topic_name,
                 column += 1
             
             logging.debug( "add_to_counts: %d, row: %d, column: %d" % ( add_to_counts, counts_row, counts_column ) )
-            #if '/' in counts_value:     # update total number of regions (for given base_year)
-            #if '/' in name:     # update total number of regions (for given base_year)
             cell = ws.cell( row = counts_row, column = counts_column )
-            #num_denom = counts_value.split( '/' )
-            #cell.value = "%s/%d" % ( num_denom[ 0 ], num_regions )
             cell.value = "%d/%d" % ( counts_Numer, counts_Denom )
             
             row += 1
@@ -1355,6 +1304,7 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, params, topic_name,
                 logging.debug( "sheet_header l: %d, r: %d, c: %d, value: %s" % ( l, line[ "r" ], line[ "c" ], line[ "value" ] ) )
     
     # create copyright sheet; extract language id from filename
+    logging.debug( "COPYRIGHT SHEET" )
     comps1 = xlsx_pathname.split( '/' )
     comps2 = comps1[ -1 ].split( '-' )
     language = comps2[ 0 ]

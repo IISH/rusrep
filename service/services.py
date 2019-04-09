@@ -21,6 +21,7 @@ FL-10-Dec-2018 handle /documentation exception
 FL-11-Feb-2019 optional suppression of trailing dots in db queries
 FL-12-Feb-2019 separate functions for old/new historic/modern
 FL-19-Feb-2019 main query split by subclasses, other 2 by indicator length
+FL-09-Apr-2019 
 
 def get_configparser():
 def get_connection():
@@ -74,6 +75,7 @@ def format_secs( seconds ):
 @app.route( "/classes" )                                        def classes():
 @app.route( "/indicators", methods = [ "POST", "GET" ] )        def indicators():
 @app.route( "/aggregation", methods = ["POST" ] )               def aggregation():
+
 def aggregate_historic_redun( params ):
 def aggregate_historic( params )
 def aggregate_modern_redun( params )
@@ -3129,76 +3131,13 @@ def aggregation():
     elif classification == "modern":
         # modern classification does not have base_year or ter_code from qinput
         
-        entry_list_total = []
-        
-        # modern classification does not provide a base_year; 
-        # loop over base_years, and accumulate results.
-        base_years = [ "1795", "1858", "1897", "1959", "2002" ]
-        #base_years = [ "1858" ]    # test single year
-        
-        for base_year in base_years:
-            logging.info( "base_year: %s" % base_year )
-            params[ "base_year" ] = base_year
-            
-            params_ntc  = copy.deepcopy( params )
-            params_none = copy.deepcopy( params )
-            
-            entry_list_year = []
-            
-            for pd, path_dict in enumerate( path_lists, start = 1 ):
-                show_path_dict( num_path_lists, pd, path_dict )
-                
-                path_list = path_dict[ "path_list" ]
-                add_subclasses = path_dict[ "subclasses" ]
-                
-                params_ntc[  "path" ] = path_list
-                params_none[ "path" ] = path_list
-                
-                # only for debugging
-                #params_ntc[  "etype" ] = "ntc"
-                #params_none[ "etype" ] = "none"
-                
-                show_params( "params -1- = entry_list_ntc", params_ntc )
-                #old_query_ntc, eng_data_ntc = aggregate_year( params_ntc, add_subclasses, value_total = True, value_numerical = True )
-                sql_query_ntc = make_query( "ntc", params_ntc, add_subclasses, value_total = True, value_numerical = True )
-                eng_data_ntc = {}
-                entry_list_ntc = execute_year( params_ntc, sql_query_ntc, eng_data_ntc )
-                if entry_debug: 
-                    show_entries( "params -1- = entry_list_ntc", entry_list_ntc )
-                
-                # TODO
-                #if group_tercodes:
-                #   entry_dict_ntc_ig = group_by_ident( entry_list_ntc )
-                
-                show_params( "params -2- = entry_list_none", params_none )
-                #old_query_none, eng_data_none = aggregate_year( params_none, add_subclasses, value_total = False, value_numerical = False )
-                sql_query_none = make_query( "none", params_none, add_subclasses, value_total = False, value_numerical = False )   # non-numbers
-                eng_data_none = {}
-                entry_list_none = execute_year( params_none, sql_query_none, eng_data_none )
-                if entry_debug: 
-                    show_entries( "params -2- = entry_list_none", entry_list_none )
-                
-                # TODO
-                #if group_tercodes:
-                #   entry_dict_none_ig = group_by_ident( entry_list_none )
-                
-                #if group_tercodes:
-                #   entry_list_path_ig = add_unique_items_grouped( ...
-                # TODO: use entry_list_path_ig
-                
-                # entry_list_year = entry_list_ntc + entry_list_none
-                logging.info( "add_unique_nones()" )
-                entry_list_path = add_unique_items( language, "entry_list_none", entry_list_ntc, entry_list_none )
-                logging.info( "entry_list_year: %d items" % len( entry_list_path ) )
-                
-                entry_list_year.extend( entry_list_path )           # different path_dict, so no duplicates 
-                
-            entry_list_total.extend( entry_list_year )              # different base_year, so no duplicates
-            #entry_list_total = extend_nodups( entry_list_total, entry_list_year )  # avoid duplicates
-            logging.info( "entry_list_total: %d items" % len( entry_list_total ) )
-        
-        entry_list_sorted = sort_entries( datatype, entry_list_total )
+        if redundant:   # old
+            entry_list_sorted = aggregate_modern_redun( params )
+        else:           # new, redundant = False
+            entry_list_sorted = aggregate_modern( params )
     # end classification
+    
+    
     
     json_string, cache_except = json_cache( entry_list_sorted, params, download_key )
     
@@ -3399,7 +3338,76 @@ def aggregate_historic( params ):
 
 def aggregate_modern_redun( params ):
     logging.info( "aggregate_modern_redun()" )
-    entry_list_sorted = []
+    
+    entry_list_total = []
+    
+    # modern classification does not provide a base_year; 
+    # loop over base_years, and accumulate results.
+    base_years = [ "1795", "1858", "1897", "1959", "2002" ]
+    #base_years = [ "1858" ]    # test single year
+    
+    for base_year in base_years:
+        logging.info( "base_year: %s" % base_year )
+        params[ "base_year" ] = base_year
+        
+        params_ntc  = copy.deepcopy( params )
+        params_none = copy.deepcopy( params )
+        
+        entry_list_year = []
+        
+        for pd, path_dict in enumerate( path_lists, start = 1 ):
+            show_path_dict( num_path_lists, pd, path_dict )
+            
+            path_list = path_dict[ "path_list" ]
+            add_subclasses = path_dict[ "subclasses" ]
+            
+            params_ntc[  "path" ] = path_list
+            params_none[ "path" ] = path_list
+            
+            # only for debugging
+            #params_ntc[  "etype" ] = "ntc"
+            #params_none[ "etype" ] = "none"
+            
+            show_params( "params -1- = entry_list_ntc", params_ntc )
+            #old_query_ntc, eng_data_ntc = aggregate_year( params_ntc, add_subclasses, value_total = True, value_numerical = True )
+            sql_query_ntc = make_query( "ntc", params_ntc, add_subclasses, value_total = True, value_numerical = True )
+            eng_data_ntc = {}
+            entry_list_ntc = execute_year( params_ntc, sql_query_ntc, eng_data_ntc )
+            if entry_debug: 
+                show_entries( "params -1- = entry_list_ntc", entry_list_ntc )
+            
+            # TODO
+            #if group_tercodes:
+            #   entry_dict_ntc_ig = group_by_ident( entry_list_ntc )
+            
+            show_params( "params -2- = entry_list_none", params_none )
+            #old_query_none, eng_data_none = aggregate_year( params_none, add_subclasses, value_total = False, value_numerical = False )
+            sql_query_none = make_query( "none", params_none, add_subclasses, value_total = False, value_numerical = False )   # non-numbers
+            eng_data_none = {}
+            entry_list_none = execute_year( params_none, sql_query_none, eng_data_none )
+            if entry_debug: 
+                show_entries( "params -2- = entry_list_none", entry_list_none )
+            
+            # TODO
+            #if group_tercodes:
+            #   entry_dict_none_ig = group_by_ident( entry_list_none )
+            
+            #if group_tercodes:
+            #   entry_list_path_ig = add_unique_items_grouped( ...
+            # TODO: use entry_list_path_ig
+            
+            # entry_list_year = entry_list_ntc + entry_list_none
+            logging.info( "add_unique_nones()" )
+            entry_list_path = add_unique_items( language, "entry_list_none", entry_list_ntc, entry_list_none )
+            logging.info( "entry_list_year: %d items" % len( entry_list_path ) )
+            
+            entry_list_year.extend( entry_list_path )           # different path_dict, so no duplicates 
+            
+        entry_list_total.extend( entry_list_year )              # different base_year, so no duplicates
+        #entry_list_total = extend_nodups( entry_list_total, entry_list_year )  # avoid duplicates
+        logging.info( "entry_list_total: %d items" % len( entry_list_total ) )
+    
+    entry_list_sorted = sort_entries( datatype, entry_list_total )
 
     return entry_list_sorted
 
@@ -3407,7 +3415,77 @@ def aggregate_modern_redun( params ):
 
 def aggregate_modern( params ):
     logging.info( "aggregate_modern()" )
-    entry_list_sorted = []
+    
+    entry_list_total = []
+    
+    # modern classification does not provide a base_year; 
+    # loop over base_years, and accumulate results.
+    base_years = [ "1795", "1858", "1897", "1959", "2002" ]
+    #base_years = [ "1858" ]    # test single year
+    
+    # NOT YET ADAPTED FOR NON-REDUNDANT !!
+    for base_year in base_years:
+        logging.info( "base_year: %s" % base_year )
+        params[ "base_year" ] = base_year
+        
+        params_ntc  = copy.deepcopy( params )
+        params_none = copy.deepcopy( params )
+        
+        entry_list_year = []
+        
+        for pd, path_dict in enumerate( path_lists, start = 1 ):
+            show_path_dict( num_path_lists, pd, path_dict )
+            
+            path_list = path_dict[ "path_list" ]
+            add_subclasses = path_dict[ "subclasses" ]
+            
+            params_ntc[  "path" ] = path_list
+            params_none[ "path" ] = path_list
+            
+            # only for debugging
+            #params_ntc[  "etype" ] = "ntc"
+            #params_none[ "etype" ] = "none"
+            
+            show_params( "params -1- = entry_list_ntc", params_ntc )
+            #old_query_ntc, eng_data_ntc = aggregate_year( params_ntc, add_subclasses, value_total = True, value_numerical = True )
+            sql_query_ntc = make_query( "ntc", params_ntc, add_subclasses, value_total = True, value_numerical = True )
+            eng_data_ntc = {}
+            entry_list_ntc = execute_year( params_ntc, sql_query_ntc, eng_data_ntc )
+            if entry_debug: 
+                show_entries( "params -1- = entry_list_ntc", entry_list_ntc )
+            
+            # TODO
+            #if group_tercodes:
+            #   entry_dict_ntc_ig = group_by_ident( entry_list_ntc )
+            
+            show_params( "params -2- = entry_list_none", params_none )
+            #old_query_none, eng_data_none = aggregate_year( params_none, add_subclasses, value_total = False, value_numerical = False )
+            sql_query_none = make_query( "none", params_none, add_subclasses, value_total = False, value_numerical = False )   # non-numbers
+            eng_data_none = {}
+            entry_list_none = execute_year( params_none, sql_query_none, eng_data_none )
+            if entry_debug: 
+                show_entries( "params -2- = entry_list_none", entry_list_none )
+            
+            # TODO
+            #if group_tercodes:
+            #   entry_dict_none_ig = group_by_ident( entry_list_none )
+            
+            #if group_tercodes:
+            #   entry_list_path_ig = add_unique_items_grouped( ...
+            # TODO: use entry_list_path_ig
+            
+            # entry_list_year = entry_list_ntc + entry_list_none
+            logging.info( "add_unique_nones()" )
+            entry_list_path = add_unique_items( language, "entry_list_none", entry_list_ntc, entry_list_none )
+            logging.info( "entry_list_year: %d items" % len( entry_list_path ) )
+            
+            entry_list_year.extend( entry_list_path )           # different path_dict, so no duplicates 
+            
+        entry_list_total.extend( entry_list_year )              # different base_year, so no duplicates
+        #entry_list_total = extend_nodups( entry_list_total, entry_list_year )  # avoid duplicates
+        logging.info( "entry_list_total: %d items" % len( entry_list_total ) )
+    
+    entry_list_sorted = sort_entries( datatype, entry_list_total )
 
     return entry_list_sorted
 
