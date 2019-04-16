@@ -6,6 +6,7 @@
 # FL-24-Apr-2018 GridFS
 # FL-29-Jan-2019 aggregate_dataset: fields (old) & records (new) versions
 # FL-09-Apr-2019 adapt aggregate_dataset_records for changed data structure
+# FL-16-Apr-2019 
 
 import gridfs
 import json
@@ -146,7 +147,10 @@ def preprocessor( use_gridfs, datafilter ):
             dataset.append( dataitem )
         
         if len( ter_codes ) == 0:
-            ter_codes = params.get( "ter_codes" )
+            try:
+                ter_codes = params[ "ter_codes" ]
+            except:
+                ter_codes = []
         vocab_regs_terms[ "ter_codes" ] = ter_codes
         
         db_vocabulary = clientcache.get_database( 'vocabulary' )   # vocabulary

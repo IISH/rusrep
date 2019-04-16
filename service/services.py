@@ -21,7 +21,7 @@ FL-10-Dec-2018 handle /documentation exception
 FL-11-Feb-2019 optional suppression of trailing dots in db queries
 FL-12-Feb-2019 separate functions for old/new historic/modern
 FL-19-Feb-2019 main query split by subclasses, other 2 by indicator length
-FL-09-Apr-2019 
+FL-16-Apr-2019 downloads adaped
 
 def get_configparser():
 def get_connection():
@@ -3160,23 +3160,21 @@ def aggregation():
 def aggregate_historic_redun( params ):
     logging.info( "aggregate_historic_redun()" )
     
-    redundant      = params[ "redundant" ]
     language       = params[ "language" ]
     datatype       = params[ "datatype" ]
     base_year      = params[ "base_year" ]
     group_tercodes = params[ "group_tercodes" ]
     path_lists     = params[ "path_lists_bylen" ]
     
-    #num_path_lists = params[ "num_path_lists" ]
     num_path_lists = len( path_lists )
     
     entry_list_sorted = []
-    entry_list_total  = []              # old: redundant = True
-    record_dict_total = {}              # new: redundant = False
+    entry_list_total  = []
     
     # loop over the equal length path subgroups
     for pd, path_dict in enumerate( path_lists, start = 1 ):
         show_path_dict( num_path_lists, pd, path_dict )
+        
         path_list      = path_dict[ "path_list" ]
         nkeys          = path_dict[ "nkeys" ]
         add_subclasses = path_dict[ "subclasses" ]
@@ -3184,7 +3182,7 @@ def aggregate_historic_redun( params ):
         params[ "path_list" ] = path_list
         
         prefix = "num"
-        logging.debug( "-1- = entry_list_total" )
+        logging.debug( "-1- = entry_list_%s" % prefix )
         #show_params( "params -1- = entry_list_total", params )
         
         sql_query = make_query( prefix, params, add_subclasses, value_total = True, value_numerical = True )
@@ -3217,7 +3215,7 @@ def aggregate_historic_redun( params ):
                 entry_dict_ntc_ig = group_by_ident( entry_list_ntc )
         
         prefix = "none"
-        logging.debug( "-3- = entry_list_none" )
+        logging.debug( "-3- = entry_list_%s" % prefix )
         #show_params( "prefix=none -3- = entry_list_none", params )
         
         sql_query_none = make_query( prefix, params, add_subclasses, value_total = False, value_numerical = False )   # non-numbers
@@ -3253,7 +3251,7 @@ def aggregate_historic_redun( params ):
     # sort the entries by path + value_unit
     entry_list_sorted = sort_entries( datatype, entry_list_total )
     logging.debug( "entry_list_sorted: %d items" % len( entry_list_sorted ) )
-    show_entries( "all", entry_list_sorted )
+    #show_entries( "all", entry_list_sorted )
 
     return entry_list_sorted
 
@@ -3265,14 +3263,8 @@ def aggregate_historic( params ):
     datatype  = params[ "datatype" ]
     base_year = params[ "base_year" ]
     
-    
-    path_lists_bysub = params[ "path_lists_bysub" ]
-    
-    #num_path_lists = params[ "num_path_lists" ]
-    
     #record_dict_total = SortedDict()    # json: dicts => tuples
     record_dict_total = {}
-    
     
     # loop over the 2 yes/no subclassess path subgroups
     path_lists = params[ "path_lists_bysub" ]
@@ -3288,7 +3280,7 @@ def aggregate_historic( params ):
         params[ "num_path_lists" ] = num_path_lists
         
         prefix = "num"
-        logging.debug( "-1- = entry_list_total" )
+        logging.debug( "-1- = entry_list_%s" % prefix )
         #show_params( "params -1- = entry_list_total", params )
         
         sql_query = make_query( prefix, params, add_subclasses, value_total = True, value_numerical = True )
@@ -3319,18 +3311,18 @@ def aggregate_historic( params ):
             nrecords = collect_records( record_dict_total, prefix, path_dict, params, sql_names_ntc, sql_resp_ntc )
         
         prefix = "none"
-        logging.debug( "-3- = entry_list_none" )
+        logging.debug( "-3- = entry_list_%s" % prefix )
         #show_params( "prefix=none -3- = entry_list_none", params )
         
         sql_query_none = make_query( prefix, params, add_subclasses, value_total = False, value_numerical = False )   # non-numbers
         sql_names_none, sql_resp_none = execute_only( sql_query_none, dict_cursor = True )
         nrecords = collect_records( record_dict_total, prefix, path_dict, params, sql_names_none, sql_resp_none )
     
-    add_missing( record_dict_total, params )
+    add_missing( record_dict_total, params )    # needed?
     
     # input: data as dict, output: data as list
     entry_list_sorted = sort_records( record_dict_total, params )
-    show_entries( "all", entry_list_sorted )
+    #show_entries( "all", entry_list_sorted )
 
     return entry_list_sorted
 
@@ -3338,6 +3330,13 @@ def aggregate_historic( params ):
 
 def aggregate_modern_redun( params ):
     logging.info( "aggregate_modern_redun()" )
+    
+    language       = params[ "language" ]
+    datatype       = params[ "datatype" ]
+    group_tercodes = params[ "group_tercodes" ]
+    path_lists     = params[ "path_lists_bylen" ]
+    
+    num_path_lists = len( path_lists )
     
     entry_list_total = []
     
@@ -3350,29 +3349,26 @@ def aggregate_modern_redun( params ):
         logging.info( "base_year: %s" % base_year )
         params[ "base_year" ] = base_year
         
-        params_ntc  = copy.deepcopy( params )
-        params_none = copy.deepcopy( params )
-        
         entry_list_year = []
         
         for pd, path_dict in enumerate( path_lists, start = 1 ):
-            show_path_dict( num_path_lists, pd, path_dict )
+            #show_path_dict( num_path_lists, pd, path_dict )
             
             path_list = path_dict[ "path_list" ]
             add_subclasses = path_dict[ "subclasses" ]
             
-            params_ntc[  "path" ] = path_list
-            params_none[ "path" ] = path_list
+            params[  "path_list" ] = path_list
             
-            # only for debugging
-            #params_ntc[  "etype" ] = "ntc"
-            #params_none[ "etype" ] = "none"
+            prefix = "ntc"
+            logging.debug( "-1- = entry_list_%s" % prefix )
+            #show_params( "params -1- = entry_list_ntc", params )
             
-            show_params( "params -1- = entry_list_ntc", params_ntc )
-            #old_query_ntc, eng_data_ntc = aggregate_year( params_ntc, add_subclasses, value_total = True, value_numerical = True )
-            sql_query_ntc = make_query( "ntc", params_ntc, add_subclasses, value_total = True, value_numerical = True )
+            sql_query_ntc = make_query( prefix, params, add_subclasses, value_total = True, value_numerical = True )
+            sql_names_ntc, sql_resp_ntc = execute_only( sql_query_ntc )
             eng_data_ntc = {}
-            entry_list_ntc = execute_year( params_ntc, sql_query_ntc, eng_data_ntc )
+            #entry_list_ntc = execute_year( params, sql_query_ntc, eng_data_ntc )
+            entry_list_ntc = collect_fields( params, eng_data_ntc, sql_names_ntc, sql_resp_ntc )
+            
             if entry_debug: 
                 show_entries( "params -1- = entry_list_ntc", entry_list_ntc )
             
@@ -3380,11 +3376,16 @@ def aggregate_modern_redun( params ):
             #if group_tercodes:
             #   entry_dict_ntc_ig = group_by_ident( entry_list_ntc )
             
-            show_params( "params -2- = entry_list_none", params_none )
-            #old_query_none, eng_data_none = aggregate_year( params_none, add_subclasses, value_total = False, value_numerical = False )
-            sql_query_none = make_query( "none", params_none, add_subclasses, value_total = False, value_numerical = False )   # non-numbers
+            prefix = "none"
+            logging.debug( "-2- = entry_list_%s" % prefix )
+            #show_params( "params -2- = entry_list_none", params )
+            
+            sql_query_none = make_query( prefix, params, add_subclasses, value_total = False, value_numerical = False )   # non-numbers
+            sql_names_none, sql_resp_none = execute_only( sql_query_none )
             eng_data_none = {}
-            entry_list_none = execute_year( params_none, sql_query_none, eng_data_none )
+            #entry_list_none = execute_year( params, sql_query_none, eng_data_none )
+            entry_list_none = collect_fields( params, eng_data_none, sql_names_none, sql_resp_none )
+            
             if entry_debug: 
                 show_entries( "params -2- = entry_list_none", entry_list_none )
             
@@ -3396,6 +3397,7 @@ def aggregate_modern_redun( params ):
             #   entry_list_path_ig = add_unique_items_grouped( ...
             # TODO: use entry_list_path_ig
             
+            # merge the the 2 lists (ntc, none)
             # entry_list_year = entry_list_ntc + entry_list_none
             logging.info( "add_unique_nones()" )
             entry_list_path = add_unique_items( language, "entry_list_none", entry_list_ntc, entry_list_none )
@@ -3416,76 +3418,56 @@ def aggregate_modern_redun( params ):
 def aggregate_modern( params ):
     logging.info( "aggregate_modern()" )
     
-    entry_list_total = []
+    language       = params[ "language" ]
+    datatype       = params[ "datatype" ]
+    group_tercodes = params[ "group_tercodes" ]
+    path_lists     = params[ "path_lists_bylen" ]
+    
+    num_path_lists = len( path_lists )
+    
+    #record_dict_total = SortedDict()    # json: dicts => tuples
+    record_dict_total = {}
     
     # modern classification does not provide a base_year; 
     # loop over base_years, and accumulate results.
     base_years = [ "1795", "1858", "1897", "1959", "2002" ]
     #base_years = [ "1858" ]    # test single year
     
-    # NOT YET ADAPTED FOR NON-REDUNDANT !!
     for base_year in base_years:
         logging.info( "base_year: %s" % base_year )
         params[ "base_year" ] = base_year
         
-        params_ntc  = copy.deepcopy( params )
-        params_none = copy.deepcopy( params )
-        
         entry_list_year = []
         
         for pd, path_dict in enumerate( path_lists, start = 1 ):
-            show_path_dict( num_path_lists, pd, path_dict )
+            #show_path_dict( num_path_lists, pd, path_dict )
             
             path_list = path_dict[ "path_list" ]
             add_subclasses = path_dict[ "subclasses" ]
             
-            params_ntc[  "path" ] = path_list
-            params_none[ "path" ] = path_list
+            params[  "path_list" ] = path_list
             
-            # only for debugging
-            #params_ntc[  "etype" ] = "ntc"
-            #params_none[ "etype" ] = "none"
+            prefix = "ntc"
+            logging.debug( "-1- = entry_list_%s" % prefix )
+            #show_params( "params -1- = entry_list_ntc", params )
             
-            show_params( "params -1- = entry_list_ntc", params_ntc )
-            #old_query_ntc, eng_data_ntc = aggregate_year( params_ntc, add_subclasses, value_total = True, value_numerical = True )
-            sql_query_ntc = make_query( "ntc", params_ntc, add_subclasses, value_total = True, value_numerical = True )
-            eng_data_ntc = {}
-            entry_list_ntc = execute_year( params_ntc, sql_query_ntc, eng_data_ntc )
-            if entry_debug: 
-                show_entries( "params -1- = entry_list_ntc", entry_list_ntc )
+            sql_query_ntc = make_query( prefix, params, add_subclasses, value_total = True, value_numerical = True )
+            sql_names_ntc, sql_resp_ntc = execute_only( sql_query_ntc, dict_cursor = True )
+            nrecords = collect_records( record_dict_total, prefix, path_dict, params, sql_names_ntc, sql_resp_ntc )
             
-            # TODO
-            #if group_tercodes:
-            #   entry_dict_ntc_ig = group_by_ident( entry_list_ntc )
+            prefix = "none"
+            logging.debug( "-2- = entry_list_%s" % prefix )
+            #show_params( "params -2- = entry_list_none", params )
             
-            show_params( "params -2- = entry_list_none", params_none )
-            #old_query_none, eng_data_none = aggregate_year( params_none, add_subclasses, value_total = False, value_numerical = False )
-            sql_query_none = make_query( "none", params_none, add_subclasses, value_total = False, value_numerical = False )   # non-numbers
-            eng_data_none = {}
-            entry_list_none = execute_year( params_none, sql_query_none, eng_data_none )
-            if entry_debug: 
-                show_entries( "params -2- = entry_list_none", entry_list_none )
-            
-            # TODO
-            #if group_tercodes:
-            #   entry_dict_none_ig = group_by_ident( entry_list_none )
-            
-            #if group_tercodes:
-            #   entry_list_path_ig = add_unique_items_grouped( ...
-            # TODO: use entry_list_path_ig
-            
-            # entry_list_year = entry_list_ntc + entry_list_none
-            logging.info( "add_unique_nones()" )
-            entry_list_path = add_unique_items( language, "entry_list_none", entry_list_ntc, entry_list_none )
-            logging.info( "entry_list_year: %d items" % len( entry_list_path ) )
-            
-            entry_list_year.extend( entry_list_path )           # different path_dict, so no duplicates 
-            
-        entry_list_total.extend( entry_list_year )              # different base_year, so no duplicates
-        #entry_list_total = extend_nodups( entry_list_total, entry_list_year )  # avoid duplicates
-        logging.info( "entry_list_total: %d items" % len( entry_list_total ) )
+            sql_query_none = make_query( prefix, params, add_subclasses, value_total = False, value_numerical = False )   # non-numbers
+            sql_names_none, sql_resp_none = execute_only( sql_query_none, dict_cursor = True )
+            nrecords = collect_records( record_dict_total, prefix, path_dict, params, sql_names_none, sql_resp_none )
     
-    entry_list_sorted = sort_entries( datatype, entry_list_total )
+    #add_missing( record_dict_total, params )
+    
+    # input: data as dict, output: data as list
+    entry_list_sorted = sort_records( record_dict_total, params )
+    #show_entries( "all", entry_list_sorted )
 
     return entry_list_sorted
 
@@ -3562,7 +3544,11 @@ def make_query( prefix, params, subclasses, value_total, value_numerical ):
     classification = params[ "classification" ]
     base_year      = params[ "base_year" ]
     path_list      = params[ "path_list" ]
-    ter_codes      = params[ "ter_codes" ]
+    
+    try:
+        ter_codes = params[ "ter_codes" ]   # historical
+    except:
+        ter_codes = []                      # modern, ter_codes not specified
     
     logging.debug( "language:        %s" % language )
     logging.debug( "datatype:        %s" % datatype )
@@ -3571,6 +3557,7 @@ def make_query( prefix, params, subclasses, value_total, value_numerical ):
     logging.debug( "path_list:       %s" % str( path_list ) )
     logging.debug( "subclasses:      %s" % subclasses )
     logging.debug( "ter_codes:       %s" % str( ter_codes ) )
+    
     logging.debug( "value_total:     %s" % value_total )
     logging.debug( "value_numerical: %s" % value_numerical )
     
