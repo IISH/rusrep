@@ -1,6 +1,13 @@
 # -*- coding: utf-8 -*-
 
 """
+TODO
+The functions aggregate_historic_redun() and aggregate_modern_redun() return a sorted list of dicts. 
+For compatbility with the sequel functions json_cache() and the functions in preprocessor.py, 
+the new functions aggregate_historic() and aggregate_modern() also return the same sorted list of dicts.
+It would be better to keep the record_dicts of the new functions, and completely overhaul the 
+messy sequel functons. 
+
 VT-07-Jul-2016 latest change by VT
 FL-12-Dec-2016 use datatype in function documentation()
 FL-20-Jan-2017 utf8 encoding
@@ -21,7 +28,7 @@ FL-10-Dec-2018 handle /documentation exception
 FL-11-Feb-2019 optional suppression of trailing dots in db queries
 FL-12-Feb-2019 separate functions for old/new historic/modern
 FL-19-Feb-2019 main query split by subclasses, other 2 by indicator length
-FL-16-Apr-2019 downloads adaped
+FL-30-Apr-2019 downloads adapted
 
 def get_configparser():
 def get_connection():
@@ -51,8 +58,8 @@ def execute_year( params, sql_query, eng_data ):
 def execute_only( sql_query, dict_cursor = False ):
 def collect_fields(  params, eng_data, sql_names, sql_resp ):
 def collect_records( record_dict_total, prefix, path_dict, params, eng_data, sql_names, sql_resp ):
-def add_missing( record_dict_total, params ):
-def sort_records( record_dict_total, params ):
+def add_missing_valstr( record_dict_total, params ):
+def sort_records( record_dict_total, base_year = None ):
 def records2oldentries( records_dict, params ):
 #def merge_3records( record_dict_num, record_dict_ntc, record_dict_none ):
 #def merge_2records( record_dict_total, record_dict_path ):
@@ -1801,8 +1808,10 @@ def collect_fields( params, eng_data, sql_names, sql_resp ):
 
 def collect_records( records_dict, sql_prefix, path_dict, params, sql_names, sql_resp ):
     logging.debug( "collect_records() sql_prefix: %s" % sql_prefix )
+    
+    logging.debug( "records_dict: %d records" % len( records_dict ) )
     # sql_names & sql_resp from execute_only()
-    logging.debug( "sql_resp:  %d records" % len( sql_resp ) )
+    logging.debug( "sql_resp: %d records" % len( sql_resp ) )
     if len( sql_resp ) == 0:
         return
 
@@ -1866,44 +1875,42 @@ def collect_records( records_dict, sql_prefix, path_dict, params, sql_names, sql
         # ter_codes
         ter_code_dict = records_dict[ path_unit_str ]       # already collected ter_codes for this path_unit_str
         ter_code = rec_dict[ "ter_code" ]                   # new ter_code from sql response
-
-        if classification == "historical":      # only add requested ter_codes
-            if ter_code in ter_codes_req:       # wanted ter_code (plus its value)
-                logging.debug( "requested ter_code %s" % ter_code )
-                total = rec_dict.get( "total" )
-                
+        
+        # historical: only add requested ter_codes
+        # modern: add all ter_codes
+        if( classification == "historical" and ter_code in ter_codes_req ) or classification == "modern":
+            logging.debug( "ter_code %s" % ter_code )
+            total = rec_dict.get( "total" )
+            
+            try:
+                total = float( total )
+            except:
+                total = value_na
+            
+            try:
+                old_val = ter_code_dict[ ter_code ]
+                dup = True      # existing ter_code
+            except:
+                ter_code_dict[ ter_code ] = total
+                dup = False     # new ter_code
+            
+            if dup:             # combine values
                 try:
-                    total = float( total )
-                except:
-                    total = value_na
-                
-                try:
-                    old_val = ter_code_dict[ ter_code ]
-                    dup = True      # existing ter_code
-                except:
-                    ter_code_dict[ ter_code ] = total
-                    dup = False     # new ter_code
-                
-                if dup:             # combine values
-                    try:
-                        float( old_val )
-                        if total in [ value_na, value_none ]:
-                            ter_code_dict[ ter_code ] = value_none
-                        else:
-                            ter_code_dict[ ter_code ] = old_val + total
-                    except:     # not both float
-                        if total == value_na:
-                            ter_code_dict[ ter_code ] = value_na
-                        else:
-                            ter_code_dict[ ter_code ] = value_none
-            else:
-                logging.debug( "skip ter_code %s" % ter_code )
-        else:
-            logging.debug( "modern: skip path_unit_str %s" % path_unit_str )
+                    float( old_val )
+                    if total in [ value_na, value_none ]:
+                        ter_code_dict[ ter_code ] = value_none
+                    else:
+                        ter_code_dict[ ter_code ] = old_val + total
+                except:     # not both float
+                    if total == value_na:
+                        ter_code_dict[ ter_code ] = value_na
+                    else:
+                        ter_code_dict[ ter_code ] = value_none
     
     nrecords = len( records_dict.keys() )
     logging.debug( "paths in records_dict %d" % nrecords )
-    #show_record_dict( sql_prefix, records_dict )
+    
+    show_record_dict( sql_prefix, records_dict )
     
     str_elapsed = format_secs( time() - time0 )
     logging.info( "collect_records() took %s" % str_elapsed )
@@ -1912,11 +1919,11 @@ def collect_records( records_dict, sql_prefix, path_dict, params, sql_names, sql
 
 
 
-def add_missing( records_dict, params ):
+def add_missing_valstr( records_dict, params ):
     time0 = time()      # seconds since the epoch
-    logging.debug( "add_missing() start: %s" % datetime.datetime.now() )
+    logging.debug( "add_missing_valstr() start: %s" % datetime.datetime.now() )
 
-    # value strings for empty fields
+    # add value strings for empty fields
     language = params.get( "language" )
     value_na   = ""
     value_none = ""
@@ -1935,17 +1942,19 @@ def add_missing( records_dict, params ):
             except:
                 ter_code_dict[ ter_code ] = value_na
     
-    logging.debug( "add_missing() final # of paths in records_dict %d" % len( records_dict.keys() ) )
+    logging.debug( "add_missing_valstr() final # of paths in records_dict %d" % len( records_dict.keys() ) )
+    
     #show_record_dict( "all", records_dict )
     
     str_elapsed = format_secs( time() - time0 )
-    logging.info( "add_missing() took %s" % str_elapsed )
+    logging.info( "add_missing_valstr() took %s" % str_elapsed )
     
     return records_dict
 
 
-def sort_records( records_dict, params ):
-    # input: dict (+ params)
+
+def sort_records( records_dict, base_year = None ):
+    # input: dict (+ base_year)
     # output: list
     time0 = time()      # seconds since the epoch
     logging.debug( "sort_records() start: %s" % datetime.datetime.now() )
@@ -1973,10 +1982,13 @@ def sort_records( records_dict, params ):
             ter_code_list.append( tc_dict )
         
         record_dict = {
-            "path" : path,
+            "path"       : path,
             "value_unit" : value_unit,
-            "ter_codes" : ter_code_list
+            "ter_codes"  : ter_code_list
         }
+        
+        if base_year is not None:   # inject for modern (differentiate between the years)
+            record_dict[ "base_year" ] = base_year
         
         entry_list.append( record_dict )
     
@@ -3137,8 +3149,6 @@ def aggregation():
             entry_list_sorted = aggregate_modern( params )
     # end classification
     
-    
-    
     json_string, cache_except = json_cache( entry_list_sorted, params, download_key )
     
     if cache_except is not None:
@@ -3318,10 +3328,10 @@ def aggregate_historic( params ):
         sql_names_none, sql_resp_none = execute_only( sql_query_none, dict_cursor = True )
         nrecords = collect_records( record_dict_total, prefix, path_dict, params, sql_names_none, sql_resp_none )
     
-    add_missing( record_dict_total, params )    # needed?
+    add_missing_valstr( record_dict_total, params )
     
-    # input: data as dict, output: data as list
-    entry_list_sorted = sort_records( record_dict_total, params )
+    # input: data as dict, output: data as list, for compatibility with old list approach
+    entry_list_sorted = sort_records( record_dict_total )
     #show_entries( "all", entry_list_sorted )
 
     return entry_list_sorted
@@ -3426,7 +3436,8 @@ def aggregate_modern( params ):
     num_path_lists = len( path_lists )
     
     #record_dict_total = SortedDict()    # json: dicts => tuples
-    record_dict_total = {}
+    #record_dict_total = {}
+    entry_list_sorted = []
     
     # modern classification does not provide a base_year; 
     # loop over base_years, and accumulate results.
@@ -3437,7 +3448,7 @@ def aggregate_modern( params ):
         logging.info( "base_year: %s" % base_year )
         params[ "base_year" ] = base_year
         
-        entry_list_year = []
+        record_dict_year = {}
         
         for pd, path_dict in enumerate( path_lists, start = 1 ):
             #show_path_dict( num_path_lists, pd, path_dict )
@@ -3453,7 +3464,7 @@ def aggregate_modern( params ):
             
             sql_query_ntc = make_query( prefix, params, add_subclasses, value_total = True, value_numerical = True )
             sql_names_ntc, sql_resp_ntc = execute_only( sql_query_ntc, dict_cursor = True )
-            nrecords = collect_records( record_dict_total, prefix, path_dict, params, sql_names_ntc, sql_resp_ntc )
+            nrecords = collect_records( record_dict_year, prefix, path_dict, params, sql_names_ntc, sql_resp_ntc )
             
             prefix = "none"
             logging.debug( "-2- = entry_list_%s" % prefix )
@@ -3461,12 +3472,14 @@ def aggregate_modern( params ):
             
             sql_query_none = make_query( prefix, params, add_subclasses, value_total = False, value_numerical = False )   # non-numbers
             sql_names_none, sql_resp_none = execute_only( sql_query_none, dict_cursor = True )
-            nrecords = collect_records( record_dict_total, prefix, path_dict, params, sql_names_none, sql_resp_none )
+            nrecords = collect_records( record_dict_year, prefix, path_dict, params, sql_names_none, sql_resp_none )
     
-    #add_missing( record_dict_total, params )
+        #add_missing_valstr( record_dict_year, params )
     
-    # input: data as dict, output: data as list
-    entry_list_sorted = sort_records( record_dict_total, params )
+        # input: data as dict, output: data as list, for compatibility with old list approach
+        entry_list_year = sort_records( record_dict_year, base_year )           # sort per year
+        entry_list_sorted.extend( entry_list_year )
+    
     #show_entries( "all", entry_list_sorted )
 
     return entry_list_sorted
