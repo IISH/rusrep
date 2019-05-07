@@ -1,6 +1,11 @@
 # -*- coding: utf-8 -*-
 
 """
+TODO CHECK
+collect_docs() is called by aggregation() and filecatalogdata(). Double action?
+TODO
+Reorder functions
+
 TODO
 The functions aggregate_historic_items_redun() and aggregate_modern_items_redun() return a sorted list of dicts. 
 For compatbility with the sequel functions json_cache_items() and the functions in preprocessor.py, 
@@ -29,44 +34,34 @@ FL-11-Feb-2019 optional suppression of trailing dots in db queries
 FL-12-Feb-2019 separate functions for old/new historic/modern
 FL-19-Feb-2019 main query split by subclasses, other 2 by indicator length
 FL-30-Apr-2019 downloads adapted
-FL-06-May-2019 cleanup
+FL-07-May-2019 cleanup
 
 
-def strip_subclasses( path ):
-def group_levels( path_list ):
-def json_cache_items( entry_list, params, download_key ):
-def collect_docs( params, download_dir, download_key ):
-def load_years( cursor, datatype, classification ):
-def sqlfilter( sql ):
-def sqlconstructor( sql ):
-#def topic_counts( schema ):    # obsolete, remove
-#def load_topics( qinput ):     # obsolete, remove
-def topic_counts( language, datatype ):
-def dataset_filter( data, sql_names, classification ):
-def zap_empty_classes( item ):
+def strip_subclasses( path ):                                   # called by aggregation()
+def group_levels( path_list ):                                  # called by aggregation()
+def json_cache_items( entry_list, params, download_key ):       # called by aggregation() and indicators()
 
-def translate_item( item, eng_data ):
-def load_vocabulary( vocab_type ):
-def translate_vocabulary( vocab_filter, classification = None ):
+def collect_docs( params, download_dir, download_key ):         # called by aggregation() and filecatalogdata()
 
-def get_sql_where( name, value ):
-def loadjson( json_dataurl ):
-#def filecat_subtopic( qinput, cursor, datatype, base_year ):
-def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
-def aggregate_year( params, add_subclasses, value_total = True, value_numerical = True ):
+def load_years( cursor, datatype, classification ):             # called by years()
 
-def collect_records( record_dict_total, prefix, path_dict, params, eng_data, sql_names, sql_resp ):
-def add_missing_valstr( record_dict_total, params ):
-def sort_records( record_dict_total, base_year = None ):
-def records2oldentries( records_dict, params ):
-#def merge_3records( record_dict_num, record_dict_ntc, record_dict_none ):
-#def merge_2records( record_dict_total, record_dict_path ):
-def show_record_dict( dict_name, record_dict, sort = False ):
-def show_record_list( list_name, record_list ):
+def topic_counts( language, datatype ):                         # called by topics()
 
-def add_unique_items_grouped( language, dict_name, entry_dict_collect, entry_dict_none )
-def remove_dups( entry_list_collect ):
-def cleanup_downloads( download_dir, time_limit ):
+def zap_empty_classes( item ):                                  # called by load_vocabulary()
+def translate_item( item, eng_data ):                           # called by load_vocabulary()
+def load_vocabulary( vocab_type ):                              # called by several functions
+def translate_vocabulary( vocab_filter, classification = None ):# was called by load_vocabulary()
+
+def loadjson( json_dataurl ):                                   # called by documentation()
+
+def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):  # called by filecatalogdata()
+
+def collect_records( record_dict_total, prefix, path_dict, params, eng_data, sql_names, sql_resp ): # called by aggregate_*_items()
+def add_missing_valstr( record_dict_total, params ):            # called by aggregate_historic_items()
+def sort_records( record_dict_total, base_year = None ):        # called by aggregate_*_items()
+def show_record_dict( dict_name, record_dict, sort = False ):   # called by collect_records()
+
+def cleanup_downloads( download_dir, time_limit ):              # called by download()
 
 @app.route( '/' )                                               def test():
 @app.route( "/documentation" )                                  def documentation():
@@ -75,7 +70,7 @@ def cleanup_downloads( download_dir, time_limit ):
 @app.route( "/regions" )                                        def regions():
 @app.route( "/histclasses" )                                    def histclasses():
 @app.route( "/classes" )                                        def classes():
-@app.route( "/indicators", methods = [ "POST", "GET" ] )        def indicators():
+#@app.route( "/indicators", methods = [ "POST", "GET" ] )        def indicators():  # no longer used?
 @app.route( "/aggregation", methods = ["POST" ] )               def aggregation():
 
 
@@ -98,43 +93,39 @@ import sys
 reload( sys )
 sys.setdefaultencoding( "utf8" )
 
-import collections
+import collections                      # OrderedDict()
 import csv
-#import datetime
-import gridfs
+import gridfs                           # mongodb
+import json
 import logging
 import os
 os.environ[ "MPLCONFIGDIR" ] = "/tmp"   # matplotlib (used by pandas) needs tmp a dir
-import pandas as pd
-import random
+import pandas as pd                     # csv, excel
+import random                           # download key
 import re
-import shutil
+import shutil                           # downloads
 import simplejson
-import sqlite3
-#import time
-import uuid
+import uuid                             # download key
 import urllib
 import urllib2
-import zipfile
+import zipfile                          # downloads
 
 from configutils import DataFilter
 from copy import deepcopy
 from datetime import date, datetime
-from io import BytesIO
+from io import BytesIO                  # downloads
 from flask import Flask, jsonify, Response, request, send_from_directory, send_file, session
 from jsonmerge import merge
 from pymongo import MongoClient
-from socket import gethostname
-#from sortedcontainers import SortedDict
-from StringIO import StringIO
+from socket import gethostname          # json hash
+#from sortedcontainers import SortedDict    # json: dicts => tuples
 from sys import exc_info
 from time import time, localtime
 
 from dataverse import Connection
-
 from excelmaster import aggregate_dataset_fields, aggregate_dataset_records, preprocessor
 from services_helpers import get_connection, format_secs, get_configparser, make_query, execute_only, show_path_dict
-from services_obs import aggregate_historic_items_redun, aggregate_modern_items_redun
+from services_deprec import aggregate_historic_items_redun, aggregate_modern_items_redun
 
 sys.path.insert( 0, os.path.abspath( os.path.join( os.path.dirname( "__file__" ), "./" ) ) )
 
@@ -198,7 +189,7 @@ def strip_subclasses( path ):
     logging.debug( "strip_subclasses() return" )
     
     return add_subclasses, path_stripped, key_set
-
+# strip_subclasses()
 
 
 def group_levels( path_list ):
@@ -300,7 +291,7 @@ def group_levels( path_list ):
         path_lists_bysub.append( { "nkeys" : -1, "subclasses" : False, "path_list" : path_list_subno } )
     
     return path_lists_bylen, path_lists_bysub
-
+# group_levels()
 
 
 def json_cache_items( entry_list, params, download_key ):
@@ -386,7 +377,7 @@ def json_cache_items( entry_list, params, download_key ):
     logging.info( "json_cache_items() caching took %s" % str_elapsed )
     
     return json_string, exc_value
-
+# json_cache_items()
 
 
 def collect_docs( qinput, download_dir, download_key ):
@@ -484,7 +475,7 @@ def collect_docs( qinput, download_dir, download_key ):
     logging.debug( "stop: %s" % datetime.now() )
     str_elapsed = format_secs( time() - time0 )
     logging.info( "collect_docs() caching took %s" % str_elapsed )
-
+# collect_docs()
 
 
 def load_years( cursor, datatype, classification ):
@@ -527,137 +518,7 @@ def load_years( cursor, datatype, classification ):
     json_string = json.dumps( result, encoding = "utf-8" )
 
     return json_string
-
-
-
-def sqlfilter( sql ):
-    logging.debug( "sqlfilter()" )
-    items     = ''
-    sqlparams = ''
-
-    for key, value in request.args.items():
-        items = request.args.get( key, '' )
-        itemlist = items.split( "," )
-        if key == "basisyear":
-            sql += " AND %s LIKE '%s" % ( "region_code", itemlist[ 0 ] )
-            sql += "%'"
-        else:
-            for item in itemlist:
-                sqlparams = "\'%s\',%s" % ( item, sqlparams )
-            sqlparams = sqlparams[ :-1 ]
-            sql += " AND %s in (%s)" % ( key, sqlparams )
-    return sql
-
-
-
-def sqlconstructor( sql ):
-    logging.debug( "sqlconstructor()" )
-    items     = ''
-    sqlparams = ''
-
-    for key, value in request.args.items():
-        items = request.args.get( key, '' )
-        itemlist = items.split( "," )
-        if key == "language":
-            skip = 1
-        elif key == "classification":
-            skip = 1
-        elif key == "basisyear":
-            sql += " AND %s like '%s'" % ( "region_code", sqlparams )
-        else:
-            for item in itemlist:
-                sqlparams = "\'%s\'" % item
-            sql += " AND %s in (%s)" % ( key, sqlparams )
-    return sql
-
-
-"""
-def topic_counts( schema ):
-    logging.info( "topic_counts()" )
-
-    connection = get_connection()
-    cursor = connection.cursor( cursor_factory = psycopg2.extras.NamedTupleCursor )
-
-    sql_topics = "SELECT datatype, topic_name FROM "
-    
-    if schema:
-        sql_topics += "%s.topics" % schema
-    else:
-        sql_topics += "topics"
-    
-    sql_topics += " ORDER BY datatype"
-    logging.info( sql_topics )
-    cursor.execute( sql_topics )
-    sql_resp = cursor.fetchall()
-    
-    #skip_list = [ "1", "2", "3", "4", "5", "6", "7" ]
-    skip_list = []
-    all_cnt_dict = {}
-    for record in sql_resp:
-        datatype   = record.datatype
-        topic_name = record.topic_name
-        if datatype not in skip_list:
-            #print( datatype, topic_name )
-            sql_count  = "SELECT base_year, COUNT(*) AS count FROM russianrepository"
-            sql_count += " WHERE datatype = '%s'" % datatype
-            sql_count += " GROUP BY base_year ORDER BY base_year"
-            logging.debug( sql_count )
-            
-            cursor.execute( sql_count )
-            sql_cnt_resp = cursor.fetchall()
-            cnt_dict = {}
-            for cnt_rec in sql_cnt_resp:
-                #print( cnt_rec )
-                cnt_dict[ cnt_rec.base_year ] = int( cnt_rec.count )    # strip trailing 'L'
-            
-            #print( cnt_dict )
-            all_cnt_dict[ datatype ] = cnt_dict
-            logging.debug( "datatype: %s , topic_name: %s, counts: %s" % ( datatype, topic_name, str( cnt_dict ) ) )
-        else:
-            #print( "skip:", datatype, topic_name )
-            pass
-    
-    #connection.commit()     # SELECT does not change anything
-    cursor.close()
-    connection.close()
-
-    return all_cnt_dict
-"""
-
-"""
-def load_topics( qinput ):
-    logging.debug( "load_topics()" )
-    
-    #schema = "datasets"
-    schema = "public"
-    all_cnt_dict = topic_counts( schema )
-    
-    sql = "SELECT * FROM %s.topics" % schema
-    
-    sql = sqlfilter( sql ) 
-    logging.debug( "sql: %s" % sql )
-    
-    connection = get_connection()
-    cursor = connection.cursor()
-    cursor.execute( sql )
-
-    sql_resp = cursor.fetchall()
-    sql_names = [ desc[ 0 ] for desc in cursor.description ]
-    
-    cursor.close()
-    connection.close()
-    
-    entry_list_in = json_generator( qinput, sql_names, "data", sql_resp )
-    
-    entry_list_out = []
-    for topic_dict in entry_list_in:
-        logging.debug( topic_dict )
-        datatype = topic_dict[ "datatype" ]
-        topic_dict[ "byear_counts" ] = all_cnt_dict[ datatype ]
-        entry_list_out.append(topic_dict )
-    
-    return entry_list_out
-"""
+# load_years()
 
 
 def topic_counts( language, datatype ):
@@ -681,65 +542,7 @@ def topic_counts( language, datatype ):
     logging.debug( "count_dict: %s" % count_dict )
     
     return count_dict
-
-
-
-def dataset_filter( data, sql_names, classification ):
-    logging.debug( "dataset_filter()" )
-    
-    datafilter = []
-    
-    for dataline in data:
-        datarow = {}
-        active  = ''
-        for i in range( len( sql_names ) ):
-            name = sql_names[ i ]
-            
-            if classification == "historical":
-                if name.find( "class", 0 ):
-                    try:
-                        nextvalue = dataline[ i+1 ]
-                    except:
-                        nextvalue = '.'
-                    
-                    if ( dataline[ i ] == '.' and nextvalue == '.' ):
-                        skip = "yes"
-                    else:
-                        toplevel = re.search( "(\d+)", name )
-                        if name.find( "histclass10", 0 ):
-                            datarow[ name ] = dataline[ i ]
-                            if toplevel:
-                                datarow[ "levels" ] = toplevel.group( 0 )
-            
-            elif classification == "modern":
-                if name.find( "histclass", 0 ):
-                    try:
-                        nextvalue = dataline[ i+1 ]
-                    except:
-                        nextvalue = '.'
-                    
-                    if ( dataline[i] == '.' and nextvalue == '.' ):
-                        skip = "yes"
-                    else:
-                        toplevel = re.search( "(\d+)", name )
-                        if name.find( "class10", 0 ):
-                            datarow[ name ] = dataline[ i ]
-                            if toplevel:
-                                if toplevel.group( 0 ) != "10":
-                                    datarow[ "levels" ] = toplevel.group( 0 )
-        
-        try:
-            if datarow[ "levels" ] > 0:
-                datafilter.append( datarow )
-        except:
-            pass
-    
-    json_string = "{}"
-    if classification:
-        json_string = json.dumps( datafilter, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
-
-    return json_string 
-
+# topic_counts()
 
 
 def zap_empty_classes( item ):
@@ -759,7 +562,7 @@ def zap_empty_classes( item ):
             new_item[ name ] = value
     
     return new_item
-
+# zap_empty_classes()
 
 
 def translate_item( item, eng_data ):
@@ -986,31 +789,6 @@ def translate_vocabulary( vocab_filter, classification = None ):
 # translate_vocabulary()
 
 
-def get_sql_where( name, value ):
-    logging.debug( "get_sql_where() name: %s, value: %s" % ( name, value ) )
-    
-    sql_query = ''
-    #result = re.match( "\[(.+)\]", value )
-    result = re.match( "\[(.+)\]", str( value ) )
-    
-    if result:
-        query = result.group( 1 )
-        ids = query.split( ',' )
-        for param in ids:
-            param=re.sub( "u'", "'", str( param ) )
-            sql_query += "%s," % param
-        
-        if sql_query:
-            sql_query = sql_query[ :-1 ]
-            sql_query = "%s in (%s)" % ( name, sql_query )
-    else:
-        sql_query = "%s = '%s'" % ( name, value )
-    
-    logging.debug( "sql_where: %s" % sql_query )
-    return sql_query
-
-
-
 def loadjson( json_dataurl ):
     logging.debug( "loadjson() %s" % json_dataurl )
 
@@ -1019,25 +797,7 @@ def loadjson( json_dataurl ):
     f = opener.open( req )
     dataframe = simplejson.load( f )
     return dataframe
-
-
-"""
-def filecat_subtopic( qinput, cursor, datatype, base_year ):
-    logging.debug( "filecatalog_subtopic()" )
-    
-    query  = "SELECT * FROM russianrepository"
-    query += " WHERE datatype = '%s' AND base_year = '%s'" % ( datatype, base_year )
-    query += " ORDER BY ter_code"
-    
-    cursor.execute( query )
-    sql_resp = cursor.fetchall()
-    sql_names = [ desc[ 0 ] for desc in cursor.description ]
-    
-    entry_list = json_generator( qinput, sql_names, "data", sql_resp )
-    logging.debug( entry_list )
-    
-    return entry_list
-"""
+# loadjson()
 
 
 def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
@@ -1170,231 +930,7 @@ def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
         # Convert the dataframe to an XlsxWriter Excel object.
         df2.to_excel( writer, sheet_name = "Copyrights", encoding = "utf-8", index = False )
         writer.save()
-
-
-
-def aggregate_year( params, add_subclasses, value_total = True, value_numerical = True ):
-    logging.debug( "aggregate_year() add_subclasses: %s" % add_subclasses )
-    logging.debug( "params %s" % str( params ) )
-    
-    language       = params.get( "language" )
-    datatype       = params.get( "datatype" ) 
-    classification = params.get( "classification" )
-    base_year      = params.get( "base_year" )
-    
-    #forbidden = [ "classification", "action", "language", "path" ]
-    #forbidden = [ "classification", "action", "language", "path", "ter_codes", "add_subclasses" ]
-    forbidden = [ "classification", "action", "language", "path", "add_subclasses", "etype" ]
-    
-    eng_data = {}
-    
-    """
-    if do_translate and language == "en":
-        # translate input english term to russian sql terms
-        vocab_filter = {}
-    
-        if base_year and classification == "historical":
-            vocab_filter[ "YEAR" ] = base_year
-        
-        if datatype:
-            if classification == "historical":
-                vocab_filter[ "DATATYPE" ] = datatype
-            elif classification == "modern":
-                vocab_filter[ "DATATYPE" ] = "MOD_" + datatype
-        logging.debug( "vocab_filter: %s" % str( vocab_filter ) )
-        
-        eng_data = translate_vocabulary( vocab_filter )
-        logging.debug( "translate_vocabulary returned %d eng_data items" % len( eng_data ) )
-        #logging.debug( "eng_data: %s" % str( eng_data ) )
-        for i, item in enumerate( eng_data ):
-            logging.debug( "%d: %s" % ( i, item ) )
-        
-        units = translate_vocabulary( { "vocabulary": "ERRHS_Vocabulary_units" } )
-        logging.debug( "translate_vocabulary returned %d units items" % len( units ) )
-        #logging.debug( "units: %s" % str( units ) )
-        for item in units:
-            eng_data[ item ] = units[ item ]
-    """
-    
-    sql = {}
-    
-    sql[ "where" ]     = ''
-    sql[ "condition" ] = ''
-    known_fields       = {}
-    
-    sql[ "internal" ]  = ''
-    sql[ "group_by" ]  = ''
-    sql[ "order_by" ]  = ''
-    
-    for name in params:
-        logging.info( "name: %s" % name )
-        if not name in forbidden:
-            value = params[ name ]
-            logging.info( "value: %s" % value )
-            
-            #if value in eng_data:
-            #    value = eng_data[ value ]
-            #    logging.debug( "eng_data name: %s, value: %s" % ( name, value ) )
-            
-            # temporary fix, sql composition must be overhauled
-            name_ = name
-            if name == "ter_codes":
-                name_ = "ter_code"      # name of db column
-            
-            sql[ "where" ] += "%s AND " % get_sql_where( name_, value )
-            sql[ "condition" ] += "%s, " % name_
-            known_fields[ name_ ] = value
-        
-        elif name == "path":
-            full_path = params[ name ]
-            top_sql = "AND ("
-            for path in full_path:
-                sql_local = {}
-                clear_path = {}
-                
-                for xkey in path:
-                    value = path[ xkey ]
-                    # need to retain '.' in classes, but not in summing
-                    if value == '.':
-                        value = 0
-                    
-                    clear_path[ xkey ] = value
-                    
-                for xkey in clear_path:
-                    value = path[ xkey ]
-                    #value = str( value )    # ≥5000 : \xe2\x89\xa55000 => u'\\u22655000
-                    value = value.encode( "utf-8" ) # otherwise, "≥5000 inhabitants" is not found in eng_data
-                    
-                    logging.debug( "clear_path xkey: %s, value: %s" % ( xkey, value ) )
-                    
-                    if value in eng_data:
-                        logging.debug( "xkey: %s, value: %s" % ( xkey, value ) )
-                        value = eng_data[ value ]
-                        logging.debug( "xkey: %s, value: %s" % ( xkey, value ) )
-                    else:
-                        logging.debug( "not found: value: %s" % value )
-                        #logging.warning( "not found: value: %s" % value )
-                        
-                    sql_local[ xkey ] = "(%s='%s' OR %s='. '), " % ( xkey, value, xkey )
-                    
-                    if not known_fields.has_key( xkey ):
-                        known_fields[ xkey ] = value
-                        sql[ "condition" ] += "%s, " % xkey
-                
-                if sql_local:
-                    sql[ "internal" ] += " ("
-                    for key in sql_local:
-                        sql_local[ key ] = sql_local[ key ][ :-2 ]
-                        sql[ "internal" ] += "%s AND " % sql_local[ key ]
-                        logging.debug( "key: %s, value: %s" % ( key, sql_local[ key ] ) )
-                        
-                    sql[ "internal" ] = sql[ "internal" ][ :-4 ]
-                    sql[ "internal" ] += ") OR"
-def execute_year( params, sql_query, eng_data ):
-    sql[ "internal" ] = sql[ "internal" ][ :-3 ]
-    
-    logging.debug( "sql: %s" % str( sql ) )
-
-    for key in sql:
-        logging.debug( "sql key: %s, sql value: %s" % ( key, str( sql[ key ] ) ) )
-    
-    extra_classes = []
-    if add_subclasses:   # 5&6 were removed from path; add them all here
-        if classification == "historical":
-            extra_classes = [ "histclass5", "histclass6", "histclass7", "histclass8", "histclass9", "histclass10" ]
-        elif classification == "modern":
-            extra_classes = [ "class5", "class6", "class7", "class8", "class9", "class10" ]
-        logging.debug( "extra_classes: %s" % extra_classes )
-    
-    sql_query  = "SELECT COUNT(*) AS datarecords" 
-    sql_query += ", COUNT(*) - COUNT(value) AS data_active"
-    
-    if value_total:
-        sql_query += ", SUM(CAST(value AS DOUBLE PRECISION)) AS total"
-    
-    if classification == "modern":  # "ter_code" keyword not in qinput, but we always need it
-        logging.debug( "modern classification: adding ter_code to SELECT" )
-        sql_query += ", ter_code"
-    
-    sql_query += ", value_unit"
-    logging.debug( "sql_query 0: %s" % sql_query )
-
-    if len( extra_classes ) > 0:
-        for field in extra_classes:
-            sql_query += ", %s" % field
-        logging.debug( "sql_query 1: %s" % sql_query )
-    
-    if sql[ "where" ]:
-        logging.debug( "where: %s" % sql[ "where" ] )
-        sql_query += ", %s" % sql[ "condition" ]
-        sql_query  = sql_query[ :-2 ]
-        logging.debug( "sql_query 2: %s" % sql_query )
-        
-        dbtable = "russianrepo_%s" % language
-        sql_query += " FROM %s WHERE %s" % ( dbtable, sql[ "where" ] )
-        sql_query  = sql_query[ :-4 ]
-        logging.debug( "sql_query 3: %s" % sql_query )
-    
-    if value_numerical:
-        sql_query += " AND value <> ''"             # suppress empty values
-        sql_query += " AND value <> '.'"            # suppress a 'lone' "optional point", used in the table to flag missing data
-        # plus an optional single . for floating point values, and plus an optional leading sign
-        sql_query += " AND value ~ '^[-+]?\d*\.?\d*$'"
-    else:
-        sql_query += " AND (value = '' OR value = ' ' OR value = '.' OR value = '. ' OR value = NULL)"
-        
-    logging.debug( "sql_query 4: %s" % sql_query )
-    
-    if sql[ "internal" ]:
-        logging.debug( "internal: %s" % sql[ "internal" ] )
-        sql_query += " AND (%s) " % sql[ "internal" ]
-        logging.debug( "sql_query 5: %s" % sql_query )
-    
-    sql[ "group_by" ] = " GROUP BY value_unit"
-    
-    if not "ter_code" in known_fields: 
-        sql[ "group_by" ] += ", ter_code"
-    
-    for field in known_fields:
-        sql[ "group_by" ] += ", %s" % field
-    for field in extra_classes:
-        sql[ "group_by" ] += ", %s" % field
-    
-    logging.debug( "group_by: %s" % sql[ "group_by" ] )
-    sql_query += sql[ "group_by" ]
-    logging.debug( "sql_query 6: %s" % sql_query )
-    
-    # ordering by the db: applied to the russian contents, so the ordering of 
-    # the english translation will not be perfect, but at least grouped. 
-    logging.debug( "known_fields: %s" % str( known_fields ) )
-    sql[ "order_by" ] = " ORDER BY "
-    class_list = []
-    for i in range( 1, 4 ):
-        ikey = u"histclass%d" % i
-        if known_fields.get( ikey ):
-            class_list.append( ikey )
-    for i in range( 1, 4 ):
-        ikey = u"class%d" % i
-        if known_fields.get( ikey ):
-            class_list.append( ikey )
-    
-    class_list.append( "ter_code" )
-    class_list.append( "value_unit" )
-    for iclass in class_list:
-        if sql[ "order_by" ] != " ORDER BY ":
-            sql[ "order_by" ] += ", "
-        sql[ "order_by" ] += "%s" % iclass
-    
-    for field in extra_classes:
-        sql[ "order_by" ] += ", %s" % field
-    
-    logging.debug( "order_by: %s" % sql[ "order_by" ] )
-    sql_query += " %s" % sql[ "order_by" ]
-    
-    logging.debug( "sql_query 7 = complete: %s" % sql_query )
-
-    return sql_query, eng_data
-
+# process_csv()
 
 
 def collect_records( records_dict, sql_prefix, path_dict, params, sql_names, sql_resp ):
@@ -1507,7 +1043,7 @@ def collect_records( records_dict, sql_prefix, path_dict, params, sql_names, sql
     logging.info( "collect_records() took %s" % str_elapsed )
     
     return nrecords
-
+# collect_records()
 
 
 def add_missing_valstr( records_dict, params ):
@@ -1541,7 +1077,7 @@ def add_missing_valstr( records_dict, params ):
     logging.info( "add_missing_valstr() took %s" % str_elapsed )
     
     return records_dict
-
+# add_missing_valstr()
 
 
 def sort_records( records_dict, base_year = None ):
@@ -1587,103 +1123,7 @@ def sort_records( records_dict, base_year = None ):
     logging.info( "sort_records() took %s" % str_elapsed )
     
     return entry_list
-
-
-
-def records2oldentries( records_dict, params ):
-    # compatibility check with old response structure
-    time0 = time()      # seconds since the epoch
-    logging.info( "records2oldentries() start: %s" % datetime.now() )
-
-    datatype  = params[ "datatype" ]
-    base_year = params[ "base_year" ]
-
-    entry_list = []
-    
-    for path_unit_str in records_dict:
-        logging.info( "records2oldentries() path_unit_str: %s" % path_unit_str )
-        path_unit_dict = json.loads( path_unit_str )
-        
-        value_unit = path_unit_dict[ "value_unit" ]
-        path = path_unit_dict
-        del path[ "value_unit" ]
-        
-        ter_code_dict = records_dict[ path_unit_str ]
-        for ter_code in ter_code_dict:
-            #total = ter_code_dict[ ter_code ]
-            total = ter_code_dict.get( ter_code )
-            
-            logging.info( "records2oldentries() type: %s" % type( total ) )
-            
-            entry = {}
-            entry[ "base_year" ]  = base_year,
-            entry[ "datatype" ]   = datatype,
-            entry[ "path" ]       = path, 
-            entry[ "ter_code" ]   = ter_code,
-            entry[ "total" ]      = total, 
-            entry[ "value_unit" ] = value_unit
-            entry_list.append( entry )
-    
-    logging.info( "records2oldentries() # %d" % len( entry_list ) )
-    
-    str_elapsed = format_secs( time() - time0 )
-    logging.info( "records2oldentries() took %s" % str_elapsed )
-    
-    return entry_list
-
-
-"""
-def merge_3records( record_dict_num, record_dict_ntc, record_dict_none ):
-    time0 = time()      # seconds since the epoch
-    logging.info( "merge_3records() start: %s" % datetime.now() )
-    
-    show_record_dict( "record_dict_num", record_dict_num )
-    show_record_dict( "record_dict_ntc", record_dict_ntc )
-    show_record_dict( "record_dict_none", record_dict_none )
-    
-    record_dict = deepcopy( record_dict_num )
-    
-    for key, val in record_dict_ntc.items():
-        try:        # old key: append list
-            record_dict[ key ]
-            record_dict[ key ].append( val )
-        except:     # new key
-            record_dict[ key ] = val
-    
-    for key, val in record_dict_none.items():
-        try:        # old key: append list
-            record_dict[ key ]
-            record_dict[ key ].append( val )
-        except:     # new key
-            record_dict[ key ] = val
-
-    logging.info( "record_dict: %d records" % len( record_dict ) )
-    
-    str_elapsed = format_secs( time() - time0 )
-    logging.info( "merge_records() took %s" % str_elapsed )
-    
-    return record_dict
-"""
-
-"""
-def merge_2records( record_dict, record_dict_path ):
-    time0 = time()      # seconds since the epoch
-    logging.info( "merge_2records() start: %s" % datetime.now() )
-    
-    for key, val in record_dict_path.items():
-        try:        # old key: append list
-            record_dict[ key ]
-            record_dict[ key ].append( val )
-        except:     # new key
-            record_dict[ key ] = val
-
-    logging.info( "record_dict: %d records" % len( record_dict ) )
-    
-    str_elapsed = format_secs( time() - time0 )
-    logging.info( "merge_2records() took %s" % str_elapsed )
-    
-    return record_dict
-"""
+# sort_records()
 
 
 def show_record_dict( prefix, record_dict, sort = False ):
@@ -1699,61 +1139,7 @@ def show_record_dict( prefix, record_dict, sort = False ):
         for r, ( key, val ) in enumerate( record_dict.items() ):
             logging.info( "# %d path_unit: %s" % ( r, key ) )
             logging.info( "# %d ter_codes: %s" % ( r, str( val ) ) )
-
-
-
-def show_record_list( list_name, record_list ):
-    logging.info( "show_record_list()" )
-    logging.info( "%s # of records: %d" % ( list_name, len( record_list ) ) )
-    for r, record in enumerate( record_list ):
-        path_unit_str = record[ "path_unit_str" ]
-        ter_codes  = record[ "ter_codes" ]
-        logging.info( "# %d path_unit: %s" % ( r, path_unit_str ) )
-        logging.info( "# %d ter_codes: %s" % ( r, str( ter_codes ) ) )
-
-
-
-def add_unique_items_grouped( language, dict_name, entry_dict_collect, entry_dict_extra ):
-    # collect unique paths in entry_dict_collect
-    logging.info( "add_unique_items_grouped()" )
-    
-    entry_dict_path_ig = {}
-    """
-    logging.info( "entry_dict_collect: %s, len: %d" % ( type( entry_dict_collect ), len( entry_dict_collect ) ) )
-    for key, value in entry_dict_collect.iteritems():
-        logging.info( "key: %s\nvalue: %s" % ( key, value ) )
-    """
-
-    logging.info( "entry_dict_extra: %s, len: %d" % ( type( entry_dict_extra ), len( entry_dict_extra ) ) )
-    for key, entry_extra in entry_dict_extra.iteritems():
-        logging.info( "key: %s\nentry_extra: %s" % ( key, entry_extra ) )
-        entry_collect = entry_dict_collect.get( key )
-        if entry_collect:
-            logging.info( "merge key: %s\nentry_extra: %s\nentry_collect: %s" % ( key, entry_extra, entry_collect ) )
-    
-    return entry_dict_path_ig
-
-
-
-def remove_dups( entry_list_collect ):
-    logging.debug( "remove_dups()" )
-    time0 = time()      # seconds since the epoch
-    
-    # remove duplicates
-    #list( set( entry_list_collect ) )      # fails: dicts not hashable
-    
-    # [i for n, i in enumerate(d) if i not in d[n + 1:]]    # list comprehension
-    # Here since we can use dict comparison, we only keep the elements that are not in the rest of the 
-    # initial list (this notion is only accessible through the index n, hence the use of enumerate).
-    entry_list_nodups = [ i for n, i in enumerate( entry_list_collect ) if i not in entry_list_collect[ n + 1: ] ]
-    
-    logging.info( "remove_dups() %d items removed" % ( len( entry_list_collect ) - len( entry_list_nodups ) ) )
-    
-    str_elapsed = format_secs( time() - time0 )
-    logging.info( "remove_dups() took %s" % str_elapsed )
-    
-    return entry_list_nodups
-
+# show_record_dict()
 
 
 def cleanup_downloads( download_dir, time_limit ):
@@ -1809,7 +1195,7 @@ def cleanup_downloads( download_dir, time_limit ):
         logging.info( "# of files deleted: %d" % f_deleted )
     if d_deleted > 0:
         logging.info( "# of download dirs deleted: %d" % d_deleted )
-
+# cleanup_downloads()
 
 # ==============================================================================
 app = Flask( __name__ )
@@ -1826,6 +1212,7 @@ def test():
     #description = 'Russian Repository API Service v.0.1<br>/service/regions<br>/service/topics<br>/service/data<br>/service/histclasses<br>/service/years<br>/service/maps (reserved)<br>'
     description = "Russian Repository API Service v.1.0<br>"
     return description
+# / test()
 
 
 # Documentation - Get documentation needed to show files in help pop-up at GUI step 1
@@ -1852,7 +1239,6 @@ def documentation():
         type_, value, tb = sys.exc_info()
         logging.error( "%s" % value )
         return Response( json.dumps( papers ), mimetype = "application/json; charset=utf-8" )
-    
     
     dataverse = connection.get_dataverse( ristat_name )
     if not dataverse:
@@ -1939,7 +1325,7 @@ def documentation():
         logging.debug( paper )
     
     return Response( json.dumps( papers ), mimetype = "application/json; charset=utf-8" )
-
+# /documentation documentation()
 
 
 # Topics - Get topics and process them as terms for GUI
@@ -1999,7 +1385,7 @@ def topics():
     topics_dict_out = { "data" : topics_array_out }
     logging.debug( "/topics return Response" )
     return Response( json.dumps( topics_dict_out ), mimetype = "application/json; charset=utf-8" )
-    
+# /topics topics()
 
 
 # Years - Get available years for year selection at GUI step 2
@@ -2030,7 +1416,7 @@ def years():
     
     logging.debug( "/years return Response" )
     return Response( json_string, mimetype = "application/json; charset=utf-8" )
-
+# /years years()
 
 
 # Regions - Get regions to build the region selector at GUI step 3 
@@ -2048,7 +1434,7 @@ def regions():
     
     logging.debug( "/regions return Response" )
     return Response( json.dumps( data ), mimetype = "application/json; charset=utf-8" )
-
+# /regions regions()
 
 
 # Histclasses - Get historical indicators for the indicator selection at GUI step 4
@@ -2066,7 +1452,7 @@ def histclasses():
     
     logging.debug( "/histclasses return Response" )
     return Response( json.dumps( data ), mimetype = "application/json; charset=utf-8" )
-
+# /histclasses histclasses()
 
 
 # Classes - Get modern indicators for the indicator selection at GUI step 4
@@ -2085,7 +1471,7 @@ def classes():
     
     logging.debug( "/classes return Response" )
     return Response( json.dumps( data ), mimetype = "application/json; charset=utf-8" )
-
+# /classes classes()
 
 
 # Indicators - Is this used by the GUI?
@@ -2140,6 +1526,7 @@ def indicators():
     logging.debug( json_string )
     
     return Response( json_string, mimetype = "application/json; charset=utf-8" )
+# /indicators indicators()
 """
 
 
@@ -2250,7 +1637,7 @@ def aggregation():
     logging.info( "aggregation took %s" % str_elapsed )
     
     return Response( json_string, mimetype = "application/json; charset=utf-8" )
-
+# /aggregation aggregation()
 
 
 def aggregate_historic_items( params ):
@@ -2334,7 +1721,7 @@ def aggregate_historic_items( params ):
     #show_entries( "all", entry_list_sorted )
 
     return entry_list_sorted
-
+# aggregate_historic_items()
 
 
 def aggregate_modern_items( params ):
@@ -2407,6 +1794,7 @@ def aggregate_modern_items( params ):
     #show_entries( "all", entry_list_sorted )
 
     return entry_list_sorted
+# aggregate_modern_items()
 
 
 # Filecatalog - Create filecatalog download link
@@ -2536,7 +1924,7 @@ def filecatalogdata():
     logging.debug( json_string )
     logging.debug( "/filecatalogdata before Response()" )
     return Response( json_string, mimetype = "application/json; charset=utf-8" )
-
+# /filecatalogdata filecatalogdata()
 
 
 # Filecatalog - Get filecatalog download zip
@@ -2554,7 +1942,7 @@ def filecatalogget():
     logging.debug( "zip_pathname: %s" % zip_pathname )
 
     return send_file( zip_pathname, attachment_filename = zip_filename, as_attachment = True )
-
+# /filecatalogget filecatalogget()
 
 
 @app.route( "/download" )
@@ -2703,31 +2091,7 @@ def download():
         logging.info( "creating download took %s" % str_elapsed )
         
         return send_file( memory_file, attachment_filename = zip_filename, as_attachment = True )
-    
-    """
-    clientcache = MongoClient()
-    db_cache = clientcache.get_database( "datacache" )
-    
-    if use_gridfs:
-        fs_cache = gridfs.GridFS( db_cache )
-        result_str = fs_cache.get( str( key ) ).read()
-        result = json.loads( result_str )
-    else:
-        result = db_cache.data.find( { "key": str( request.args.get( "key" ) ) } )
-    
-    for item in result:
-        del item[ "key" ]
-        del item[ "_id" ]
-    
-    dataset = json.dumps( item, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
-        
-    logging.debug( "stop: %s" % datetime.now() )
-    str_elapsed = format_secs( time() - time0 )
-    logging.info( "creating download took %s" % str_elapsed )
-    
-    return Response( dataset, mimetype = "application/json; charset=utf-8" )
-    """
-
+# /download_dir download()
 
 
 # Get cron autoupdate log to inspect for errors
@@ -2742,7 +2106,7 @@ def getupdatelog():
     log_pathname = os.path.join( etl_dir, log_filename )
         
     return send_file( log_pathname, attachment_filename = log_filename, as_attachment = True )
-
+# /logfile getupdatelog()
 
 
 if __name__ == "__main__":

@@ -1,25 +1,23 @@
 # -*- coding: utf-8 -*-
 
 """
-Cleanup of services.py; collect obsolete and no longer used functions
-FL-06-May-2019 Created
+Cleanup of services.py
 
-Obsolete functions:
+FL-06-May-2019 Created
+FL-07-May-2019 Changed
+
+Deprecated functions:
 def aggregate_historic_items_redun( params ):   
 def aggregate_modern_items_redun( params )
 def add_unique_items( language, list_name, entry_list_collect, entry_list_none ):
+def add_unique_items_grouped( language, dict_name, entry_dict_collect, entry_dict_none )
 def collect_fields(  params, eng_data, sql_names, sql_resp ):
 def sort_entries( datatype, entry_list ):
 def json_generator( params, sql_names, json_dataname, data, qkey_set = None ):
 def class_collector( keywords ):
-
-Functions no longer used:
 def execute_year( params, sql_query, eng_data ):
-def make_identifier( path, value_unit ):
 def group_by_ident( entry_list ):
 def extend_nodups( tot_list, add_list ):
-#def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None)
-
 """
 
 # future-0.17.1 imports for Python 2/3 compatibility
@@ -351,6 +349,28 @@ def add_unique_items( language, list_name, entry_list_collect, entry_list_extra 
 # add_unique_items()
 
 
+def add_unique_items_grouped( language, dict_name, entry_dict_collect, entry_dict_extra ):
+    # collect unique paths in entry_dict_collect
+    logging.info( "add_unique_items_grouped()" )
+    
+    entry_dict_path_ig = {}
+    """
+    logging.info( "entry_dict_collect: %s, len: %d" % ( type( entry_dict_collect ), len( entry_dict_collect ) ) )
+    for key, value in entry_dict_collect.iteritems():
+        logging.info( "key: %s\nvalue: %s" % ( key, value ) )
+    """
+
+    logging.info( "entry_dict_extra: %s, len: %d" % ( type( entry_dict_extra ), len( entry_dict_extra ) ) )
+    for key, entry_extra in entry_dict_extra.iteritems():
+        logging.info( "key: %s\nentry_extra: %s" % ( key, entry_extra ) )
+        entry_collect = entry_dict_collect.get( key )
+        if entry_collect:
+            logging.info( "merge key: %s\nentry_extra: %s\nentry_collect: %s" % ( key, entry_extra, entry_collect ) )
+    
+    return entry_dict_path_ig
+# add_unique_items_grouped(
+
+
 def collect_fields( params, eng_data, sql_names, sql_resp ):
     # sql_names & sql_resp from execute_only()
     
@@ -664,10 +684,6 @@ def class_collector( keywords, key_list ):
 # class_collector()
 
 
-
-# ==============================================================================
-# Functions no longer used
-
 def execute_year( key_set, params, sql_query, eng_data = {} ):
     logging.info( "execute_year()" )
     
@@ -731,19 +747,6 @@ def execute_year( key_set, params, sql_query, eng_data = {} ):
 # execute_year()
 
 
-def make_identifier( path, value_unit ):
-    # ordered dict, sorted by keys
-    ident_dict = collections.OrderedDict( sorted( path.items(), key = lambda t: t [ 0 ] ) )
-    ident_dict[ "value_unit" ] = value_unit
-
-    # identifier must be immutable
-    #identifier = frozenset( ident_dict.items() )
-    identifier = json.dumps( ident_dict.items(), encoding = "utf-8" )
-    
-    return identifier
-# make_identifier()
-
-
 def group_by_ident( entry_list ):
     logging.info( "group_by_ident()" )
     
@@ -794,323 +797,5 @@ def extend_nodups( tot_list, add_list ):
 
     return tot_list
 # extend_nodups()
-
-"""
-def reorder_entries( params, entry_list_ntc, entry_list_none, entry_list = None ):
-    logging.info( "reorder_entries()" )
-    # params params.keys() = [ "language", "classification", "datatype", "base_year", "ter_codes" ]
-    # no "ter_codes" for modern classification in params, get from entries
-    # for modern, reorder_entries is called separate for each base_year
-    
-    time0 = time()      # seconds since the epoch
-    language  = params.get( "language" )
-    classification = params.get( "classification" )
-    
-    # aggregation table settings
-    use_temp_table = True       # on production server
-    #use_temp_table = False     # 'manual' cleanup
-    
-    # on production server: use DROP
-    #on_commit =  " ON COMMIT PRESERVE ROWS"    # Default, No special action is taken at the ends of transactions
-    #on_commit =  " ON COMMIT DELETE ROWS"      # All rows in the temporary table will be deleted at the end of each transaction block
-    on_commit =  " ON COMMIT DROP"             # The temporary table will be dropped at the end of the current transaction block
-
-    skip_empty = True     # only return entries in response that have a specfied region count
-    #skip_empty = False    # return all region fields (may exhibit performance problem)
-
-    nlevels_use = 0
-    entry_list_asked = []       # entries requested
-    entry_list_cnt = []         # entries with counts
-    ter_codes = []              # region codes
-    
-    if classification == "modern":
-        level_prefix = "class"
-        
-        for entry in entry_list_ntc:
-            ter_code = entry[ "ter_code" ]          # ter_codes from entries
-            if ter_code not in ter_codes:
-                ter_codes.append( ter_code )
-            
-            value_unit = entry[ "value_unit" ]
-            
-            total_str = entry[ "total" ]
-            try:
-                total_float = float( total_str )
-                entry_list_cnt.append( entry )
-            except:
-                pass
-            
-    else:       # historical
-        level_prefix = "histclass"
-        nlevels = 0
-        #path_list = []          # lists of unique paths
-        path_unit_list = []     # lists of unique (paths + value_unit)
-        ter_codes = params.get( "ter_codes" )       # ter_codes provided
-        
-        # only "historical" has entry_list
-        logging.debug( "# of entries in [historical] entry_list: %d" % len( entry_list ) )
-        for entry in entry_list:
-            logging.debug( "entry: %s" % entry )
-            path = entry[ "path" ]
-            
-            value_unit = entry[ "value_unit" ]
-            
-            path_unit = { "path" : path, "value_unit" : value_unit }
-            if path_unit not in path_unit_list:
-                path_unit_list.append( path_unit )
-                nlevels = max( nlevels, len( path.keys() ) )
-            
-            total_str = entry[ "total" ]
-            try:
-                total_float = float( total_str )
-                entry_list_cnt.append( entry )
-            except:
-                pass
-        
-        logging.debug( "# of levels: %d" % nlevels )
-        nlevels_use = nlevels
-    
-    # both "historical" and "modern" have entry_list_ntc
-    nlevels_ntc = 0
-    path_unit_list_ntc = []     # lists of unique (paths + value_unit)
-    logging.debug( "# of entries in entry_list_ntc: %d" % len( entry_list_ntc ) )
-    
-    for entry in entry_list_ntc:
-        logging.debug( "entry: %s" % entry )
-        path = entry[ "path" ]
-        
-        value_unit = entry[ "value_unit" ]
-        path_unit = { "path" : path, "value_unit" : value_unit }
-        if path_unit not in path_unit_list_ntc:
-            path_unit_list_ntc.append( path_unit )
-            nlevels_ntc = max( nlevels_ntc, len( path.keys() ) )
-    
-    logging.info( "# of levels_ntc: %d" % nlevels_ntc )
-    
-    if classification == "modern":
-        nlevels_use = 10        # always use the max, don't care about possible empty columns
-    else:
-        nlevels_use = max( nlevels_use, nlevels_ntc )
-    logging.info( "# of levels used: %d" % nlevels_use )
-    
-    #logging.info( "# of unique records in path_list_ntc result: %d" % len( path_list_ntc ) )
-    logging.info( "# of unique records in path_unit_list_ntc result: %d" % len( path_unit_list_ntc ) )
-    logging.info( "# of records in path result with count: %d" % len( entry_list_cnt ) )
-    
-    nregions = len( ter_codes )
-    logging.info( "# of regions requested: %d" % nregions )
-    
-    
-    connection = get_connection()
-    cursor = connection.cursor( cursor_factory = psycopg2.extras.DictCursor )
-    
-    sql_delete = None
-    sql_create = ""
-    
-    table_name = "temp_aggregate"
-    if use_temp_table:          # TEMP TABLEs are not visible to other sessions
-        sql_create  = "CREATE TEMP TABLE %s (" % table_name 
-    else:                       # debugging
-        sql_delete = "DROP TABLE %s;" % table_name
-        #sql_create = "CREATE UNLOGGED TABLE %s (" % table_name 
-        sql_create = "CREATE TABLE %s (" % table_name 
-    
-    for column in range( 1, nlevels_use + 1 ):
-        sql_create += "%s%d VARCHAR(1024)," % ( level_prefix, column )
-    
-    sql_create += "value_unit VARCHAR(1024),"
-    sql_create += "count VARCHAR(1024)"
-    
-    ntc = len( ter_codes )
-    for tc, ter_code in enumerate( ter_codes ):
-        sql_create += ",tc_%s VARCHAR(1024)" % ter_code
-    
-    sql_create += ")"
-    
-    if use_temp_table:
-        sql_create += on_commit 
-    sql_create += ";" 
-        
-    logging.info( "sql_create: %s" % sql_create )
-    
-    try:
-        cursor.execute( sql_create )
-    except:
-        logging.error( "creating temp table %s failed:" % table_name )
-        type_, value, tb = sys.exc_info()
-        logging.error( "%s" % value )
-    
-    # fill table
-    # value strings for empty and combined fields
-    value_na   = ""
-    value_none = ""
-    if language.upper() == "EN":
-        value_na   = "na"
-        value_none = "cannot aggregate at this level"
-    elif language.upper() == "RU":
-        value_na   = "нет данных"
-        value_none = "агрегация на этом уровне невозможна"
-    
-    levels_str = []
-    ter_codes_str = []
-    num_path = len( path_unit_list_ntc )
-    for pu, path_unit in enumerate( path_unit_list_ntc ):
-        path = path_unit[ "path" ]
-        value_unit = path_unit[ "value_unit" ]
-        logging.debug( "%d-of-%d unit: %s, path: %s" % ( pu+1, num_path, value_unit, path ) )
-        columns = []
-        values  = []
-        for key, value in path.items():
-            columns.append( key )
-            values .append( value )
-            if key not in levels_str:
-                levels_str.append( key )
-        
-        ncounts = 0
-        #unit = '?'
-        for ter_code in ter_codes:
-            logging.debug( "ter_code: %s" % ter_code )
-            value = value_na
-            
-            # search for path + ter_code in list with counts
-            for entry in entry_list_cnt:
-                #logging.debug( "entry: %s" % entry )
-                if path == entry[ "path" ] and value_unit == entry[ "value_unit" ] and ter_code == entry[ "ter_code" ]:
-                    ncounts += 1
-                    total = entry[ "total" ]        # double from aggregate sql query
-                    logging.debug( "ncounts: %d, total: %s, value_unit: %s, ter_code: %s, path: %s" % ( ncounts, total, value_unit, ter_code, path ) )
-                    if round( total ) == total:     # only 0's after .
-                        total = int( total )        # suppress trailing .0...
-                    value = total
-                    #unit = entry[ "value_unit" ]
-                    
-                    # check for presence in non-number list
-                    for entry_none in entry_list_none:
-                        logging.debug( "entry_none: %s" % entry_none )
-                        if path == entry_none[ "path" ] and value_unit == entry[ "value_unit" ] and ter_code == entry_none[ "ter_code" ]:
-                            value = value_none
-                            break
-                    break
-            
-            if skip_empty and value in [ value_na, '' ]:
-                continue        # do not return empty values in response
-            
-            ter_code_str = "tc_%s" % ter_code
-            if ter_code_str not in ter_codes_str:
-                ter_codes_str.append( ter_code_str )
-            columns.append( ter_code_str )
-            values .append( value )
-        
-        logging.debug( "columns: %s" % columns )
-        logging.debug( "values:  %s" % values )
-        
-        columns.append( "value_unit" )
-        values .append( value_unit )
-        
-        columns.append( "count" )
-        values .append( "%d/%d" % ( ncounts, nregions ) )
-        
-        logging.debug( "columns: %s" % columns )
-        logging.debug( "values:  %s" % values )
-        
-        # improve this with psycopg2.sql – SQL string composition, see http://initd.org/psycopg/docs/sql.html
-        fmt = "%s," * len ( columns )
-        fmt = fmt[ :-1 ]    #  remove trailing comma
-        columns_str = ','.join( columns )
-        sql_insert = "INSERT INTO %s (%s) VALUES ( %s );" % ( table_name, columns_str, fmt )
-        logging.debug( "sql_insert: %d: %s" % ( pu, sql_insert ) )
-        
-        try:
-            cursor.execute( sql_insert, ( values ) )
-        except:
-            logging.error( "insert into temp table %s failed:" % table_name )
-            type_, value, tb = sys.exc_info()
-            logging.error( "%s" % value )
-    
-    # fetch result sorted
-    order_by = ""
-    #for l in range( 1, 1 + nlevels_ntc ):
-    for l in range( 1, 1 + nlevels_use ):
-        if l > 1:
-            order_by += ','
-        order_by += "%s%d" % ( level_prefix, l )
-    
-    try:
-        sql_query = "SELECT * FROM %s ORDER BY %s;" % ( table_name, order_by )
-    except:
-        logging.error( "select from temp table %s failed:" % table_name )
-        type_, value, tb = sys.exc_info()
-        logging.error( "%s" % value )
-        
-    logging.info( sql_query )
-    cursor.execute( sql_query )
-    sql_resp = cursor.fetchall()
-    sql_names = [ desc[ 0 ] for desc in cursor.description ]
-    logging.debug( "%d sql_names: \n%s" % ( len( sql_names ), sql_names ) )
-    
-    if sql_delete:
-        try:
-            cursor.execute( sql_delete )
-        except:
-            logging.error( "deleting temp table %s failed:" % table_name )
-            type_, value, tb = sys.exc_info()
-            logging.error( "%s" % value )
-    
-    connection.commit()
-    cursor.close()
-    connection.close()
-    
-    entry_list_sorted = []
-    for r, row in enumerate( sql_resp ):
-        record = dict( row )
-        logging.debug( "%d: record: %s" % ( r, record ) )
-        
-        # 1 entry per ter_code
-        for ter_code in ter_codes:
-            new_entry = {
-                "datatype"   : params[ "datatype" ],
-                "base_year"  : params[ "base_year" ],
-                "ter_code"   : ter_code,
-                #"value_unit" : unit,
-                "db_row"     : r
-            }
-            
-            path = {}
-            total = ''
-            for key in record:
-                value = record[ key ]
-                if key == "count":
-                    new_entry[ "count" ] = value
-                if key == "value_unit":
-                    #new_entry[ "value_unit" ] = value_label
-                    new_entry[ "value_unit" ] = value
-                
-                if "class" in key:
-                    if value is None:
-                        path[ key ] = ''
-                    else:
-                        path[ key ] = value
-                
-                if ter_code in key:
-                    new_entry[ "total" ] = value
-            
-            new_entry[ "path" ] = path
-            total = new_entry.get( "total" )
-            
-            if skip_empty and total is None or total == '':
-                continue        # do not return empty values in response
-            else:
-                logging.debug( "new_entry: %s" % new_entry )
-            
-            entry_list_sorted.append( new_entry )
-    
-    logging.debug( "%d entries in list_sorted: \n%s" % ( len( entry_list_sorted ), entry_list_sorted ) )
-    str_elapsed = format_secs( time() - time0 )
-    logging.info( "reordering entries took %s" % str_elapsed )
-    
-    return entry_list_sorted
-# reorder_entries()
-"""
-
 
 # [eof]
