@@ -36,7 +36,6 @@ from datetime import date, datetime
 from time import time, localtime
 
 
-
 def get_configparser():
     RUSSIANREPO_CONFIG_PATH = os.environ[ "RUSSIANREPO_CONFIG_PATH" ]
     logging.debug( "RUSSIANREPO_CONFIG_PATH: %s" % RUSSIANREPO_CONFIG_PATH )

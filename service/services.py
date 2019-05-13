@@ -89,6 +89,8 @@ import logging
 import os
 os.environ[ "MPLCONFIGDIR" ] = "/tmp"   # matplotlib (used by pandas) needs tmp a dir
 import pandas as pd                     # csv, excel
+import psycopg2
+import psycopg2.extras
 import random                           # download key
 import re
 import shutil                           # downloads
@@ -183,7 +185,7 @@ def load_years( cursor, datatype, classification ):
     
     sql += " GROUP BY base_year ORDER BY base_year;"
     
-    logging.info( sql )
+    logging.debug( sql )
     
     cursor.execute( sql )
     resp = cursor.fetchall()
@@ -195,7 +197,7 @@ def load_years( cursor, datatype, classification ):
     for year in years:
         if int( year ) not in result:
             result[ int( year ) ] = 0
-    logging.info( "result: %s" % result )
+    logging.debug( "result: %s" % result )
     
     json_string = json.dumps( result, encoding = "utf-8" )
 
@@ -1064,7 +1066,7 @@ def collect_records( records_dict, sql_prefix, path_dict, params, sql_names, sql
     nrecords = len( records_dict.keys() )
     logging.debug( "paths in records_dict %d" % nrecords )
     
-    show_record_dict( sql_prefix, records_dict )
+    #show_record_dict( sql_prefix, records_dict )
     
     str_elapsed = format_secs( time() - time0 )
     logging.info( "collect_records() took %s" % str_elapsed )
@@ -1556,7 +1558,7 @@ def years():
     cursor.close()
     connection.close()
     
-    logging.info( "json_string: %s" % str( json_string ) )
+    logging.debug( "json_string: %s" % str( json_string ) )
     
     logging.debug( "/years return Response" )
     return Response( json_string, mimetype = "application/json; charset=utf-8" )

@@ -6,7 +6,7 @@
 # FL-24-Apr-2018 GridFS
 # FL-29-Jan-2019 aggregate_dataset: fields (old) & records (new) versions
 # FL-09-Apr-2019 adapt aggregate_dataset_records for changed data structure
-# FL-16-Apr-2019 
+# FL-13-May-2019 
 
 import gridfs
 import json
@@ -1147,14 +1147,14 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, params, topic_name,
                 base_year_chain = chain.get( "base_year" )
             except:
                 base_year_chain = '0'
-            logging.info( "base_year_chain: %s" % base_year_chain )
+            logging.debug( "base_year_chain: %s" % base_year_chain )
             
             # 29-Jan-2019 No base_year
-            logging.info( "params: %s" % str( params ) )
-            logging.info( "hist_mod: %s" % hist_mod )
+            logging.debug( "params: %s" % str( params ) )
+            logging.debug( "hist_mod: %s" % hist_mod )
             if hist_mod == 'h' and base_year is None:
                 base_year = params.get( "base_year" )
-            logging.info( "base_year: %s" % base_year )
+            logging.debug( "base_year: %s" % base_year )
             
             # hack
             if base_year_chain is None:
