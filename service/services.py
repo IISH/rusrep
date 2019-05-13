@@ -34,33 +34,26 @@ FL-11-Feb-2019 optional suppression of trailing dots in db queries
 FL-12-Feb-2019 separate functions for old/new historic/modern
 FL-19-Feb-2019 main query split by subclasses, other 2 by indicator length
 FL-30-Apr-2019 downloads adapted
-FL-07-May-2019 cleanup
+FL-13-May-2019 cleanup, reorganize
 
-
+def loadjson( json_dataurl ):                                   # called by documentation()
+def topic_counts( language, datatype ):                         # called by topics()
+def load_years( cursor, datatype, classification ):             # called by years()
+def load_vocabulary( vocab_type ):                              # called by several functions
+def translate_item( item, eng_data ):                           # called by load_vocabulary()
+def translate_vocabulary( vocab_filter, classification = None ):# was called by load_vocabulary()
+def zap_empty_classes( item ):                                  # called by load_vocabulary()
+def aggregate_historic_items( params )                          # called by aggregation()
+def aggregate_modern_items( params )                            # called by aggregation()
 def strip_subclasses( path ):                                   # called by aggregation()
 def group_levels( path_list ):                                  # called by aggregation()
 def json_cache_items( entry_list, params, download_key ):       # called by aggregation() and indicators()
-
 def collect_docs( params, download_dir, download_key ):         # called by aggregation() and filecatalogdata()
-
-def load_years( cursor, datatype, classification ):             # called by years()
-
-def topic_counts( language, datatype ):                         # called by topics()
-
-def zap_empty_classes( item ):                                  # called by load_vocabulary()
-def translate_item( item, eng_data ):                           # called by load_vocabulary()
-def load_vocabulary( vocab_type ):                              # called by several functions
-def translate_vocabulary( vocab_filter, classification = None ):# was called by load_vocabulary()
-
-def loadjson( json_dataurl ):                                   # called by documentation()
-
-def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):  # called by filecatalogdata()
-
+def show_record_dict( dict_name, record_dict, sort = False ):   # called by collect_records()
 def collect_records( record_dict_total, prefix, path_dict, params, eng_data, sql_names, sql_resp ): # called by aggregate_*_items()
 def add_missing_valstr( record_dict_total, params ):            # called by aggregate_historic_items()
 def sort_records( record_dict_total, base_year = None ):        # called by aggregate_*_items()
-def show_record_dict( dict_name, record_dict, sort = False ):   # called by collect_records()
-
+def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):  # called by filecatalogdata()
 def cleanup_downloads( download_dir, time_limit ):              # called by download()
 
 @app.route( '/' )                                               def test():
@@ -72,11 +65,6 @@ def cleanup_downloads( download_dir, time_limit ):              # called by down
 @app.route( "/classes" )                                        def classes():
 #@app.route( "/indicators", methods = [ "POST", "GET" ] )        def indicators():  # no longer used?
 @app.route( "/aggregation", methods = ["POST" ] )               def aggregation():
-
-
-def aggregate_historic_items( params )
-def aggregate_modern_items( params )
-
 @app.route( "/filecatalogdata", methods = [ 'POST', 'GET' ]  )  def filecatalogdata():
 @app.route( "/filecatalogget", methods = [ 'POST', 'GET' ] )    def filecatalogget():
 @app.route( "/download" )                                       def download():
@@ -131,11 +119,489 @@ sys.path.insert( 0, os.path.abspath( os.path.join( os.path.dirname( "__file__" )
 
 use_gridfs = True
 
-#forbidden = [ "classification", "action", "language", "path" ]
 vocab_debug = False
 
 #do_translate = True
 #do_translate = False   # read from English db for language = "en"
+
+
+def loadjson( json_dataurl ):
+    logging.debug( "loadjson() %s" % json_dataurl )
+
+    req = urllib2.Request( json_dataurl )
+    opener = urllib2.build_opener()
+    f = opener.open( req )
+    dataframe = simplejson.load( f )
+    return dataframe
+# loadjson()
+
+
+def topic_counts( language, datatype ):
+    logging.debug( "topic_counts() datatype: %s" % datatype )
+
+    connection = get_connection()
+    cursor = connection.cursor( cursor_factory = psycopg2.extras.NamedTupleCursor )
+
+    sql_count  = "SELECT base_year, COUNT(*) AS count FROM russianrepo_%s" % language
+    sql_count += " WHERE datatype = '%s'" % datatype
+    sql_count += " GROUP BY base_year ORDER BY base_year"
+    logging.debug( sql_count )
+    
+    cursor.execute( sql_count )
+    sql_count_resp = cursor.fetchall()
+    count_dict = {}
+    for count_rec in sql_count_resp:
+        logging.debug( "count_rec: %s" % str( count_rec ) )
+        count_dict[ count_rec.base_year ] = int( count_rec.count )    # strip trailing 'L'
+    
+    logging.debug( "count_dict: %s" % count_dict )
+    
+    return count_dict
+# topic_counts()
+
+
+def load_years( cursor, datatype, classification ):
+    """
+    return a json dictionary with record counts from table russianrepository for the given datatype
+    """
+    logging.debug( "load_years()" )
+    
+    config_parser = get_configparser()
+    years = config_parser.get( "config", "years" ).split( ',' )
+    
+    language = "en"
+    dbtable_name = "dbtable" + '_' + language
+    dbtable  = config_parser.get( "config", dbtable_name )
+    
+    sql = "SELECT base_year, COUNT(*) AS cnt FROM %s" % dbtable
+    
+    if datatype:
+        sql += " WHERE datatype = '%s'" % datatype 
+    
+    if classification == "modern":
+        sql += " AND class1 <> 'no modern classification for this datatype'"
+    
+    sql += " GROUP BY base_year ORDER BY base_year;"
+    
+    logging.info( sql )
+    
+    cursor.execute( sql )
+    resp = cursor.fetchall()
+    result = collections.OrderedDict()
+        
+    for val in resp:
+        if val[ 0 ]:
+            result[ val[ 0 ] ] = val[ 1 ]
+    for year in years:
+        if int( year ) not in result:
+            result[ int( year ) ] = 0
+    logging.info( "result: %s" % result )
+    
+    json_string = json.dumps( result, encoding = "utf-8" )
+
+    return json_string
+# load_years()
+
+
+def load_vocabulary( vocab_type, language, datatype, base_year ):
+    logging.debug( "load_vocabulary() vocab_type: %s, language: %s, datatype: %s, base_year: %s" % 
+        ( vocab_type, language, datatype, base_year ) )
+    
+    vocab_filter = {}
+    
+    if vocab_type == "topics":
+        vocab_name = "ERRHS_Vocabulary_topics"
+    
+    elif vocab_type == "regions":
+        vocab_name = "ERRHS_Vocabulary_regions"
+        if base_year:
+            vocab_filter[ "basisyear" ] = base_year
+    
+    elif vocab_type == "historical":
+        vocab_name = "ERRHS_Vocabulary_histclasses"
+        if datatype:
+            vocab_filter[ "DATATYPE" ] = datatype
+        if base_year:
+            vocab_filter[ "YEAR" ] = base_year
+    
+    elif vocab_type == "modern":
+        vocab_name = "ERRHS_Vocabulary_modclasses"
+        if datatype:
+            vocab_filter[ "DATATYPE" ] = "MOD_" + datatype
+    
+    logging.debug( "vocab_filter: %s" % vocab_filter )
+    
+    eng_data = {}
+    
+    """
+    if do_translate and language == "en":
+    #if language == "en":
+        eng_data = translate_vocabulary( vocab_filter )
+        logging.debug( "translate_vocabulary eng_data items: %d" % len( eng_data ) )
+        logging.debug( "eng_data: %s" % eng_data )
+        
+        units = translate_vocabulary( { "vocabulary": "ERRHS_Vocabulary_units" } )
+        logging.debug( "translate_vocabulary units items: %d" % len( units ) )
+        logging.debug( "units: %s" % units )
+        
+        for item in units:
+            eng_data[ item ] = units[ item ]
+            #logging.debug( "%s => %s" % ( item, units[ item ] ) )
+    """
+    
+    params = {}
+    if vocab_type == "topics":
+        params[ "vocabulary" ] = vocab_name
+    elif vocab_type == "regions":
+        params[ "vocabulary" ] = vocab_name
+        if base_year:
+            params[ "basisyear" ] = base_year
+    else:
+        params[ "vocabulary" ] = vocab_type
+        if base_year:
+            params[ "base_year" ] = base_year
+        params[ "datatype" ] = datatype
+    
+    logging.debug( "params: %s" % params )
+    
+    client = MongoClient()
+    db_name = "vocabulary"
+    if "classes" in vocab_name:
+        db_name += ( '_' + language )
+    logging.debug( "db_name: %s" % db_name )
+    
+    db = client.get_database( db_name )     # get the vocabulary db
+    vocab = db.data.find( params )          # apply the filter parameters
+    
+    data = []
+    uid = 0
+    logging.debug( "processing %d items in vocab %s" % ( vocab.count(), vocab_type ) )
+    for item in vocab:
+        logging.debug( "item: %s" % item )
+        del item[ "_id" ]
+        del item[ "vocabulary" ]
+        topics  = {}
+        regions = {}
+        
+        if vocab_type == "topics":
+            topics[ "topic_id" ]       = item[ "TOPIC_ID" ]
+            topics[ "topic_root" ]     = item[ "TOPIC_ROOT" ]
+            topics[ "topic_name_rus" ] = item[ "RUS" ]
+            topics[ "topic_name" ]     = item[ "EN" ]
+            topics[ "datatype" ]       = item[ "DATATYPE" ]
+            item = topics
+            data.append( item )
+        elif vocab_type == "regions":
+            uid += 1
+            regions[ "region_name" ]     = item[ "RUS" ]
+            regions[ "region_name_eng" ] = item[ "EN" ]
+            regions[ "region_code" ]     = item[ "ID" ]
+            regions[ "region_id" ]       = uid
+            regions[ "region_ord" ]      = 189702
+            regions[ "description" ]     = regions[ "region_name" ]
+            regions[ "active" ]          = 1
+            item = regions
+            data.append( item )
+        elif vocab_type == "modern":
+            item = zap_empty_classes( item )
+            if eng_data:
+                item = translate_item( item, eng_data )
+            data.append( item )
+        elif vocab_type == "historical":
+            item = zap_empty_classes( item )
+            if eng_data:
+                item = translate_item( item, eng_data )
+            data.append( item )
+        else:
+            # Translate first
+            newitem = {}
+            if eng_data:
+                for name in item:
+                    value = item[ name ]
+                    if value in eng_data: 
+                        value = eng_data[ value ]
+                    newitem[ name ] = value
+                item = newitem
+            
+            ( path, output ) = class_collector( item )
+            if path:
+                output[ "path" ] = path
+                data.append( output )
+            else:
+                data.append( item )
+    
+    logging.debug( "%d items in %s data" % ( len( data ), vocab_type ) )
+    for item in data:
+        logging.debug( item )
+    
+    json_hash = {}
+    if vocab_type == "topics":
+        json_hash[ "data" ] = data
+    elif vocab_type == "regions":
+        json_hash[ "regions" ] = data
+    elif vocab_type == "modern":
+        json_hash = data
+    elif vocab_type == "historical":
+        json_hash = data
+    else:
+        json_hash[ "data" ] = data
+        json_data = json.dumps( json_hash, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
+        logging.debug( "load_vocabulary() return %s json_data" % vocab_type )
+        logging.debug( json_data )
+        return json_data
+
+    logging.debug( "load_vocabulary() return %s json_hash" % vocab_type )
+    logging.debug( json_hash )
+    return json_hash
+# load_vocabulary()
+
+
+def translate_item( item, eng_data ):
+    logging.debug( "translate_item()" )
+    #logging.debug( "translate_item() %s \n->\n %s" % ( item, eng_data ) )
+    #logging.debug( item )
+    #logging.debug( eng_data )
+    
+    newitem = {}
+    if eng_data:
+        for name in item:
+            value = item[ name ].encode( "utf-8" )
+            if value in eng_data:
+                logging.debug( "translate_item() %s -> %s" % ( value, eng_data[ value ] ) )
+                value = eng_data[ value ]
+            newitem[ name ] = value
+        item = newitem
+    return item
+# translate_item()
+
+
+def translate_vocabulary( vocab_filter, classification = None ):
+    logging.debug( "translate_vocabulary()" )
+    logging.debug( "vocab_filter: %s" % str( vocab_filter ) )
+    
+    client = MongoClient()
+    dbname = "vocabulary"
+    db = client.get_database( dbname )
+    
+    if classification == "modern":
+        del vocab_filter[ "YEAR" ]  # single "modern" classification for all years
+    
+    if vocab_filter:
+        vocab = db.data.find( vocab_filter )
+    else:
+        vocab = db.data.find()
+    
+    data = {}
+    for i, item in enumerate( vocab ):
+        logging.debug( "%d: %s" % ( i, item ) )
+        if "RUS" in item:
+            try:
+                item[ "RUS" ] = item[ "RUS" ].encode( "utf-8" )
+                item[ "EN" ]  = item[ "EN" ] .encode( "utf-8" )
+                
+                if item[ "RUS" ].startswith( '"' ) and item[ "RUS" ].endswith( '"' ):
+                    item[ "RUS" ] = string[ 1:-1 ]
+                if item[ "EN" ].startswith( '"' ) and item[ "EN" ].endswith( '"' ):
+                    item[ "EN" ] = string[ 1:-1 ]
+                
+                item[ "RUS" ] = re.sub( r'"', '', item[ "RUS" ] )
+                item[ "EN" ]  = re.sub( r'"', '', item[ "EN" ] )
+                
+                # 2-way key/values; E->R & R->E
+                data[ item[ "RUS" ] ] = item[ "EN" ]
+                data[ item[ "EN" ] ]  = item[ "RUS" ] 
+                
+                if vocab_debug:
+                    logging.debug( "%d EN: |%s| RUS: |%s|" % ( i, item[ "EN" ], item[ "RUS" ] ) )
+            except:
+                type_, value, tb = exc_info()
+                logging.error( "translate_vocabulary failed: %s" % value )
+    
+    if vocab_debug:
+        for k, key in enumerate( data ):
+            logging.debug( "%d: key: %s, value: %s" % ( k, key, data[ key ] ) )
+    
+    logging.debug( "translate_vocabulary: return %d items" % len( data ) )
+    
+    return data
+# translate_vocabulary()
+
+
+def zap_empty_classes( item ):
+    logging.debug( "zap_empty_classes()" )
+    # trailing empty classes have value ". ", skip them; 
+    # bridging empty classes have value '.', keep them; 
+    
+    new_item = {}
+    for name in item:
+        value = item[ name ].encode( "utf-8" )
+        # skip trailing ". " in hist & modern classes
+        if ( name.startswith( "histclass" ) or name.startswith( "class" ) ) and value == ". ":
+            #logging.debug( "name: %s, value: %s" % ( name, value ) )
+            #value = ""
+            pass
+        else:
+            new_item[ name ] = value
+    
+    return new_item
+# zap_empty_classes()
+
+
+def aggregate_historic_items( params ):
+    logging.info( "aggregate_historic_items()" )
+    
+    datatype  = params[ "datatype" ]
+    base_year = params[ "base_year" ]
+    
+    #record_dict_total = SortedDict()    # json: dicts => tuples
+    record_dict_total = {}
+    
+    """
+    prefix = num    default query with explicit ter_code specification; 
+                    historic:   value_total = True,  value_numerical = True
+                    modern:     not used
+    prefix = ntc    query without ter_code specification: => all ter_codes requested
+                    historic:   value_total = False, value_numerical = True
+                    modern:     value_total = True,  value_numerical = True
+    prefix = none   hist + modern:  
+                    query with only NANs in value response
+                    historic:   value_total = False, value_numerical = False
+                    modern:     value_total = False, value_numerical = False
+    """
+    
+    # loop over the 2 yes/no subclassess path subgroups
+    path_lists = params[ "path_lists_bysub" ]
+    for pd, path_dict in enumerate( path_lists, start = 1 ):
+        num_path_lists = len( path_lists )
+        show_path_dict( num_path_lists, pd, path_dict )
+        
+        path_list      = path_dict[ "path_list" ]
+        nkeys          = path_dict[ "nkeys" ]
+        add_subclasses = path_dict[ "subclasses" ]
+        
+        params[ "path_list" ] = path_list
+        params[ "num_path_lists" ] = num_path_lists
+        
+        prefix = "num"
+        logging.debug( "-1- = entry_list_%s" % prefix )
+        #show_params( "params -1- = entry_list_total", params )
+        
+        sql_query = make_query( prefix, params, add_subclasses, value_total = True, value_numerical = True )
+        sql_names, sql_resp = execute_only( sql_query, dict_cursor = True )
+        nrecords = collect_records( record_dict_total, prefix, path_dict, params, sql_names, sql_resp )
+        
+    # loop over the equal length path subgroups
+    path_lists = params[ "path_lists_bylen" ]
+    for pd, path_dict in enumerate( path_lists, start = 1 ):
+        path_list      = path_dict[ "path_list" ]
+        nkeys          = path_dict[ "nkeys" ]
+        add_subclasses = path_dict[ "subclasses" ]
+        params[ "path_list" ] = path_list
+        
+        num_path_lists = len( path_list )
+        show_path_dict( num_path_lists, pd, path_dict )
+        
+        prefix = "ntc"
+        entry_list_ntc = []
+        if datatype == "1.02":      # not needed for 1.02 (and much data)
+            logging.info( "SKIPPING -2- = entry_list_ntc" )
+        else:                       # not needed for 1.02 (and much data)
+            logging.debug( "-2- = entry_list_%s" % prefix )
+            #show_params( "prefix=ntc -2- = entry_list_ntc", params )
+            
+            sql_query_ntc = make_query( prefix, params, add_subclasses, value_total = False, value_numerical = True )
+            sql_names_ntc, sql_resp_ntc = execute_only( sql_query_ntc, dict_cursor = True )
+            nrecords = collect_records( record_dict_total, prefix, path_dict, params, sql_names_ntc, sql_resp_ntc )
+        
+        prefix = "none"
+        logging.debug( "-3- = entry_list_%s" % prefix )
+        #show_params( "prefix=none -3- = entry_list_none", params )
+        
+        sql_query_none = make_query( prefix, params, add_subclasses, value_total = False, value_numerical = False )   # non-numbers
+        sql_names_none, sql_resp_none = execute_only( sql_query_none, dict_cursor = True )
+        nrecords = collect_records( record_dict_total, prefix, path_dict, params, sql_names_none, sql_resp_none )
+    
+    add_missing_valstr( record_dict_total, params )
+    
+    # input: data as dict, output: data as list, for compatibility with old list approach
+    entry_list_sorted = sort_records( record_dict_total )
+    #show_entries( "all", entry_list_sorted )
+
+    return entry_list_sorted
+# aggregate_historic_items()
+
+
+def aggregate_modern_items( params ):
+    logging.info( "aggregate_modern_items()" )
+    
+    language       = params[ "language" ]
+    datatype       = params[ "datatype" ]
+    path_lists     = params[ "path_lists_bylen" ]
+    
+    num_path_lists = len( path_lists )
+    
+    #record_dict_total = SortedDict()    # json: dicts => tuples
+    #record_dict_total = {}
+    entry_list_sorted = []
+    
+    # modern classification does not provide a base_year; 
+    # loop over base_years, and accumulate results.
+    base_years = [ "1795", "1858", "1897", "1959", "2002" ]
+    #base_years = [ "1858" ]    # test single year
+    
+    """
+    prefix = num    default query with explicit ter_code specification; 
+                    historic:   value_total = True,  value_numerical = True
+                    modern:     not used
+    prefix = ntc    query without ter_code specification: => all ter_codes requested
+                    historic:   value_total = False, value_numerical = True
+                    modern:     value_total = True,  value_numerical = True
+    prefix = none   hist + modern:  
+                    query with only NANs in value response
+                    historic:   value_total = False, value_numerical = False
+                    modern:     value_total = False, value_numerical = False
+    """
+    
+    for base_year in base_years:
+        logging.info( "base_year: %s" % base_year )
+        params[ "base_year" ] = base_year
+        
+        record_dict_year = {}
+        
+        for pd, path_dict in enumerate( path_lists, start = 1 ):
+            #show_path_dict( num_path_lists, pd, path_dict )
+            
+            path_list = path_dict[ "path_list" ]
+            add_subclasses = path_dict[ "subclasses" ]
+            
+            params[  "path_list" ] = path_list
+            
+            prefix = "ntc"
+            logging.debug( "-1- = entry_list_%s" % prefix )
+            #show_params( "params -1- = entry_list_ntc", params )
+            
+            sql_query_ntc = make_query( prefix, params, add_subclasses, value_total = True, value_numerical = True )
+            sql_names_ntc, sql_resp_ntc = execute_only( sql_query_ntc, dict_cursor = True )
+            nrecords = collect_records( record_dict_year, prefix, path_dict, params, sql_names_ntc, sql_resp_ntc )
+            
+            prefix = "none"
+            logging.debug( "-2- = entry_list_%s" % prefix )
+            #show_params( "params -2- = entry_list_none", params )
+            
+            sql_query_none = make_query( prefix, params, add_subclasses, value_total = False, value_numerical = False )   # non-numbers
+            sql_names_none, sql_resp_none = execute_only( sql_query_none, dict_cursor = True )
+            nrecords = collect_records( record_dict_year, prefix, path_dict, params, sql_names_none, sql_resp_none )
+    
+        #add_missing_valstr( record_dict_year, params )
+    
+        # input: data as dict, output: data as list, for compatibility with old list approach
+        entry_list_year = sort_records( record_dict_year, base_year )           # sort per year
+        entry_list_sorted.extend( entry_list_year )
+    
+    #show_entries( "all", entry_list_sorted )
+
+    return entry_list_sorted
+# aggregate_modern_items()
 
 
 def strip_subclasses( path ):
@@ -478,459 +944,20 @@ def collect_docs( qinput, download_dir, download_key ):
 # collect_docs()
 
 
-def load_years( cursor, datatype, classification ):
-    """
-    return a json dictionary with record counts from table russianrepository for the given datatype
-    """
-    logging.debug( "load_years()" )
+def show_record_dict( prefix, record_dict, sort = False ):
+    logging.info( "show_record_dict() sort %s" % sort )
+    logging.info( "%s # of records: %d" % ( prefix, len( record_dict ) ) )
     
-    config_parser = get_configparser()
-    years = config_parser.get( "config", "years" ).split( ',' )
-    
-    language = "en"
-    dbtable_name = "dbtable" + '_' + language
-    dbtable  = config_parser.get( "config", dbtable_name )
-    
-    sql = "SELECT base_year, COUNT(*) AS cnt FROM %s" % dbtable
-    
-    if datatype:
-        sql += " WHERE datatype = '%s'" % datatype 
-    
-    if classification == "modern":
-        sql += " AND class1 <> 'no modern classification for this datatype'"
-    
-    sql += " GROUP BY base_year ORDER BY base_year;"
-    
-    logging.info( sql )
-    
-    cursor.execute( sql )
-    resp = cursor.fetchall()
-    result = collections.OrderedDict()
-        
-    for val in resp:
-        if val[ 0 ]:
-            result[ val[ 0 ] ] = val[ 1 ]
-    for year in years:
-        if int( year ) not in result:
-            result[ int( year ) ] = 0
-    logging.info( "result: %s" % result )
-    
-    json_string = json.dumps( result, encoding = "utf-8" )
-
-    return json_string
-# load_years()
-
-
-def topic_counts( language, datatype ):
-    logging.debug( "topic_counts() datatype: %s" % datatype )
-
-    connection = get_connection()
-    cursor = connection.cursor( cursor_factory = psycopg2.extras.NamedTupleCursor )
-
-    sql_count  = "SELECT base_year, COUNT(*) AS count FROM russianrepo_%s" % language
-    sql_count += " WHERE datatype = '%s'" % datatype
-    sql_count += " GROUP BY base_year ORDER BY base_year"
-    logging.debug( sql_count )
-    
-    cursor.execute( sql_count )
-    sql_count_resp = cursor.fetchall()
-    count_dict = {}
-    for count_rec in sql_count_resp:
-        logging.debug( "count_rec: %s" % str( count_rec ) )
-        count_dict[ count_rec.base_year ] = int( count_rec.count )    # strip trailing 'L'
-    
-    logging.debug( "count_dict: %s" % count_dict )
-    
-    return count_dict
-# topic_counts()
-
-
-def zap_empty_classes( item ):
-    logging.debug( "zap_empty_classes()" )
-    # trailing empty classes have value ". ", skip them; 
-    # bridging empty classes have value '.', keep them; 
-    
-    new_item = {}
-    for name in item:
-        value = item[ name ].encode( "utf-8" )
-        # skip trailing ". " in hist & modern classes
-        if ( name.startswith( "histclass" ) or name.startswith( "class" ) ) and value == ". ":
-            #logging.debug( "name: %s, value: %s" % ( name, value ) )
-            #value = ""
-            pass
-        else:
-            new_item[ name ] = value
-    
-    return new_item
-# zap_empty_classes()
-
-
-def translate_item( item, eng_data ):
-    logging.debug( "translate_item()" )
-    #logging.debug( "translate_item() %s \n->\n %s" % ( item, eng_data ) )
-    #logging.debug( item )
-    #logging.debug( eng_data )
-    
-    newitem = {}
-    if eng_data:
-        for name in item:
-            value = item[ name ].encode( "utf-8" )
-            if value in eng_data:
-                logging.debug( "translate_item() %s -> %s" % ( value, eng_data[ value ] ) )
-                value = eng_data[ value ]
-            newitem[ name ] = value
-        item = newitem
-    return item
-
-
-
-def load_vocabulary( vocab_type, language, datatype, base_year ):
-    logging.debug( "load_vocabulary() vocab_type: %s, language: %s, datatype: %s, base_year: %s" % 
-        ( vocab_type, language, datatype, base_year ) )
-    
-    vocab_filter = {}
-    
-    if vocab_type == "topics":
-        vocab_name = "ERRHS_Vocabulary_topics"
-    
-    elif vocab_type == "regions":
-        vocab_name = "ERRHS_Vocabulary_regions"
-        if base_year:
-            vocab_filter[ "basisyear" ] = base_year
-    
-    elif vocab_type == "historical":
-        vocab_name = "ERRHS_Vocabulary_histclasses"
-        if datatype:
-            vocab_filter[ "DATATYPE" ] = datatype
-        if base_year:
-            vocab_filter[ "YEAR" ] = base_year
-    
-    elif vocab_type == "modern":
-        vocab_name = "ERRHS_Vocabulary_modclasses"
-        if datatype:
-            vocab_filter[ "DATATYPE" ] = "MOD_" + datatype
-    
-    logging.debug( "vocab_filter: %s" % vocab_filter )
-    
-    eng_data = {}
-    
-    """
-    if do_translate and language == "en":
-    #if language == "en":
-        eng_data = translate_vocabulary( vocab_filter )
-        logging.debug( "translate_vocabulary eng_data items: %d" % len( eng_data ) )
-        logging.debug( "eng_data: %s" % eng_data )
-        
-        units = translate_vocabulary( { "vocabulary": "ERRHS_Vocabulary_units" } )
-        logging.debug( "translate_vocabulary units items: %d" % len( units ) )
-        logging.debug( "units: %s" % units )
-        
-        for item in units:
-            eng_data[ item ] = units[ item ]
-            #logging.debug( "%s => %s" % ( item, units[ item ] ) )
-    """
-    
-    params = {}
-    if vocab_type == "topics":
-        params[ "vocabulary" ] = vocab_name
-    elif vocab_type == "regions":
-        params[ "vocabulary" ] = vocab_name
-        if base_year:
-            params[ "basisyear" ] = base_year
+    if sort:
+        record_list = sorted( record_dict.items() )
+        for t, tup in enumerate( record_list ):
+            logging.info( "# %d path_unit: %s" % ( t, tup[ 0 ] ) )
+            logging.info( "# %d ter_codes: %s" % ( t, str( tup[ 1 ] ) ) )
     else:
-        params[ "vocabulary" ] = vocab_type
-        if base_year:
-            params[ "base_year" ] = base_year
-        params[ "datatype" ] = datatype
-    
-    logging.debug( "params: %s" % params )
-    
-    client = MongoClient()
-    db_name = "vocabulary"
-    if "classes" in vocab_name:
-        db_name += ( '_' + language )
-    logging.debug( "db_name: %s" % db_name )
-    
-    db = client.get_database( db_name )     # get the vocabulary db
-    vocab = db.data.find( params )          # apply the filter parameters
-    
-    data = []
-    uid = 0
-    logging.debug( "processing %d items in vocab %s" % ( vocab.count(), vocab_type ) )
-    for item in vocab:
-        logging.debug( "item: %s" % item )
-        del item[ "_id" ]
-        del item[ "vocabulary" ]
-        topics  = {}
-        regions = {}
-        
-        if vocab_type == "topics":
-            topics[ "topic_id" ]       = item[ "TOPIC_ID" ]
-            topics[ "topic_root" ]     = item[ "TOPIC_ROOT" ]
-            topics[ "topic_name_rus" ] = item[ "RUS" ]
-            topics[ "topic_name" ]     = item[ "EN" ]
-            topics[ "datatype" ]       = item[ "DATATYPE" ]
-            item = topics
-            data.append( item )
-        elif vocab_type == "regions":
-            uid += 1
-            regions[ "region_name" ]     = item[ "RUS" ]
-            regions[ "region_name_eng" ] = item[ "EN" ]
-            regions[ "region_code" ]     = item[ "ID" ]
-            regions[ "region_id" ]       = uid
-            regions[ "region_ord" ]      = 189702
-            regions[ "description" ]     = regions[ "region_name" ]
-            regions[ "active" ]          = 1
-            item = regions
-            data.append( item )
-        elif vocab_type == "modern":
-            item = zap_empty_classes( item )
-            if eng_data:
-                item = translate_item( item, eng_data )
-            data.append( item )
-        elif vocab_type == "historical":
-            item = zap_empty_classes( item )
-            if eng_data:
-                item = translate_item( item, eng_data )
-            data.append( item )
-        else:
-            # Translate first
-            newitem = {}
-            if eng_data:
-                for name in item:
-                    value = item[ name ]
-                    if value in eng_data: 
-                        value = eng_data[ value ]
-                    newitem[ name ] = value
-                item = newitem
-            
-            ( path, output ) = class_collector( item )
-            if path:
-                output[ "path" ] = path
-                data.append( output )
-            else:
-                data.append( item )
-    
-    logging.debug( "%d items in %s data" % ( len( data ), vocab_type ) )
-    for item in data:
-        logging.debug( item )
-    
-    json_hash = {}
-    if vocab_type == "topics":
-        json_hash[ "data" ] = data
-    elif vocab_type == "regions":
-        json_hash[ "regions" ] = data
-    elif vocab_type == "modern":
-        json_hash = data
-    elif vocab_type == "historical":
-        json_hash = data
-    else:
-        json_hash[ "data" ] = data
-        json_data = json.dumps( json_hash, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
-        logging.debug( "load_vocabulary() return %s json_data" % vocab_type )
-        logging.debug( json_data )
-        return json_data
-
-    logging.debug( "load_vocabulary() return %s json_hash" % vocab_type )
-    logging.debug( json_hash )
-    return json_hash
-# load_vocabulary()
-
-
-def translate_vocabulary( vocab_filter, classification = None ):
-    logging.debug( "translate_vocabulary()" )
-    logging.debug( "vocab_filter: %s" % str( vocab_filter ) )
-    
-    client = MongoClient()
-    dbname = "vocabulary"
-    db = client.get_database( dbname )
-    
-    if classification == "modern":
-        del vocab_filter[ "YEAR" ]  # single "modern" classification for all years
-    
-    if vocab_filter:
-        vocab = db.data.find( vocab_filter )
-    else:
-        vocab = db.data.find()
-    
-    data = {}
-    for i, item in enumerate( vocab ):
-        logging.debug( "%d: %s" % ( i, item ) )
-        if "RUS" in item:
-            try:
-                item[ "RUS" ] = item[ "RUS" ].encode( "utf-8" )
-                item[ "EN" ]  = item[ "EN" ] .encode( "utf-8" )
-                
-                if item[ "RUS" ].startswith( '"' ) and item[ "RUS" ].endswith( '"' ):
-                    item[ "RUS" ] = string[ 1:-1 ]
-                if item[ "EN" ].startswith( '"' ) and item[ "EN" ].endswith( '"' ):
-                    item[ "EN" ] = string[ 1:-1 ]
-                
-                item[ "RUS" ] = re.sub( r'"', '', item[ "RUS" ] )
-                item[ "EN" ]  = re.sub( r'"', '', item[ "EN" ] )
-                
-                # 2-way key/values; E->R & R->E
-                data[ item[ "RUS" ] ] = item[ "EN" ]
-                data[ item[ "EN" ] ]  = item[ "RUS" ] 
-                
-                if vocab_debug:
-                    logging.debug( "%d EN: |%s| RUS: |%s|" % ( i, item[ "EN" ], item[ "RUS" ] ) )
-            except:
-                type_, value, tb = exc_info()
-                logging.error( "translate_vocabulary failed: %s" % value )
-    
-    if vocab_debug:
-        for k, key in enumerate( data ):
-            logging.debug( "%d: key: %s, value: %s" % ( k, key, data[ key ] ) )
-    
-    logging.debug( "translate_vocabulary: return %d items" % len( data ) )
-    
-    return data
-# translate_vocabulary()
-
-
-def loadjson( json_dataurl ):
-    logging.debug( "loadjson() %s" % json_dataurl )
-
-    req = urllib2.Request( json_dataurl )
-    opener = urllib2.build_opener()
-    f = opener.open( req )
-    dataframe = simplejson.load( f )
-    return dataframe
-# loadjson()
-
-
-def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
-    logging.debug( "process_csv() %s" % csv_filename )
-    csv_pathname = os.path.join( csv_dir, csv_filename )
-
-    # dataverse column names
-    dv_column_names = [
-        "id", 
-        "territory", 
-        "ter_code", 
-        "town", 
-        "district", 
-        "year", 
-        "month", 
-        "value", 
-        "value_unit", 
-        "value_label", 
-        "datatype", 
-        "histclass1", 
-        "histclass2", 
-        "histclass3", 
-        "histclass4", 
-        "histclass5", 
-        "histclass6", 
-        "histclass7", 
-        "histclass8", 
-        "histclass9", 
-        "histclass10", 
-        "class1", 
-        "class2", 
-        "class3", 
-        "class4", 
-        "class5", 
-        "class6", 
-        "class7", 
-        "class8", 
-        "class9", 
-        "class10", 
-        "comment_source", 
-        "source", 
-        "volume", 
-        "page", 
-        "naborshik_id", 
-        "comment_naborshik", 
-        "base_year"
-    ]
-    
-    delimiter = b'|'    # leading b required with __future__, otherwise: TypeError: "delimiter" must be an 1-character string
-    with open( csv_pathname, "rb" ) as csv_file:
-        csv_reader = csv.reader( csv_file, delimiter = delimiter )
-        for row in csv_reader:
-            logging.debug( ", ".join( row ) )
-    
-    if to_xlsx:
-        #sep = str( u'|' ).encode( "utf-8" )
-        #sep = str( delimiter ).encode( "utf-8" )       # "encode method has been disabled in newbytes"
-        sep = delimiter
-        kwargs_pandas = { 
-            "sep" : sep 
-            #,"line_terminator" : '\n'   # TypeError: parser_f() got an unexpected keyword argument "line_terminator"
-        }
-        
-        df1 = pd.read_csv( csv_pathname, **kwargs_pandas )
-        
-        # sort by ter_code and histclasses
-        sort_columns = []
-        sort_columns.append( "TER_CODE" )
-        for l in range( 10 ):
-            l_str = "HISTCLASS%d" % ( l + 1 )
-            sort_columns.append( l_str )
-        logging.debug( "sort by: %s" % sort_columns )
-        df1 = df1.sort_values( by = sort_columns )
-        
-        root, ext = os.path.splitext( csv_filename )
-        xlsx_filename = root + ".xlsx"
-        xlsx_pathname = os.path.join( download_dir, xlsx_filename )
-        
-        writer = pd.ExcelWriter( xlsx_pathname )
-        df1.to_excel( writer, "Table", encoding = "utf-8", index = False )
-        
-        # Create a Pandas dataframe from the data.
-        if language == "en":
-            df2 = pd.DataFrame( { " ": [ 
-                "",
-                "",
-                "Creative Commons License", 
-                "This work is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License.", 
-                "http://creativecommons.org/licenses/by-nc-sa/4.0/", 
-                "", 
-                "By downloading and using data from the Electronic Repository of Russian Historical Statistics the user agrees to the terms of this license. Providing a correct reference to the resource is a formal requirement of the license: ", 
-                "Kessler, Gijs and Andrei Markevich (%d), Electronic Repository of Russian Historical Statistics, 18th - 21st centuries, http://ristat.org/" % date.today().year, 
-            ] } )
-            """
-            c = ws_cr.cell( row = 4, column = 0 )
-            c.value = "Creative Commons License"
-            c = ws_cr.cell( row = 5, column = 0 )
-            c.value = "This work is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License."
-            c = ws_cr.cell( row = 6, column = 0 )
-            c.value = "http://creativecommons.org/licenses/by-nc-sa/4.0/"
-            c = ws_cr.cell( row = 8, column = 0 )
-            c.value = "By downloading and using data from the Electronic Repository of Russian Historical Statistics the user agrees to the terms of this license. Providing a correct reference to the resource is a formal requirement of the license: "
-            c = ws_cr.cell( row = 9, column = 0 )
-            c.value = "Kessler, Gijs and Andrei Markevich (%d), Electronic Repository of Russian Historical Statistics, 18th - 21st centuries, http://ristat.org/" % date.today().year
-            """
-        elif language == "ru":
-            df2 = pd.DataFrame( { " ": [ 
-                "",
-                "",
-                "Лицензия Creative Commons", 
-                "Это произведение доступно по лицензии Creative Commons «Attribution-NonCommercial-ShareAlike» («Атрибуция — Некоммерческое использование — На тех же условиях») 4.0 Всемирная.", 
-                "http://creativecommons.org/licenses/by-nc-sa/4.0/deed.ru", 
-                "",
-                "Скачивая и начиная использовать данные пользователь автоматически соглашается с этой лицензией. Наличие корректно оформленной ссылки является обязательным требованием лицензии:", 
-                "Кесслер Хайс и Маркевич Андрей (%d), Электронный архив Российской исторической статистики, XVIII – XXI вв., [Электронный ресурс] : [сайт]. — Режим доступа: http://ristat.org/" % date.today().year, 
-            ] } )
-            """
-            c = ws_cr.cell( row = 4, column = 0 )
-            c.value = "Лицензия Creative Commons"
-            c = ws_cr.cell( row = 5, column = 0 )
-            c.value = "Это произведение доступно по лицензии Creative Commons «Attribution-NonCommercial-ShareAlike» («Атрибуция — Некоммерческое использование — На тех же условиях») 4.0 Всемирная."
-            c = ws_cr.cell( row = 6, column = 0 )
-            c.value = "http://creativecommons.org/licenses/by-nc-sa/4.0/deed.ru"
-            c = ws_cr.cell( row = 8, column = 0 )
-            c.value = "Скачивая и начиная использовать данные пользователь автоматически соглашается с этой лицензией. Наличие корректно оформленной ссылки является обязательным требованием лицензии:"
-            c = ws_cr.cell( row = 9, column = 0 )
-            c.value = "Кесслер Хайс и Маркевич Андрей (%d), Электронный архив Российской исторической статистики, XVIII – XXI вв., [Электронный ресурс] : [сайт]. — Режим доступа: http://ristat.org/" % date.today().year
-            """
-        
-        # Convert the dataframe to an XlsxWriter Excel object.
-        df2.to_excel( writer, sheet_name = "Copyrights", encoding = "utf-8", index = False )
-        writer.save()
-# process_csv()
+        for r, ( key, val ) in enumerate( record_dict.items() ):
+            logging.info( "# %d path_unit: %s" % ( r, key ) )
+            logging.info( "# %d ter_codes: %s" % ( r, str( val ) ) )
+# show_record_dict()
 
 
 def collect_records( records_dict, sql_prefix, path_dict, params, sql_names, sql_resp ):
@@ -1126,20 +1153,137 @@ def sort_records( records_dict, base_year = None ):
 # sort_records()
 
 
-def show_record_dict( prefix, record_dict, sort = False ):
-    logging.info( "show_record_dict() sort %s" % sort )
-    logging.info( "%s # of records: %d" % ( prefix, len( record_dict ) ) )
+def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
+    logging.debug( "process_csv() %s" % csv_filename )
+    csv_pathname = os.path.join( csv_dir, csv_filename )
+
+    # dataverse column names
+    dv_column_names = [
+        "id", 
+        "territory", 
+        "ter_code", 
+        "town", 
+        "district", 
+        "year", 
+        "month", 
+        "value", 
+        "value_unit", 
+        "value_label", 
+        "datatype", 
+        "histclass1", 
+        "histclass2", 
+        "histclass3", 
+        "histclass4", 
+        "histclass5", 
+        "histclass6", 
+        "histclass7", 
+        "histclass8", 
+        "histclass9", 
+        "histclass10", 
+        "class1", 
+        "class2", 
+        "class3", 
+        "class4", 
+        "class5", 
+        "class6", 
+        "class7", 
+        "class8", 
+        "class9", 
+        "class10", 
+        "comment_source", 
+        "source", 
+        "volume", 
+        "page", 
+        "naborshik_id", 
+        "comment_naborshik", 
+        "base_year"
+    ]
     
-    if sort:
-        record_list = sorted( record_dict.items() )
-        for t, tup in enumerate( record_list ):
-            logging.info( "# %d path_unit: %s" % ( t, tup[ 0 ] ) )
-            logging.info( "# %d ter_codes: %s" % ( t, str( tup[ 1 ] ) ) )
-    else:
-        for r, ( key, val ) in enumerate( record_dict.items() ):
-            logging.info( "# %d path_unit: %s" % ( r, key ) )
-            logging.info( "# %d ter_codes: %s" % ( r, str( val ) ) )
-# show_record_dict()
+    delimiter = b'|'    # leading b required with __future__, otherwise: TypeError: "delimiter" must be an 1-character string
+    with open( csv_pathname, "rb" ) as csv_file:
+        csv_reader = csv.reader( csv_file, delimiter = delimiter )
+        for row in csv_reader:
+            logging.debug( ", ".join( row ) )
+    
+    if to_xlsx:
+        #sep = str( u'|' ).encode( "utf-8" )
+        #sep = str( delimiter ).encode( "utf-8" )       # "encode method has been disabled in newbytes"
+        sep = delimiter
+        kwargs_pandas = { 
+            "sep" : sep 
+            #,"line_terminator" : '\n'   # TypeError: parser_f() got an unexpected keyword argument "line_terminator"
+        }
+        
+        df1 = pd.read_csv( csv_pathname, **kwargs_pandas )
+        
+        # sort by ter_code and histclasses
+        sort_columns = []
+        sort_columns.append( "TER_CODE" )
+        for l in range( 10 ):
+            l_str = "HISTCLASS%d" % ( l + 1 )
+            sort_columns.append( l_str )
+        logging.debug( "sort by: %s" % sort_columns )
+        df1 = df1.sort_values( by = sort_columns )
+        
+        root, ext = os.path.splitext( csv_filename )
+        xlsx_filename = root + ".xlsx"
+        xlsx_pathname = os.path.join( download_dir, xlsx_filename )
+        
+        writer = pd.ExcelWriter( xlsx_pathname )
+        df1.to_excel( writer, "Table", encoding = "utf-8", index = False )
+        
+        # Create a Pandas dataframe from the data.
+        if language == "en":
+            df2 = pd.DataFrame( { " ": [ 
+                "",
+                "",
+                "Creative Commons License", 
+                "This work is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License.", 
+                "http://creativecommons.org/licenses/by-nc-sa/4.0/", 
+                "", 
+                "By downloading and using data from the Electronic Repository of Russian Historical Statistics the user agrees to the terms of this license. Providing a correct reference to the resource is a formal requirement of the license: ", 
+                "Kessler, Gijs and Andrei Markevich (%d), Electronic Repository of Russian Historical Statistics, 18th - 21st centuries, http://ristat.org/" % date.today().year, 
+            ] } )
+            """
+            c = ws_cr.cell( row = 4, column = 0 )
+            c.value = "Creative Commons License"
+            c = ws_cr.cell( row = 5, column = 0 )
+            c.value = "This work is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License."
+            c = ws_cr.cell( row = 6, column = 0 )
+            c.value = "http://creativecommons.org/licenses/by-nc-sa/4.0/"
+            c = ws_cr.cell( row = 8, column = 0 )
+            c.value = "By downloading and using data from the Electronic Repository of Russian Historical Statistics the user agrees to the terms of this license. Providing a correct reference to the resource is a formal requirement of the license: "
+            c = ws_cr.cell( row = 9, column = 0 )
+            c.value = "Kessler, Gijs and Andrei Markevich (%d), Electronic Repository of Russian Historical Statistics, 18th - 21st centuries, http://ristat.org/" % date.today().year
+            """
+        elif language == "ru":
+            df2 = pd.DataFrame( { " ": [ 
+                "",
+                "",
+                "Лицензия Creative Commons", 
+                "Это произведение доступно по лицензии Creative Commons «Attribution-NonCommercial-ShareAlike» («Атрибуция — Некоммерческое использование — На тех же условиях») 4.0 Всемирная.", 
+                "http://creativecommons.org/licenses/by-nc-sa/4.0/deed.ru", 
+                "",
+                "Скачивая и начиная использовать данные пользователь автоматически соглашается с этой лицензией. Наличие корректно оформленной ссылки является обязательным требованием лицензии:", 
+                "Кесслер Хайс и Маркевич Андрей (%d), Электронный архив Российской исторической статистики, XVIII – XXI вв., [Электронный ресурс] : [сайт]. — Режим доступа: http://ristat.org/" % date.today().year, 
+            ] } )
+            """
+            c = ws_cr.cell( row = 4, column = 0 )
+            c.value = "Лицензия Creative Commons"
+            c = ws_cr.cell( row = 5, column = 0 )
+            c.value = "Это произведение доступно по лицензии Creative Commons «Attribution-NonCommercial-ShareAlike» («Атрибуция — Некоммерческое использование — На тех же условиях») 4.0 Всемирная."
+            c = ws_cr.cell( row = 6, column = 0 )
+            c.value = "http://creativecommons.org/licenses/by-nc-sa/4.0/deed.ru"
+            c = ws_cr.cell( row = 8, column = 0 )
+            c.value = "Скачивая и начиная использовать данные пользователь автоматически соглашается с этой лицензией. Наличие корректно оформленной ссылки является обязательным требованием лицензии:"
+            c = ws_cr.cell( row = 9, column = 0 )
+            c.value = "Кесслер Хайс и Маркевич Андрей (%d), Электронный архив Российской исторической статистики, XVIII – XXI вв., [Электронный ресурс] : [сайт]. — Режим доступа: http://ristat.org/" % date.today().year
+            """
+        
+        # Convert the dataframe to an XlsxWriter Excel object.
+        df2.to_excel( writer, sheet_name = "Copyrights", encoding = "utf-8", index = False )
+        writer.save()
+# process_csv()
 
 
 def cleanup_downloads( download_dir, time_limit ):
@@ -1640,163 +1784,6 @@ def aggregation():
 # /aggregation aggregation()
 
 
-def aggregate_historic_items( params ):
-    logging.info( "aggregate_historic_items()" )
-    
-    datatype  = params[ "datatype" ]
-    base_year = params[ "base_year" ]
-    
-    #record_dict_total = SortedDict()    # json: dicts => tuples
-    record_dict_total = {}
-    
-    """
-    prefix = num    default query with explicit ter_code specification; 
-                    historic:   value_total = True,  value_numerical = True
-                    modern:     not used
-    prefix = ntc    query without ter_code specification: => all ter_codes requested
-                    historic:   value_total = False, value_numerical = True
-                    modern:     value_total = True,  value_numerical = True
-    prefix = none   hist + modern:  
-                    query with only NANs in value response
-                    historic:   value_total = False, value_numerical = False
-                    modern:     value_total = False, value_numerical = False
-    """
-    
-    # loop over the 2 yes/no subclassess path subgroups
-    path_lists = params[ "path_lists_bysub" ]
-    for pd, path_dict in enumerate( path_lists, start = 1 ):
-        num_path_lists = len( path_lists )
-        show_path_dict( num_path_lists, pd, path_dict )
-        
-        path_list      = path_dict[ "path_list" ]
-        nkeys          = path_dict[ "nkeys" ]
-        add_subclasses = path_dict[ "subclasses" ]
-        
-        params[ "path_list" ] = path_list
-        params[ "num_path_lists" ] = num_path_lists
-        
-        prefix = "num"
-        logging.debug( "-1- = entry_list_%s" % prefix )
-        #show_params( "params -1- = entry_list_total", params )
-        
-        sql_query = make_query( prefix, params, add_subclasses, value_total = True, value_numerical = True )
-        sql_names, sql_resp = execute_only( sql_query, dict_cursor = True )
-        nrecords = collect_records( record_dict_total, prefix, path_dict, params, sql_names, sql_resp )
-        
-    # loop over the equal length path subgroups
-    path_lists = params[ "path_lists_bylen" ]
-    for pd, path_dict in enumerate( path_lists, start = 1 ):
-        path_list      = path_dict[ "path_list" ]
-        nkeys          = path_dict[ "nkeys" ]
-        add_subclasses = path_dict[ "subclasses" ]
-        params[ "path_list" ] = path_list
-        
-        num_path_lists = len( path_list )
-        show_path_dict( num_path_lists, pd, path_dict )
-        
-        prefix = "ntc"
-        entry_list_ntc = []
-        if datatype == "1.02":      # not needed for 1.02 (and much data)
-            logging.info( "SKIPPING -2- = entry_list_ntc" )
-        else:                       # not needed for 1.02 (and much data)
-            logging.debug( "-2- = entry_list_%s" % prefix )
-            #show_params( "prefix=ntc -2- = entry_list_ntc", params )
-            
-            sql_query_ntc = make_query( prefix, params, add_subclasses, value_total = False, value_numerical = True )
-            sql_names_ntc, sql_resp_ntc = execute_only( sql_query_ntc, dict_cursor = True )
-            nrecords = collect_records( record_dict_total, prefix, path_dict, params, sql_names_ntc, sql_resp_ntc )
-        
-        prefix = "none"
-        logging.debug( "-3- = entry_list_%s" % prefix )
-        #show_params( "prefix=none -3- = entry_list_none", params )
-        
-        sql_query_none = make_query( prefix, params, add_subclasses, value_total = False, value_numerical = False )   # non-numbers
-        sql_names_none, sql_resp_none = execute_only( sql_query_none, dict_cursor = True )
-        nrecords = collect_records( record_dict_total, prefix, path_dict, params, sql_names_none, sql_resp_none )
-    
-    add_missing_valstr( record_dict_total, params )
-    
-    # input: data as dict, output: data as list, for compatibility with old list approach
-    entry_list_sorted = sort_records( record_dict_total )
-    #show_entries( "all", entry_list_sorted )
-
-    return entry_list_sorted
-# aggregate_historic_items()
-
-
-def aggregate_modern_items( params ):
-    logging.info( "aggregate_modern_items()" )
-    
-    language       = params[ "language" ]
-    datatype       = params[ "datatype" ]
-    path_lists     = params[ "path_lists_bylen" ]
-    
-    num_path_lists = len( path_lists )
-    
-    #record_dict_total = SortedDict()    # json: dicts => tuples
-    #record_dict_total = {}
-    entry_list_sorted = []
-    
-    # modern classification does not provide a base_year; 
-    # loop over base_years, and accumulate results.
-    base_years = [ "1795", "1858", "1897", "1959", "2002" ]
-    #base_years = [ "1858" ]    # test single year
-    
-    """
-    prefix = num    default query with explicit ter_code specification; 
-                    historic:   value_total = True,  value_numerical = True
-                    modern:     not used
-    prefix = ntc    query without ter_code specification: => all ter_codes requested
-                    historic:   value_total = False, value_numerical = True
-                    modern:     value_total = True,  value_numerical = True
-    prefix = none   hist + modern:  
-                    query with only NANs in value response
-                    historic:   value_total = False, value_numerical = False
-                    modern:     value_total = False, value_numerical = False
-    """
-    
-    for base_year in base_years:
-        logging.info( "base_year: %s" % base_year )
-        params[ "base_year" ] = base_year
-        
-        record_dict_year = {}
-        
-        for pd, path_dict in enumerate( path_lists, start = 1 ):
-            #show_path_dict( num_path_lists, pd, path_dict )
-            
-            path_list = path_dict[ "path_list" ]
-            add_subclasses = path_dict[ "subclasses" ]
-            
-            params[  "path_list" ] = path_list
-            
-            prefix = "ntc"
-            logging.debug( "-1- = entry_list_%s" % prefix )
-            #show_params( "params -1- = entry_list_ntc", params )
-            
-            sql_query_ntc = make_query( prefix, params, add_subclasses, value_total = True, value_numerical = True )
-            sql_names_ntc, sql_resp_ntc = execute_only( sql_query_ntc, dict_cursor = True )
-            nrecords = collect_records( record_dict_year, prefix, path_dict, params, sql_names_ntc, sql_resp_ntc )
-            
-            prefix = "none"
-            logging.debug( "-2- = entry_list_%s" % prefix )
-            #show_params( "params -2- = entry_list_none", params )
-            
-            sql_query_none = make_query( prefix, params, add_subclasses, value_total = False, value_numerical = False )   # non-numbers
-            sql_names_none, sql_resp_none = execute_only( sql_query_none, dict_cursor = True )
-            nrecords = collect_records( record_dict_year, prefix, path_dict, params, sql_names_none, sql_resp_none )
-    
-        #add_missing_valstr( record_dict_year, params )
-    
-        # input: data as dict, output: data as list, for compatibility with old list approach
-        entry_list_year = sort_records( record_dict_year, base_year )           # sort per year
-        entry_list_sorted.extend( entry_list_year )
-    
-    #show_entries( "all", entry_list_sorted )
-
-    return entry_list_sorted
-# aggregate_modern_items()
-
-
 # Filecatalog - Create filecatalog download link
 @app.route( "/filecatalogdata", methods = [ "POST", "GET" ] )
 def filecatalogdata():
@@ -1830,14 +1817,14 @@ def filecatalogdata():
     
     logging.debug( "language: %s" % language )
     
-    handle_names = [                # per 2018.04.23
-        "hdl_errhs_population",     # ERRHS_1   39 files
-        "hdl_errhs_labour",         # ERRHS_2    5 files
+    handle_names = [                # per 2019.05.13
+        "hdl_errhs_population",     # ERRHS_1   40 files
+        "hdl_errhs_labour",         # ERRHS_2   12 files
         "hdl_errhs_industry",       # ERRHS_3    0 files
         "hdl_errhs_agriculture",    # ERRHS_4   10 files
         "hdl_errhs_services",       # ERRHS_5    0 files
         "hdl_errhs_capital",        # ERRHS_6    0 files
-        "hdl_errhs_land"            # ERRHS_7   10 files
+        "hdl_errhs_land"            # ERRHS_7    2 files
     ]
     
     configparser = get_configparser()
