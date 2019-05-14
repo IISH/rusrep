@@ -874,7 +874,9 @@ def filter_csv( config_parser, csv_dir, in_filename ):
             
             # FL-06-Mar-2019 integer strings became float strings ending with .0
             # should be solved when writing csv files, but pandas did not do what i want!
-            if in_filename.startswith( "ERRHS_1_02_data_1897" ):
+            #if in_filename.startswith( "ERRHS_1_02_data_1897" ):
+            # FL-14-May-2019 also the other years
+            if in_filename.startswith( "ERRHS_1_02_data_" ):
                 # check some [hist]class values
                 histclass1_pos = csv_header_names.index( "histclass1" )
                 in_field = fields[ histclass1_pos ]

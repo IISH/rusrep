@@ -4,6 +4,7 @@
 """
 VT-06-Jul-2016 latest change by VT
 FL-09-Jan-2018 language parameter
+FL-14-May-2019 pd.concat sort = True
 """
 
 # future-0.16.0 imports for Python 2/3 compatibility
@@ -79,7 +80,8 @@ def vocabulary( host, apikey, ids, abs_ascii_dir ):
     
     logging.info( "lexicon contains %d vocabularies containing %d items in total" % ( len( lexicon ), len_totvocab ) )
     # concatenate the vocabularies with pandas
-    return pd.concat( lexicon )
+    return pd.concat( lexicon, sort = True )
+
 
 
 def classupdate( cpath, language ):

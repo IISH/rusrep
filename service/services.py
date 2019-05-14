@@ -1,11 +1,6 @@
 # -*- coding: utf-8 -*-
 
 """
-TODO CHECK
-collect_docs() is called by aggregation() and filecatalogdata(). Double action?
-TODO
-Reorder functions
-
 TODO
 The functions aggregate_historic_items_redun() and aggregate_modern_items_redun() return a sorted list of dicts. 
 For compatbility with the sequel functions json_cache_items() and the functions in preprocessor.py, 
@@ -35,11 +30,13 @@ FL-12-Feb-2019 separate functions for old/new historic/modern
 FL-19-Feb-2019 main query split by subclasses, other 2 by indicator length
 FL-30-Apr-2019 downloads adapted
 FL-13-May-2019 cleanup, reorganize
+FL-14-May-2019 filecatalogue download Excel conversion spurious '.0'
 
 def loadjson( json_dataurl ):                                   # called by documentation()
 def topic_counts( language, datatype ):                         # called by topics()
 def load_years( cursor, datatype, classification ):             # called by years()
-def load_vocabulary( vocab_type ):                              # called by several functions
+def load_vocabulary( vocab_type, language, datatype, base_year ):       # called by several functions
+def load_vocab( config_parser, vocab_fname, vocab, pos_rus, pos_eng ):  # called by process_csv()
 def translate_item( item, eng_data ):                           # called by load_vocabulary()
 def translate_vocabulary( vocab_filter, classification = None ):# was called by load_vocabulary()
 def zap_empty_classes( item ):                                  # called by load_vocabulary()
@@ -81,6 +78,7 @@ import sys
 reload( sys )
 sys.setdefaultencoding( "utf8" )
 
+import codecs
 import collections                      # OrderedDict()
 import csv
 import gridfs                           # mongodb
@@ -356,6 +354,117 @@ def load_vocabulary( vocab_type, language, datatype, base_year ):
     logging.debug( json_hash )
     return json_hash
 # load_vocabulary()
+
+
+def load_vocab( config_parser, vocab_fname, vocab, pos_rus, pos_eng ):
+    # load_vocab() from autoupdate.py
+    global Nexcept
+    logging.info( "load_vocab() vocab_fname: %s" % vocab_fname )
+    # if pos_extar is not None, it is needed to make the keys and/or values unique
+    handle_name = "hdl_vocabularies"
+    tmp_dir = config_parser.get( "config", "tmppath" )
+    vocab_dir = os.path.join( tmp_dir, "dataverse", "vocab/csv", handle_name )
+    logging.info( "vocab_dir: %s" % vocab_dir )
+    vocab_path = os.path.join( vocab_dir, vocab_fname )
+    logging.info( "vocab_path: %s" % vocab_path )
+    
+    #vocab_file = open( vocab_path, "r" )
+    vocab_file = codecs.open( vocab_path, "r", encoding = 'utf-8' )
+    
+    nline = 0
+    for csv_line in iter( vocab_file ):
+        csv_line.strip()        # zap '\n'
+        #logging.debug( csv_line )
+        if nline == 0:
+            pass        # skip header
+        else:
+            parts = csv_line.split( '|' )
+            rus = parts[ pos_rus ].strip()
+            eng = parts[ pos_eng ].strip()
+            
+            
+            if vocab_fname == "ERRHS_Vocabulary_regions.csv":
+                # The regions (territorium) vocab is special: 
+                # vocab = dict(), not bidict()
+                # the original rus terms contain a lot of noise, but the codes 
+                # and eng translations are unique and OK. For both forward and 
+                # inverse lookup the code is the key, and either rus or eng the value. 
+                terr = parts[ 0 ].strip()
+                terr_d = { "terr" : terr }
+                terr_s = json.dumps( terr_d )
+                rus_eng_d = { "rus" : rus, "eng" : eng }
+                logging.debug( "terr: %s, rus_eng: %s %s" % ( terr, rus_eng_d[ "rus" ], rus_eng_d[ "eng" ] ) )
+                rus_eng_s = json.dumps( rus_eng_d )
+                try:
+                    vocab[ terr_s ] = rus_eng_s
+                except:
+                    Nexcept += 1
+                    type_, value, tb = sys.exc_info()
+                    msg = "%s: %s %s" % ( type_, vocab_fname, value )
+                    logging.error( msg )
+                    #sys.stderr.write( "%s\n" % msg )
+            elif vocab_fname == "ERRHS_Vocabulary_units.csv":
+                if pos_rus == pos_eng:              # a bit of a hack
+                    # vocab is a dict(), not bidict(), 
+                    # used for decimals, either from rus or from eng
+                    decimals_str = parts[ 2 ]
+                    decimals = int( float( decimals_str.strip() ) )     # strip(): sometimes a spurious space
+                    eng_d = decimals                # using value for decimals
+                    if pos_rus == 0:                # rus => decimals
+                        logging.debug( "rus: %s, decimals: %d" % ( rus, decimals ) )
+                        vocab[ rus ] = decimals     # using key for rus
+                    else:                           # eng => decimals
+                        logging.debug( "eng: %s, decimals: %d" % ( eng, decimals ) )
+                        vocab[ eng ] = decimals     # using key for eng
+                else:
+                    # vocab is a bidict(), not dict()
+                    # used for normal bidict translation
+                    logging.debug( "rus: %s, eng: %s" % ( rus, eng ) )
+                    rus_s = json.dumps( { "rus" : rus } )
+                    eng_s = json.dumps( { "eng" : eng } )
+                    vocab[ rus_s ] = eng_s
+            else:
+                if vocab_fname == "ERRHS_Vocabulary_histclasses.csv":
+                    byear = parts[ 2 ].strip()
+                    dtype = parts[ 3 ].strip()
+                    rus_d = { "rus" : rus, "byear" : byear, "dtype" : dtype }
+                    eng_d = { "eng" : eng, "byear" : byear, "dtype" : dtype }
+                
+                elif vocab_fname == "ERRHS_Vocabulary_modclasses.csv":
+                    dtype = parts[ 2 ][ 4: ].strip()
+                    rus_d = { "rus" : rus, "dtype " : dtype  }
+                    eng_d = { "eng" : eng, "dtype " : dtype  }
+                else:
+                    continue
+                
+                logging.debug( "rus: %s, eng: %s" % ( rus_d[ "rus" ], eng_d[ "eng" ] ) )
+            
+                rus_s = json.dumps( rus_d )
+                eng_s = json.dumps( eng_d )
+                
+                """
+                # test
+                rus_d = json.loads( rus_s )
+                eng_d = json.loads( eng_s )
+                logging.debug( "%s rus_d: %s, %s eng_d: %s" % ( type( rus_d, ), rus_d, type( eng_d ), eng_d ) )
+                logging.debug( "rus: %s, eng: %s" % ( rus_d[ "rus" ], eng_d[ "eng" ] ) )
+                """
+                
+                try:
+                    vocab[ rus_s ] = eng_s
+                except:
+                    Nexcept += 1
+                    type_, value, tb = sys.exc_info()
+                    msg = "%s: %s %s" % ( type_, vocab_fname, value )
+                    logging.error( msg )
+                    #sys.stderr.write( "%s\n" % msg )
+                
+        nline += 1
+    
+    vocab_file.close()
+
+    return vocab
+# load_vocab()
 
 
 def translate_item( item, eng_data ):
@@ -1218,6 +1327,36 @@ def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):
         
         df1 = pd.read_csv( csv_pathname, **kwargs_pandas )
         
+        """
+        TODO This fix now works, but it is too slow, especially for many files. 
+        So make it part of the nightly update!
+        # rounding of data in value column is specified in ERRHS_Vocabulary_units.csv
+        # Equality of pos_rus anf pos_eng is a hack, used to flag decimals from either rus or eng
+        config_parser = get_configparser()
+        vocab_units = dict()
+        if csv_filename.endswith( "-ru.csv" ):
+            vocab_units = load_vocab( config_parser, "ERRHS_Vocabulary_units.csv", vocab_units, 0, 0 )
+        elif csv_filename.endswith( "-en.csv" ):
+            vocab_units = load_vocab( config_parser, "ERRHS_Vocabulary_units.csv", vocab_units, 1, 1 )
+        else:
+            logging.error( "csv_filename does not end with either '-ru.csv' or '-en.csv'" )
+        logging.debug( str( vocab_units ) )
+        
+        # spurious '.0' added to integer values; re-round column VALUE (uppercase in csv)
+        for row in df1.index:
+            unit = df1[ "VALUE_UNIT" ][ row ]
+            decimals = int( vocab_units[ unit ] )
+            
+            if decimals == 0:
+                try:
+                    val = df1[ "VALUE" ][ row ]
+                    df1[ "VALUE" ][ row ] = str( long( round( float( val ), decimals ) ) )
+                except:
+                    pass
+            else:
+                break
+        """
+        
         # sort by ter_code and histclasses
         sort_columns = []
         sort_columns.append( "TER_CODE" )
@@ -1706,10 +1845,10 @@ def aggregation():
         base_year = str( base_year )
     
     method = qinput.get( "Method" )
-    redundant = True
-    if method == "new":
-        redundant = False
-    logging.debug( "method: %s, redundant: %s" % ( method, redundant ) )
+    redundant = False
+    if method == "old":
+        redundant = True
+    logging.info( "method: %s, redundant: %s" % ( method, redundant ) )
     
     params = {
         "language"       : language,
@@ -1798,6 +1937,9 @@ def filecatalogdata():
     logging.debug( "request.form: %s"      % str( request.form ) )
     logging.debug( "request.values: %s"    % str( request.values ) )
     logging.debug( "request.data: %s"      % str( request.data ) )
+    
+    to_xlsx  = True     # convert csv to excel; add copyright sheet
+    also_csv = False    # also copy csv to download?
     
     subtopics = []
     
@@ -1890,14 +2032,12 @@ def filecatalogdata():
         logging.debug( "csv_pathname: %s" % csv_pathname )
         
         # process csv file
-        to_xlsx = True
         process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx )
         
-        if to_xlsx:
-            logging.debug( "skipped for download: %s" % csv_filename )
-        else:
-            # also copy csv for download
+        if also_csv:   # also copy csv for download 
             shutil.copy2( csv_pathname, download_dir )
+        else:
+            logging.debug( "skipped for download: %s" % csv_filename )
     
     # zip download dir
     zip_filename = "%s.zip" % download_key
