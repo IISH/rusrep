@@ -6,7 +6,7 @@
 # FL-24-Apr-2018 GridFS
 # FL-29-Jan-2019 aggregate_dataset: fields (old) & records (new) versions
 # FL-09-Apr-2019 adapt aggregate_dataset_records for changed data structure
-# FL-13-May-2019 
+# FL-20-May-2019 
 
 import gridfs
 import json
@@ -359,7 +359,7 @@ def aggregate_dataset_fields( key, download_dir, xlsx_name, params, topic_name, 
     # loop over the data sheets, and select the correct year data
     for sheet_idx in range( nsheets ):
         base_year = base_years[ sheet_idx ]
-        logging.debug( "work_sheet: %d, base_year: %s" % ( sheet_idx, base_year ) )
+        logging.info( "work_sheet: %d, base_year: %s" % ( sheet_idx, base_year ) )
         if sheet_idx == 0:
             ws = ws_0
         elif sheet_idx == 1:
@@ -581,10 +581,11 @@ def aggregate_dataset_fields( key, download_dir, xlsx_name, params, topic_name, 
                 base_year_chain = '0'
             
             if int( base_year ) != int( base_year_chain ):
-                logging.debug( "skip: base_year %s not equal to base_year_chain %s" % ( base_year, base_year_chain ) )
+                logging.warn( "base_year %s not equal to base_year_chain %s" % ( base_year, base_year_chain ) )
+                #byear_counts[ str( base_year ) ] = 1 + byear_counts[ str( base_year ) ]
                 continue
-            else:
-                byear_counts[ str( base_year ) ] = 1 + byear_counts[ str( base_year ) ]
+            #else:
+            #    byear_counts[ str( base_year ) ] = 1 + byear_counts[ str( base_year ) ]
             
             #ter_data = lex_lands[ itemchain ]
             #lex_key = json.dumps( chain )       # this way the keys were made in preprocessor()
@@ -923,7 +924,7 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, params, topic_name,
     # loop over the data sheets, and select the correct year data
     for sheet_idx in range( nsheets ):
         base_year = base_years[ sheet_idx ]
-        logging.debug( "work_sheet: %d, base_year: %s" % ( sheet_idx, base_year ) )
+        logging.info( "work_sheet: %d, base_year: %s" % ( sheet_idx, base_year ) )
         if sheet_idx == 0:
             ws = ws_0
         elif sheet_idx == 1:
@@ -1161,10 +1162,11 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, params, topic_name,
                 base_year_chain = base_year
             
             if int( base_year ) != int( base_year_chain ):
-                logging.debug( "skip: base_year %s not equal to base_year_chain %s" % ( base_year, base_year_chain ) )
+                logging.warn( "base_year %s not equal to base_year_chain %s" % ( base_year, base_year_chain ) )
+                #byear_counts[ str( base_year ) ] = 1 + byear_counts[ str( base_year ) ]
                 continue
-            else:
-                byear_counts[ str( base_year ) ] = 1 + byear_counts[ str( base_year ) ]
+            #else:
+            #    byear_counts[ str( base_year ) ] = 1 + byear_counts[ str( base_year ) ]
 
             # FL-08-Apr-2019 fill first 2 columns for non-redundant data records
             name = "base_year"
@@ -1237,9 +1239,11 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, params, topic_name,
             
             # FL-09-Apr-2019
             keys = sorted( chain.iterkeys() )                    # sorted keys
+            logging.debug( "keys: %s: " % str( keys ) )
             tuples = [ ( key, chain[ key ] ) for key in keys ]   # tuple list ordered by keys
+            logging.debug( "tuples: %s: " % str( tuples ) )
             ordered_dict = OrderedDict( tuples )                 # dict ordered by keys
-            tc_list = ordered_dict.get( "ter_codes" )
+            tc_list = ordered_dict.get( "ter_codes", [] )
             logging.debug( "tc_list: %s: " % str( tc_list ) )
             
             tc_dict = {}

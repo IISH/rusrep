@@ -3,6 +3,7 @@
 """
 Functions needed by services.py and/or services_obs.py
 FL-06-May-2019 Created
+FL-20-May-2019 make_query() ' .' suppression for modern adapted
 
 def get_configparser():
 def get_connection():
@@ -177,7 +178,9 @@ def make_query( prefix, params, subclasses, value_total, value_numerical ):
             
             # suppress consecutive trailing dots?
             if prefix == "num":
-                suppress = False
+                suppress = False    # no suppression for the first historic query
+            elif prefix == "ntc" and classification == "modern":
+                suppress = False    # no suppression for the first modern query
             else:
                 suppress = True     # we only collect unique path strings (ignore value contents)
             

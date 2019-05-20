@@ -31,6 +31,7 @@ FL-19-Feb-2019 main query split by subclasses, other 2 by indicator length
 FL-30-Apr-2019 downloads adapted
 FL-13-May-2019 cleanup, reorganize
 FL-14-May-2019 filecatalogue download Excel conversion spurious '.0'
+FL-20-May-2019 latest change
 
 def loadjson( json_dataurl ):                                   # called by documentation()
 def topic_counts( language, datatype ):                         # called by topics()
@@ -658,7 +659,7 @@ def aggregate_modern_items( params ):
     # modern classification does not provide a base_year; 
     # loop over base_years, and accumulate results.
     base_years = [ "1795", "1858", "1897", "1959", "2002" ]
-    #base_years = [ "1858" ]    # test single year
+    #base_years = [ "1897" ]    # test single year
     
     """
     prefix = num    default query with explicit ter_code specification; 
@@ -1882,7 +1883,6 @@ def aggregation():
     
     elif classification == "modern":
         # modern classification does not have base_year or ter_codes from qinput
-        
         if redundant:   # old
             entry_list_sorted = aggregate_modern_items_redun( params )
         else:           # new, redundant = False
