@@ -23,6 +23,7 @@ FL-15-May-2018 Rounding of data in value column
 FL-23-Jul-2018 DATATYPE 1.10 => 1.1 ? try to suppress unwanted conversion of DATATYPE
 FL-18-Dec-2018 Rounding of float values in filter_csv() was not active
 FL-06-Mar-2019 HISTCLASS1 & CLASS2 digits strip spurious .0 float ending
+FL-20-Mar-2019 Prepare downloads for filecatalogue
 
 ToDo:
 - replace urllib by requests
@@ -1467,6 +1468,53 @@ def translate_csv( config_parser, handle_name ):
 
 
 
+def prepare_filecatalogue( config_parser, language ):
+    # convert the -en and -ru csv files to xlsx files with copyright tab
+    global Nexcept
+    logging.info( "" )
+    logging.info( "prepare_filecatalogue() language: %s" % language )
+    
+    tmp_dir = config_parser.get( "config", "tmppath" )
+    
+    csv_subdir  = "csv-" + language
+    fcat_subdir = "fcat-" + language
+    
+    csv_basedir = os.path.join( tmp_dir, "dataverse", csv_subdir )
+    
+    dir_list = os.listdir( csv_basedir )
+    dir_list.sort()
+    for handle_name in dir_list:
+        logging.info( "handle_name:  %s" % handle_name )
+        
+        csv_dir  = os.path.join( tmp_dir, "dataverse", csv_subdir, handle_name )
+        xlsx_dir = os.path.join( tmp_dir, "dataverse", fcat_subdir, handle_name )
+        
+        logging.info( "csv_dir:  %s" % csv_dir )
+        logging.info( "xlsx_dir: %s" % xlsx_dir )
+        
+        if os.path.exists( xlsx_dir ):
+            empty_dir( xlsx_dir )                # remove previous files
+        if not os.path.exists( xlsx_dir ):
+            os.makedirs( xlsx_dir )              # create destination dir
+        
+        dir_list = os.listdir( csv_dir )
+        dir_list.sort()
+        for csv_name in dir_list:
+            csv_path = os.path.join( csv_dir, csv_name )
+            if not os.path.isfile( csv_path ):
+                continue
+            logging.info( csv_path )
+        
+            base_name, file_ext = os.path.splitext( csv_name )
+            xlsx_name = base_name + ".xlsx"
+            xlsx_path = os.path.join( xlsx_dir, xlsx_name )
+            logging.info( xlsx_path )
+            
+            # convert csv -> xlsx and save
+            # ...
+
+
+
 def format_secs( seconds ):
     nmin, nsec  = divmod( seconds, 60 )
     nhour, nmin = divmod( nmin, 60 )
@@ -1490,6 +1538,7 @@ if __name__ == "__main__":
     DO_TRANSLATE_CSV  = True     # translate Russian csv files to English variants
     DO_POSTGRES_DB    = True     # ERRHS data: local_disk => postgresql, csv -> table
     DO_MONGO_DB       = True     # ERRHS data: postgresql => mongodb
+    DO_FILE_CATALOGUE = True     # ERRHS data: csv -> filecatalogue xlsx
     
     #dv_format = ""
     dv_format = "original"  # does not work for ter_code (regions) vocab translations
@@ -1582,6 +1631,11 @@ if __name__ == "__main__":
         logging.info( "-7- DO_MONGO_DB" )
         for language in [ "ru", "en" ]:
             update_handle_docs( config_parser, mongo_client, language )     # postgresql => mongodb
+    
+    if DO_FILE_CATALOGUE:
+        logging.info( "-8- DO_FILE_CATALOGUE" )
+        for language in [ "ru", "en" ]:
+            prepare_filecatalogue( config_parser, language )                # create filecatalogue xlsx files
     
     logging.info( "total number of exceptions: %d" % Nexcept )
     
