@@ -31,7 +31,7 @@ FL-19-Feb-2019 main query split by subclasses, other 2 by indicator length
 FL-30-Apr-2019 downloads adapted
 FL-13-May-2019 cleanup, reorganize
 FL-14-May-2019 filecatalogue download Excel conversion spurious '.0'
-FL-20-May-2019 latest change
+FL-21-May-2019 latest change
 
 def loadjson( json_dataurl ):                                   # called by documentation()
 def topic_counts( language, datatype ):                         # called by topics()
@@ -2031,7 +2031,7 @@ def filecatalogdata():
         csv_pathname = os.path.join( csv_dir, csv_filename )
         logging.debug( "csv_pathname: %s" % csv_pathname )
         
-        # process csv file
+        # convert csv to excel; add copyright sheet
         process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx )
         
         if also_csv:   # also copy csv for download 

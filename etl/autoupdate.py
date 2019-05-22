@@ -23,7 +23,9 @@ FL-15-May-2018 Rounding of data in value column
 FL-23-Jul-2018 DATATYPE 1.10 => 1.1 ? try to suppress unwanted conversion of DATATYPE
 FL-18-Dec-2018 Rounding of float values in filter_csv() was not active
 FL-06-Mar-2019 HISTCLASS1 & CLASS2 digits strip spurious .0 float ending
-FL-20-Mar-2019 Prepare downloads for filecatalogue
+FL-21-Mar-2019 Prepare downloads for filecatalogue
+FL-21-Mar-2019 PostgreSQL increase max_connections
+FL-22-Mar-2019 
 
 ToDo:
 - replace urllib by requests
@@ -62,10 +64,13 @@ def clear_mongo( mongo_client ):
 def topic_counts( config_parser, language ):
 def load_vocab( config_parser, vocab_fname, vocab, pos_rus, pos_eng ):
 def translate_csv( config_parser, handle_name ):
+def compile_filecatalogue( config_parser, language ):
+def csv2xlsx( language, vocab_units, csv_dir, csv_filename, xlsx_dir ):
 def format_secs( seconds ):
 """
 
-# future-0.16.0 imports for Python 2/3 compatibility
+
+# future-0.17.1 imports for Python 2/3 compatibility
 from __future__ import ( absolute_import, division, print_function, unicode_literals )
 from builtins import ( ascii, bytes, chr, dict, filter, hex, input, int, list, map, 
     next, object, oct, open, pow, range, round, super, str, zip )
@@ -73,7 +78,8 @@ from builtins import ( ascii, bytes, chr, dict, filter, hex, input, int, list, m
 from six.moves import configparser, StringIO, urllib
 
 import codecs
-import datetime
+import ConfigParser
+import csv
 import getpass
 import json
 import logging
@@ -86,6 +92,7 @@ import sys
 import shutil
 
 from bidict import bidict
+from datetime import date, datetime
 from pymongo import MongoClient
 from sys import exc_info
 from time import ctime, time
@@ -121,6 +128,26 @@ handle_names = [
 #"""
 #handle_names = [ "hdl_errhs_agriculture" ]     # test for rounding
 #handle_names = [ "hdl_errhs_land" ]     		# test for rounding
+
+
+def get_configparser():
+    RUSSIANREPO_CONFIG_PATH = os.environ[ "RUSSIANREPO_CONFIG_PATH" ]
+    logging.debug( "RUSSIANREPO_CONFIG_PATH: %s" % RUSSIANREPO_CONFIG_PATH )
+    
+    configpath = RUSSIANREPO_CONFIG_PATH
+    if not os.path.isfile( configpath ):
+        print( "in %s" % __file__ )
+        print( "configpath %s FILE DOES NOT EXIST" % configpath )
+        print( "EXIT" )
+        sys.exit( 1 )
+    
+    logging.debug( "configpath: %s" % configpath )
+    
+    configparser = ConfigParser.RawConfigParser()
+    configparser.read( configpath )
+    
+    return configparser
+# get_configparser()
 
 
 def load_json( url ):
@@ -509,7 +536,14 @@ def row_count( config_parser, language ):
     
     connection_string = "host = '%s' dbname = '%s' user = '%s' password = '%s'" % ( dbhost, dbname, user, password )
     logging.debug( "connection_string: %s" % connection_string )
-    pg_connection = psycopg2.connect( connection_string )
+    
+    try:
+        pg_connection = psycopg2.connect( connection_string )
+    except:
+        etype = sys.exc_info()[ 0:1 ]
+        value = sys.exc_info()[ 1:2 ]
+        logging.error( "row_count() %s, %s\n" % ( etype, value ) )
+        raise RuntimeError()
     
     cursor = pg_connection.cursor()
     sql = "SELECT COUNT(*) FROM %s;" % dbtable
@@ -555,11 +589,17 @@ def clear_postgres_table( config_parser, language ):
     connection_string = "host = '%s' dbname = '%s' user = '%s' password = '%s'" % ( dbhost, dbname, user, password )
     logging.info( "connection_string: %s" % connection_string )
 
-    pg_connection = psycopg2.connect( connection_string )
-    cursor = pg_connection.cursor()
+    try:
+        pg_connection = psycopg2.connect( connection_string )
+    except:
+        etype = sys.exc_info()[ 0:1 ]
+        value = sys.exc_info()[ 1:2 ]
+        logging.error( "clear_postgres_table() %s, %s\n" % ( etype, value ) )
+        raise RuntimeError()
 
     sql = "TRUNCATE TABLE %s;" % dbtable
     logging.info( sql )
+    cursor = pg_connection.cursor()
     cursor.execute( sql )
     
     pg_connection.commit()
@@ -602,7 +642,14 @@ def store_handle_docs( config_parser, handle_name, language ):
     connection_string = "host = '%s' dbname = '%s' user = '%s' password = '%s'" % ( dbhost, dbname, user, password )
     logging.info( "connection_string: %s" % connection_string )
 
-    pg_connection = psycopg2.connect( connection_string )
+    try:
+        pg_connection = psycopg2.connect( connection_string )
+    except:
+        etype = sys.exc_info()[ 0:1 ]
+        value = sys.exc_info()[ 1:2 ]
+        logging.error( "store_handle_docs() %s, %s\n" % ( etype, value ) )
+        raise RuntimeError()
+    
     cursor = pg_connection.cursor()
 
     for filename in dir_list:
@@ -1066,7 +1113,7 @@ def filter_csv( config_parser, csv_dir, in_filename ):
 
 def update_handle_docs( config_parser, mongo_client, language ):
     logging.info( "" )
-    logging.info( "update_handle_docs()" )
+    logging.info( "update_handle_docs() language = %s" % language )
     
     configpath = RUSSIANREPO_CONFIG_PATH
     logging.info( "using configparser: %s" % configpath )
@@ -1134,7 +1181,14 @@ def topic_counts( config_parser, langage ):
     connection_string = "host = '%s' dbname = '%s' user = '%s' password = '%s'" % ( dbhost, dbname, user, password )
     logging.info( "connection_string: %s" % connection_string )
 
-    pg_connection = psycopg2.connect( connection_string )
+    try:
+        pg_connection = psycopg2.connect( connection_string )
+    except:
+        etype = sys.exc_info()[ 0:1 ]
+        value = sys.exc_info()[ 1:2 ]
+        logging.error( "topic_counts() %s, %s\n" % ( etype, value ) )
+        raise RuntimeError()
+    
     cursor = pg_connection.cursor( cursor_factory = psycopg2.extras.NamedTupleCursor )
 
     sql_topics  = "SELECT datatype, topic_name FROM datasets.topics"
@@ -1182,8 +1236,9 @@ def load_vocab( config_parser, vocab_fname, vocab, pos_rus, pos_eng ):
     logging.info( "vocab_dir: %s" % vocab_dir )
     vocab_path = os.path.join( vocab_dir, vocab_fname )
     logging.info( "vocab_path: %s" % vocab_path )
-    vocab_file = open( vocab_path, "r" )
-    #vocab_file = codecs.open( vocab_path, "r", encoding = 'utf-8' )
+    
+    #vocab_file = open( vocab_path, "r" )
+    vocab_file = codecs.open( vocab_path, "r", encoding = 'utf-8' )
     
     nline = 0
     for csv_line in iter( vocab_file ):
@@ -1192,10 +1247,11 @@ def load_vocab( config_parser, vocab_fname, vocab, pos_rus, pos_eng ):
         if nline == 0:
             pass        # skip header
         else:
-            parts = csv_line.split( '|' )
-            rus = parts[ pos_rus ].strip()
-            eng = parts[ pos_eng ].strip()
+            parts_list = csv_line.split( '|' )
+            parts_dict = dict( enumerate( parts_list ) )
             
+            rus = parts_dict.get( pos_rus, "" ).strip()
+            eng = parts_dict.get( pos_eng, "" ).strip()
             
             if vocab_fname == "ERRHS_Vocabulary_regions.csv":
                 # The regions (territorium) vocab is special: 
@@ -1203,7 +1259,7 @@ def load_vocab( config_parser, vocab_fname, vocab, pos_rus, pos_eng ):
                 # the original rus terms contain a lot of noise, but the codes 
                 # and eng translations are unique and OK. For both forward and 
                 # inverse lookup the code is the key, and either rus or eng the value. 
-                terr = parts[ 0 ].strip()
+                terr = parts_dict.get( 0, "" ).strip()
                 terr_d = { "terr" : terr }
                 terr_s = json.dumps( terr_d )
                 rus_eng_d = { "rus" : rus, "eng" : eng }
@@ -1221,7 +1277,7 @@ def load_vocab( config_parser, vocab_fname, vocab, pos_rus, pos_eng ):
                 if pos_rus == pos_eng:              # a bit of a hack
                     # vocab is a dict(), not bidict(), 
                     # used for decimals, either from rus or from eng
-                    decimals_str = parts[ 2 ]
+                    decimals_str = parts_dict.get( 2, "0" )
                     decimals = int( float( decimals_str.strip() ) )     # strip(): sometimes a spurious space
                     eng_d = decimals                # using value for decimals
                     if pos_rus == 0:                # rus => decimals
@@ -1239,13 +1295,21 @@ def load_vocab( config_parser, vocab_fname, vocab, pos_rus, pos_eng ):
                     vocab[ rus_s ] = eng_s
             else:
                 if vocab_fname == "ERRHS_Vocabulary_histclasses.csv":
-                    byear = parts[ 2 ].strip()
-                    dtype = parts[ 3 ].strip()
+                    try:
+                        byear = parts_list[ 2 ].strip()
+                        dtype = parts_list[ 3 ].strip()
+                    except:
+                        logging.info( "csv_line: |%s|" % csv_line )
+                        Nexcept += 1
+                        type_, value, tb = sys.exc_info()
+                        msg = "%s: %s %s" % ( type_, vocab_fname, value )
+                        logging.error( msg )
+                    
                     rus_d = { "rus" : rus, "byear" : byear, "dtype" : dtype }
                     eng_d = { "eng" : eng, "byear" : byear, "dtype" : dtype }
                 
                 elif vocab_fname == "ERRHS_Vocabulary_modclasses.csv":
-                    dtype = parts[ 2 ][ 4: ].strip()
+                    dtype = parts_list[ 2 ][ 4: ].strip()
                     rus_d = { "rus" : rus, "dtype " : dtype  }
                     eng_d = { "eng" : eng, "dtype " : dtype  }
                 else:
@@ -1468,11 +1532,25 @@ def translate_csv( config_parser, handle_name ):
 
 
 
-def prepare_filecatalogue( config_parser, language ):
+def compile_filecatalogue( config_parser, language ):
     # convert the -en and -ru csv files to xlsx files with copyright tab
     global Nexcept
     logging.info( "" )
-    logging.info( "prepare_filecatalogue() language: %s" % language )
+    logging.info( "compile_filecatalogue() language = %s" % language )
+    
+    # rounding of data in value column is specified in ERRHS_Vocabulary_units.csv
+    # Equality of pos_rus and pos_eng is a hack, used to flag decimals from either rus or eng
+    config_parser = get_configparser()
+    vocab_units = dict()
+    
+    if language == "ru":
+        vocab_units = load_vocab( config_parser, "ERRHS_Vocabulary_units.csv", vocab_units, 0, 0 )
+    elif language == "en":
+        vocab_units = load_vocab( config_parser, "ERRHS_Vocabulary_units.csv", vocab_units, 1, 1 )
+    else:
+        logging.error( "language must be either 'ru' or 'en'" )
+    logging.debug( str( vocab_units ) )
+    
     
     tmp_dir = config_parser.get( "config", "tmppath" )
     
@@ -1499,19 +1577,179 @@ def prepare_filecatalogue( config_parser, language ):
         
         dir_list = os.listdir( csv_dir )
         dir_list.sort()
-        for csv_name in dir_list:
-            csv_path = os.path.join( csv_dir, csv_name )
-            if not os.path.isfile( csv_path ):
-                continue
-            logging.info( csv_path )
-        
-            base_name, file_ext = os.path.splitext( csv_name )
-            xlsx_name = base_name + ".xlsx"
-            xlsx_path = os.path.join( xlsx_dir, xlsx_name )
-            logging.info( xlsx_path )
-            
+        for csv_filename in dir_list:
             # convert csv -> xlsx and save
-            # ...
+            csv2xlsx( language, vocab_units, csv_dir, csv_filename, xlsx_dir )
+
+
+
+def csv2xlsx( language, vocab_units, csv_dir, csv_filename, xlsx_dir ): 
+    logging.debug( "convert_csv2xlsx() %s" % csv_filename )
+    
+    csv_pathname = os.path.join( csv_dir, csv_filename )
+    if not os.path.isfile( csv_pathname ):
+        return
+    logging.info( "input: %s" % csv_pathname )
+    
+    # dataverse column names
+    dv_column_names = [
+        "id", 
+        "territory", 
+        "ter_code", 
+        "town", 
+        "district", 
+        "year", 
+        "month", 
+        "value", 
+        "value_unit", 
+        "value_label", 
+        "datatype", 
+        "histclass1", 
+        "histclass2", 
+        "histclass3", 
+        "histclass4", 
+        "histclass5", 
+        "histclass6", 
+        "histclass7", 
+        "histclass8", 
+        "histclass9", 
+        "histclass10", 
+        "class1", 
+        "class2", 
+        "class3", 
+        "class4", 
+        "class5", 
+        "class6", 
+        "class7", 
+        "class8", 
+        "class9", 
+        "class10", 
+        "comment_source", 
+        "source", 
+        "volume", 
+        "page", 
+        "naborshik_id", 
+        "comment_naborshik", 
+        "base_year"
+    ]
+    
+    
+    #delimiter = b'|'       # leading b required with __future__, otherwise: TypeError: "delimiter" must be an 1-character string
+    #delimiter = str( '|' )  # TypeError: "delimiter" must be string, not newstr
+    delimiter = str( u'|' ).encode( 'utf-8' )
+    
+    """
+    with open( csv_pathname, "rb" ) as csv_file:
+    #with codecs.open( csv_pathname, "rb", encoding = 'utf-8' ) as csv_file:
+        csv_reader = csv.reader( csv_file, delimiter = delimiter )
+        for row in csv_reader:
+            #logging.debug( ", ".join( row ) )
+            logging.debug( str( row ) )
+    """
+    
+    #sep = str( u'|' ).encode( "utf-8" )            # "encode method has been disabled in newbytes"
+    #sep = str( delimiter ).encode( "utf-8" )       # "encode method has been disabled in newbytes"
+    sep = b'|'
+    
+    kwargs_pandas = { 
+        "sep" : sep 
+        #,"line_terminator" : '\n'   # TypeError: parser_f() got an unexpected keyword argument "line_terminator"
+    }
+    
+    # read csv into pandas dataframe 1
+    df1 = pd.read_csv( csv_pathname, **kwargs_pandas )
+    
+    # spurious '.0' added to integer values; re-round column VALUE (uppercase in csv)
+    for row in df1.index:
+        unit = df1[ "VALUE_UNIT" ][ row ]
+        decimals = int( vocab_units[ unit ] )
+        
+        if decimals == 0:
+            try:
+                val = df1[ "VALUE" ][ row ]
+                df1[ "VALUE" ][ row ] = str( long( round( float( val ), decimals ) ) )
+            except:
+                pass
+        else:
+            break
+    
+    # sort by ter_code and histclasses
+    sort_columns = []
+    sort_columns.append( "TER_CODE" )
+    for l in range( 10 ):
+        l_str = "HISTCLASS%d" % ( l + 1 )
+        sort_columns.append( l_str )
+    logging.debug( "sort by: %s" % sort_columns )
+    df1 = df1.sort_values( by = sort_columns )
+    
+    root, ext = os.path.splitext( csv_filename )
+    xlsx_filename = root + ".xlsx"
+    xlsx_pathname = os.path.join( xlsx_dir, xlsx_filename )
+    
+    writer = pd.ExcelWriter( xlsx_pathname, engine = "openpyxl" )
+    
+    try:
+        df1.to_excel( writer, "Table", encoding = "utf-8", index = False )
+    except:
+        logging.error( "convert_csv2xlsx() failed: %s" % csv_filename )
+        type_, value, tb = sys.exc_info()
+        msg = "%s: %s %s" % ( type_, xlsx_filename, value )
+        logging.error( msg )
+        
+    # create copyright sheet in pandas dataframe 2
+    if language == "en":
+        df2 = pd.DataFrame( { " ": [ 
+            "",
+            "",
+            "Creative Commons License", 
+            "This work is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License.", 
+            "http://creativecommons.org/licenses/by-nc-sa/4.0/", 
+            "", 
+            "By downloading and using data from the Electronic Repository of Russian Historical Statistics the user agrees to the terms of this license. Providing a correct reference to the resource is a formal requirement of the license: ", 
+            "Kessler, Gijs and Andrei Markevich (%d), Electronic Repository of Russian Historical Statistics, 18th - 21st centuries, http://ristat.org/" % date.today().year, 
+        ] } )
+        """
+        c = ws_cr.cell( row = 4, column = 0 )
+        c.value = "Creative Commons License"
+        c = ws_cr.cell( row = 5, column = 0 )
+        c.value = "This work is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License."
+        c = ws_cr.cell( row = 6, column = 0 )
+        c.value = "http://creativecommons.org/licenses/by-nc-sa/4.0/"
+        c = ws_cr.cell( row = 8, column = 0 )
+        c.value = "By downloading and using data from the Electronic Repository of Russian Historical Statistics the user agrees to the terms of this license. Providing a correct reference to the resource is a formal requirement of the license: "
+        c = ws_cr.cell( row = 9, column = 0 )
+        c.value = "Kessler, Gijs and Andrei Markevich (%d), Electronic Repository of Russian Historical Statistics, 18th - 21st centuries, http://ristat.org/" % date.today().year
+        """
+    elif language == "ru":
+        df2 = pd.DataFrame( { " ": [ 
+            "",
+            "",
+            "Лицензия Creative Commons", 
+            "Это произведение доступно по лицензии Creative Commons «Attribution-NonCommercial-ShareAlike» («Атрибуция — Некоммерческое использование — На тех же условиях») 4.0 Всемирная.", 
+            "http://creativecommons.org/licenses/by-nc-sa/4.0/deed.ru", 
+            "",
+            "Скачивая и начиная использовать данные пользователь автоматически соглашается с этой лицензией. Наличие корректно оформленной ссылки является обязательным требованием лицензии:", 
+            "Кесслер Хайс и Маркевич Андрей (%d), Электронный архив Российской исторической статистики, XVIII – XXI вв., [Электронный ресурс] : [сайт]. — Режим доступа: http://ristat.org/" % date.today().year, 
+        ] } )
+        """
+        c = ws_cr.cell( row = 4, column = 0 )
+        c.value = "Лицензия Creative Commons"
+        c = ws_cr.cell( row = 5, column = 0 )
+        c.value = "Это произведение доступно по лицензии Creative Commons «Attribution-NonCommercial-ShareAlike» («Атрибуция — Некоммерческое использование — На тех же условиях») 4.0 Всемирная."
+        c = ws_cr.cell( row = 6, column = 0 )
+        c.value = "http://creativecommons.org/licenses/by-nc-sa/4.0/deed.ru"
+        c = ws_cr.cell( row = 8, column = 0 )
+        c.value = "Скачивая и начиная использовать данные пользователь автоматически соглашается с этой лицензией. Наличие корректно оформленной ссылки является обязательным требованием лицензии:"
+        c = ws_cr.cell( row = 9, column = 0 )
+        c.value = "Кесслер Хайс и Маркевич Андрей (%d), Электронный архив Российской исторической статистики, XVIII – XXI вв., [Электронный ресурс] : [сайт]. — Режим доступа: http://ristat.org/" % date.today().year
+        """
+    
+    # Convert the dataframe to an XlsxWriter Excel object.
+    logging.info( "output: %s" % xlsx_pathname )
+    df2.to_excel( writer, sheet_name = "Copyrights", encoding = "utf-8", index = False )
+    
+    writer.save()
+    writer.close()
 
 
 
@@ -1538,7 +1776,7 @@ if __name__ == "__main__":
     DO_TRANSLATE_CSV  = True     # translate Russian csv files to English variants
     DO_POSTGRES_DB    = True     # ERRHS data: local_disk => postgresql, csv -> table
     DO_MONGO_DB       = True     # ERRHS data: postgresql => mongodb
-    DO_FILE_CATALOGUE = True     # ERRHS data: csv -> filecatalogue xlsx
+    DO_FILE_CATALOGUE = False     # ERRHS data: csv -> filecatalogue xlsx
     
     #dv_format = ""
     dv_format = "original"  # does not work for ter_code (regions) vocab translations
@@ -1560,7 +1798,7 @@ if __name__ == "__main__":
         logging.basicConfig( level = log_level )
 
     time0 = time()      # seconds since the epoch
-    logging.info( "start: %s" % datetime.datetime.now() )
+    logging.info( "start: %s" % datetime.now() )
     logging.info( "user: %s" % getpass.getuser() )
     logging.info( __file__ )
     
@@ -1634,12 +1872,12 @@ if __name__ == "__main__":
     
     if DO_FILE_CATALOGUE:
         logging.info( "-8- DO_FILE_CATALOGUE" )
-        for language in [ "ru", "en" ]:
-            prepare_filecatalogue( config_parser, language )                # create filecatalogue xlsx files
+        for language in [ "en", "ru" ]:
+            compile_filecatalogue( config_parser, language )                # create filecatalogue xlsx files
     
     logging.info( "total number of exceptions: %d" % Nexcept )
     
-    logging.info( "stop: %s" % datetime.datetime.now() )
+    logging.info( "stop: %s" % datetime.now() )
     str_elapsed = format_secs( time() - time0 )
     logging.info( "processing took %s" % str_elapsed )
     
