@@ -21,7 +21,9 @@ simplejson == 3.16.0
 jsonmerge == 1.6.0      # also fetched jsonschema-3.0.1 functools32-3.2.3.post2
 #ldap == 1.0.2           # also fetched ldap3-2.5.2 pyasn1-0.4.5	# needed by?
 Flask == 1.0.2          # also fetched Jinja2-2.10.1 MarkupSafe-1.1.1 Werkzeug-0.15.2 Click-7.0 itsdangerous-1.1.0
-psycopg2 == 2.8.2       # needs 
+
+#psycopg2 == 2.8.2       # needs too much resources for my old Ubuntu?
+psycopg2 == 2.7.7
 
 pymongo == 3.5.1        # supports MongoDB 2.4, 2.6, 3.0, 3.2, and 3.4
 #pymongo == 3.8.0        # supports MongoDB 2.6, 3.0, 3.2, 3.4, 3.6 and 4.0

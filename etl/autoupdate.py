@@ -121,7 +121,7 @@ handle_names = [
     "hdl_errhs_capital",        # 
     "hdl_errhs_industry",       # 
     "hdl_errhs_agriculture",    # ERRHS_4   10 files
-    "hdl_errhs_labour",         # ERRHS_2   11 files
+    "hdl_errhs_labour",         # ERRHS_2   12 files
     "hdl_errhs_services",       # 
     "hdl_errhs_land"            # ERRHS_7    2 files
 ]
@@ -1562,6 +1562,13 @@ def compile_filecatalogue( config_parser, language ):
     dir_list = os.listdir( csv_basedir )
     dir_list.sort()
     for handle_name in dir_list:
+        """
+        #if handle_name != "hdl_errhs_land":     # en OK
+        if handle_name != "hdl_errhs_labour":
+            logging.info( "skip handle_name:  %s" % handle_name )
+            continue
+        """
+        
         logging.info( "handle_name:  %s" % handle_name )
         
         csv_dir  = os.path.join( tmp_dir, "dataverse", csv_subdir, handle_name )
@@ -1586,9 +1593,14 @@ def compile_filecatalogue( config_parser, language ):
 def csv2xlsx( language, vocab_units, csv_dir, csv_filename, xlsx_dir ): 
     logging.debug( "convert_csv2xlsx() %s" % csv_filename )
     
+    #if csv_filename != "ERRHS_2_01_data_1795-en.csv":
+    #    logging.info( "skip input: %s" % csv_filename )
+    #    return
+    
     csv_pathname = os.path.join( csv_dir, csv_filename )
     if not os.path.isfile( csv_pathname ):
         return
+    
     logging.info( "input: %s" % csv_pathname )
     
     # dataverse column names
@@ -1658,20 +1670,24 @@ def csv2xlsx( language, vocab_units, csv_dir, csv_filename, xlsx_dir ):
     
     # read csv into pandas dataframe 1
     df1 = pd.read_csv( csv_pathname, **kwargs_pandas )
+    nrows = len( df1.index )
+    logging.info( "nrows: %d" % nrows )
     
     # spurious '.0' added to integer values; re-round column VALUE (uppercase in csv)
     for row in df1.index:
-        unit = df1[ "VALUE_UNIT" ][ row ]
+        unit = df1.loc[ row, "VALUE_UNIT" ]
         decimals = int( vocab_units[ unit ] )
         
         if decimals == 0:
             try:
-                val = df1[ "VALUE" ][ row ]
-                df1[ "VALUE" ][ row ] = str( long( round( float( val ), decimals ) ) )
+                old_val = df1.loc[ row, "VALUE" ] 
+                new_val = str( long( round( float( val ), decimals ) ) )
+                if old_val != new_val:
+                    df1.loc[ row, "VALUE" ] = new_val
             except:
                 pass
         else:
-            break
+            continue
     
     # sort by ter_code and histclasses
     sort_columns = []
@@ -1680,7 +1696,7 @@ def csv2xlsx( language, vocab_units, csv_dir, csv_filename, xlsx_dir ):
         l_str = "HISTCLASS%d" % ( l + 1 )
         sort_columns.append( l_str )
     logging.debug( "sort by: %s" % sort_columns )
-    df1 = df1.sort_values( by = sort_columns )
+    df1 = df1.sort_values( by = sort_columns, ascending = False )
     
     root, ext = os.path.splitext( csv_filename )
     xlsx_filename = root + ".xlsx"
@@ -1770,21 +1786,21 @@ def format_secs( seconds ):
 
 
 if __name__ == "__main__":
-    DO_RETRIEVE_DOC   = True     # documentation: dataverse  => local_disk
-    DO_RETRIEVE_VOCAB = True     # vocabulary: dataverse  => mongodb
-    DO_RETRIEVE_ERRHS = True     # ERRHS data: dataverse  => local_disk, xlsx -> csv
-    DO_TRANSLATE_CSV  = True     # translate Russian csv files to English variants
-    DO_POSTGRES_DB    = True     # ERRHS data: local_disk => postgresql, csv -> table
-    DO_MONGO_DB       = True     # ERRHS data: postgresql => mongodb
-    DO_FILE_CATALOGUE = False     # ERRHS data: csv -> filecatalogue xlsx
+    DO_RETRIEVE_DOC   = False     # documentation: dataverse  => local_disk
+    DO_RETRIEVE_VOCAB = False     # vocabulary: dataverse  => mongodb
+    DO_RETRIEVE_ERRHS = False     # ERRHS data: dataverse  => local_disk, xlsx -> csv
+    DO_TRANSLATE_CSV  = False     # translate Russian csv files to English variants
+    DO_POSTGRES_DB    = False     # ERRHS data: local_disk => postgresql, csv -> table
+    DO_MONGO_DB       = False     # ERRHS data: postgresql => mongodb
+    DO_FILE_CATALOGUE = True     # ERRHS data: csv -> filecatalogue xlsx
     
     #dv_format = ""
     dv_format = "original"  # does not work for ter_code (regions) vocab translations
     
     log_file = True
     
-    #log_level = logging.DEBUG
-    log_level = logging.INFO
+    log_level = logging.DEBUG
+    #log_level = logging.INFO
     #log_level = logging.WARNING
     #log_level = logging.ERROR
     #log_level = logging.CRITICAL
@@ -1805,6 +1821,13 @@ if __name__ == "__main__":
     python_vertuple = sys.version_info
     python_version = str( python_vertuple[ 0 ] ) + '.' + str( python_vertuple[ 1 ] ) + '.' + str( python_vertuple[ 2 ] )
     logging.info( "Python version: %s" % python_version )
+    
+    AUTOUPDATE = os.environ[ "AUTOUPDATE" ]
+    logging.info( "AUTOUPDATE: %s" % AUTOUPDATE )
+    if AUTOUPDATE == '0':
+        logging.error( "Skipping autoupdate" )
+        logging.error( "EXIT" )
+        sys.exit( 0 )
     
     RUSSIANREPO_CONFIG_PATH = os.environ[ "RUSSIANREPO_CONFIG_PATH" ]
     logging.info( "RUSSIANREPO_CONFIG_PATH: %s" % RUSSIANREPO_CONFIG_PATH )
@@ -1872,7 +1895,8 @@ if __name__ == "__main__":
     
     if DO_FILE_CATALOGUE:
         logging.info( "-8- DO_FILE_CATALOGUE" )
-        for language in [ "en", "ru" ]:
+        #for language in [ "en", "ru" ]:
+        for language in [ "en" ]:
             compile_filecatalogue( config_parser, language )                # create filecatalogue xlsx files
     
     logging.info( "total number of exceptions: %d" % Nexcept )
