@@ -25,7 +25,7 @@ FL-18-Dec-2018 Rounding of float values in filter_csv() was not active
 FL-06-Mar-2019 HISTCLASS1 & CLASS2 digits strip spurious .0 float ending
 FL-21-Mar-2019 Prepare downloads for filecatalogue
 FL-21-Mar-2019 PostgreSQL increase max_connections
-FL-22-Mar-2019 
+FL-28-Mar-2019 downloads for filecatalogue
 
 ToDo:
 - replace urllib by requests
@@ -1541,16 +1541,21 @@ def compile_filecatalogue( config_parser, language ):
     # rounding of data in value column is specified in ERRHS_Vocabulary_units.csv
     # Equality of pos_rus and pos_eng is a hack, used to flag decimals from either rus or eng
     config_parser = get_configparser()
-    vocab_units = dict()
     
+    vocab_units = dict()
     if language == "ru":
         vocab_units = load_vocab( config_parser, "ERRHS_Vocabulary_units.csv", vocab_units, 0, 0 )
     elif language == "en":
         vocab_units = load_vocab( config_parser, "ERRHS_Vocabulary_units.csv", vocab_units, 1, 1 )
     else:
         logging.error( "language must be either 'ru' or 'en'" )
-    logging.debug( str( vocab_units ) )
     
+    #logging.info( "vocab_units: %s" % str( vocab_units ) )
+    """
+    logging.info( "vocab_units keys:" )
+    for key in vocab_units:
+        logging.info( key )
+    """
     
     tmp_dir = config_parser.get( "config", "tmppath" )
     
@@ -1591,7 +1596,7 @@ def compile_filecatalogue( config_parser, language ):
 
 
 def csv2xlsx( language, vocab_units, csv_dir, csv_filename, xlsx_dir ): 
-    logging.debug( "convert_csv2xlsx() %s" % csv_filename )
+    logging.info( "convert_csv2xlsx() %s" % csv_filename )
     
     #if csv_filename != "ERRHS_2_01_data_1795-en.csv":
     #    logging.info( "skip input: %s" % csv_filename )
@@ -1601,49 +1606,49 @@ def csv2xlsx( language, vocab_units, csv_dir, csv_filename, xlsx_dir ):
     if not os.path.isfile( csv_pathname ):
         return
     
-    logging.info( "input: %s" % csv_pathname )
+    logging.debug( "input: %s" % csv_pathname )
     
     # dataverse column names
     dv_column_names = [
-        "id", 
-        "territory", 
-        "ter_code", 
-        "town", 
-        "district", 
-        "year", 
-        "month", 
-        "value", 
-        "value_unit", 
-        "value_label", 
-        "datatype", 
-        "histclass1", 
-        "histclass2", 
-        "histclass3", 
-        "histclass4", 
-        "histclass5", 
-        "histclass6", 
-        "histclass7", 
-        "histclass8", 
-        "histclass9", 
-        "histclass10", 
-        "class1", 
-        "class2", 
-        "class3", 
-        "class4", 
-        "class5", 
-        "class6", 
-        "class7", 
-        "class8", 
-        "class9", 
-        "class10", 
-        "comment_source", 
-        "source", 
-        "volume", 
-        "page", 
-        "naborshik_id", 
-        "comment_naborshik", 
-        "base_year"
-    ]
+        "id",                   #  0
+        "territory",            #  1
+        "ter_code",             #  2
+        "town",                 #  3
+        "district",             #  4
+        "year",                 #  5
+        "month",                #  6
+        "value",                #  7
+        "value_unit",           #  8
+        "value_label",          #  9
+        "datatype",             # 10
+        "histclass1",           # 11
+        "histclass2",           # 12
+        "histclass3",           # 13
+        "histclass4",           # 14
+        "histclass5",           # 15
+        "histclass6",           # 16
+        "histclass7",           # 17
+        "histclass8",           # 18
+        "histclass9",           # 19
+        "histclass10",          # 20
+        "class1",               # 21
+        "class2",               # 22
+        "class3",               # 23
+        "class4",               # 24
+        "class5",               # 25
+        "class6",               # 26
+        "class7",               # 27
+        "class8",               # 28
+        "class9",               # 29
+        "class10",              # 30
+        "comment_source",       # 31
+        "source",               # 32
+        "volume",               # 33
+        "page",                 # 34
+        "naborshik_id",         # 35
+        "comment_naborshik",    # 36
+        "base_year"             # 37
+    ]                           
     
     
     #delimiter = b'|'       # leading b required with __future__, otherwise: TypeError: "delimiter" must be an 1-character string
@@ -1663,51 +1668,83 @@ def csv2xlsx( language, vocab_units, csv_dir, csv_filename, xlsx_dir ):
     #sep = str( delimiter ).encode( "utf-8" )       # "encode method has been disabled in newbytes"
     sep = b'|'
     
-    kwargs_pandas = { 
-        "sep" : sep 
+    kwargs_pandas = \
+    {
+        "encoding" : "utf-8",
+        "sep"      : sep
+        #,"dtype"    : "str"         # how to prevent stupid int to float coversion?
         #,"line_terminator" : '\n'   # TypeError: parser_f() got an unexpected keyword argument "line_terminator"
     }
     
     # read csv into pandas dataframe 1
     df1 = pd.read_csv( csv_pathname, **kwargs_pandas )
     nrows = len( df1.index )
-    logging.info( "nrows: %d" % nrows )
     
+    #df1.loc[ 0 ] = df1.loc[ 0 ].astype( int )
+    
+    missing_units = set()
+    
+    nround = 0
     # spurious '.0' added to integer values; re-round column VALUE (uppercase in csv)
     for row in df1.index:
         unit = df1.loc[ row, "VALUE_UNIT" ]
-        decimals = int( vocab_units[ unit ] )
-        
-        if decimals == 0:
+        decimals = vocab_units.get( unit )
+        if decimals is None:
+            missing_units.add( unit )
+            continue
+        elif decimals == 0:
             try:
-                old_val = df1.loc[ row, "VALUE" ] 
-                new_val = str( long( round( float( val ), decimals ) ) )
+                old_val = df1.loc[ row, "VALUE" ]
+                if old_val == '.':
+                    continue
+                
+                new_val = str( long( round( float( old_val ), decimals ) ) )
                 if old_val != new_val:
                     df1.loc[ row, "VALUE" ] = new_val
+                    nround += 1
             except:
-                pass
+                logging.error( "convert_csv2xlsx() rounding failed" )
+                type_, value, tb = sys.exc_info()
+                msg = "%s: %s" % ( type_, value )
+                logging.error( msg )
         else:
             continue
     
+    if nround == 0:
+        logging.info( "nrows: %d, nothing rounded" % nrows )
+    else:
+        logging.info( "nrows: %d, nround: %d" % ( nrows, nround ) )
+    
+    nmissing = len( missing_units )
+    if nmissing > 0:
+        logging.warn( "missing vocab_unit keys: %d" % nmissing )
+        for unit in missing_units:
+            logging.warn( unit )
+    
+    """
     # sort by ter_code and histclasses
     sort_columns = []
     sort_columns.append( "TER_CODE" )
     for l in range( 10 ):
         l_str = "HISTCLASS%d" % ( l + 1 )
         sort_columns.append( l_str )
+    
     logging.debug( "sort by: %s" % sort_columns )
     df1 = df1.sort_values( by = sort_columns, ascending = False )
+    """
     
     root, ext = os.path.splitext( csv_filename )
     xlsx_filename = root + ".xlsx"
     xlsx_pathname = os.path.join( xlsx_dir, xlsx_filename )
     
-    writer = pd.ExcelWriter( xlsx_pathname, engine = "openpyxl" )
+    #engine = "openpyxl"
+    engine = "xlsxwriter"
+    writer = pd.ExcelWriter( xlsx_pathname, engine = engine )
     
     try:
         df1.to_excel( writer, "Table", encoding = "utf-8", index = False )
     except:
-        logging.error( "convert_csv2xlsx() failed: %s" % csv_filename )
+        logging.error( "convert_csv2xlsx() to_excel failed: %s" % csv_filename )
         type_, value, tb = sys.exc_info()
         msg = "%s: %s %s" % ( type_, xlsx_filename, value )
         logging.error( msg )
@@ -1761,7 +1798,7 @@ def csv2xlsx( language, vocab_units, csv_dir, csv_filename, xlsx_dir ):
         """
     
     # Convert the dataframe to an XlsxWriter Excel object.
-    logging.info( "output: %s" % xlsx_pathname )
+    logging.debug( "output: %s" % xlsx_filename )
     df2.to_excel( writer, sheet_name = "Copyrights", encoding = "utf-8", index = False )
     
     writer.save()
@@ -1786,21 +1823,21 @@ def format_secs( seconds ):
 
 
 if __name__ == "__main__":
-    DO_RETRIEVE_DOC   = False     # documentation: dataverse  => local_disk
-    DO_RETRIEVE_VOCAB = False     # vocabulary: dataverse  => mongodb
-    DO_RETRIEVE_ERRHS = False     # ERRHS data: dataverse  => local_disk, xlsx -> csv
-    DO_TRANSLATE_CSV  = False     # translate Russian csv files to English variants
-    DO_POSTGRES_DB    = False     # ERRHS data: local_disk => postgresql, csv -> table
-    DO_MONGO_DB       = False     # ERRHS data: postgresql => mongodb
-    DO_FILE_CATALOGUE = True     # ERRHS data: csv -> filecatalogue xlsx
+    DO_RETRIEVE_DOC   = False      # documentation: dataverse  => local_disk
+    DO_RETRIEVE_VOCAB = False      # vocabulary: dataverse  => mongodb
+    DO_RETRIEVE_ERRHS = False      # ERRHS data: dataverse  => local_disk, xlsx -> csv
+    DO_TRANSLATE_CSV  = False      # translate Russian csv files to English variants
+    DO_POSTGRES_DB    = False      # ERRHS data: local_disk => postgresql, csv -> table
+    DO_MONGO_DB       = False      # ERRHS data: postgresql => mongodb
+    DO_FILE_CATALOGUE = True      # ERRHS data: csv -> filecatalogue xlsx
     
     #dv_format = ""
     dv_format = "original"  # does not work for ter_code (regions) vocab translations
     
     log_file = True
     
-    log_level = logging.DEBUG
-    #log_level = logging.INFO
+    #log_level = logging.DEBUG
+    log_level = logging.INFO
     #log_level = logging.WARNING
     #log_level = logging.ERROR
     #log_level = logging.CRITICAL
@@ -1895,8 +1932,8 @@ if __name__ == "__main__":
     
     if DO_FILE_CATALOGUE:
         logging.info( "-8- DO_FILE_CATALOGUE" )
-        #for language in [ "en", "ru" ]:
-        for language in [ "en" ]:
+        for language in [ "en", "ru" ]:
+        #for language in [ "en" ]:
             compile_filecatalogue( config_parser, language )                # create filecatalogue xlsx files
     
     logging.info( "total number of exceptions: %d" % Nexcept )
