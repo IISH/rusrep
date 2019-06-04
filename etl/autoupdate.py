@@ -26,6 +26,7 @@ FL-06-Mar-2019 HISTCLASS1 & CLASS2 digits strip spurious .0 float ending
 FL-21-Mar-2019 Prepare downloads for filecatalogue
 FL-21-Mar-2019 PostgreSQL increase max_connections
 FL-28-Mar-2019 downloads for filecatalogue
+FL-04-Jun-2019 
 
 ToDo:
 - replace urllib by requests
@@ -63,6 +64,8 @@ def update_handle_docs( config_parser, mongo_client ):
 def clear_mongo( mongo_client ):
 def topic_counts( config_parser, language ):
 def load_vocab( config_parser, vocab_fname, vocab, pos_rus, pos_eng ):
+def convert_excel( config_parser ):
+def xlsx2csv( xlsx_dir, xlsx_filename, csv_dir ):
 def translate_csv( config_parser, handle_name ):
 def compile_filecatalogue( config_parser, language ):
 def csv2xlsx( language, vocab_units, csv_dir, csv_filename, xlsx_dir ):
@@ -83,6 +86,7 @@ import csv
 import getpass
 import json
 import logging
+import math
 import os
 import pandas as pd
 import psycopg2
@@ -248,7 +252,10 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", co
     }
     
     sep = str(u'|').encode('utf-8')
-    kwargs_pandas   = { 'sep' : sep, 'line_terminator' : '\n' }
+    kwargs_pandas = { 
+        'sep' : sep, 
+        'line_terminator' : '\n' 
+    }
     
     tmp_dir = config_parser.get( "config", "tmppath" )
     if copy_local:
@@ -1345,6 +1352,160 @@ def load_vocab( config_parser, vocab_fname, vocab, pos_rus, pos_eng ):
 
 
 
+def convert_excel( config_parser ):
+    global Nexcept
+    logging.info( "" )
+    logging.info( "convert_excel()" )
+    
+    tmp_dir = config_parser.get( "config", "tmppath" )
+    
+    xlsx_subdir = "xlsx"
+    csv_subdir  = "csv-ru"
+    
+    xlsx_basedir = os.path.join( tmp_dir, "dataverse", xlsx_subdir )
+    
+    # read russian excel files
+    dir_list = os.listdir( xlsx_basedir )
+    dir_list.sort()
+    for handle_name in dir_list:
+        """
+        # TEST
+        #if handle_name != "hdl_errhs_agriculture":
+        if handle_name != "hdl_errhs_population":
+            logging.info( "skip handle_name: %s" % handle_name )
+            continue
+        """
+        
+        logging.info( "handle_name:  %s" % handle_name )
+        
+        xlsx_dir = os.path.join( tmp_dir, "dataverse", xlsx_subdir, handle_name )
+        csv_dir  = os.path.join( tmp_dir, "dataverse", csv_subdir,  handle_name )
+       
+        logging.info( "xlsx_dir: %s" % xlsx_dir )
+        logging.info( "csv_dir:  %s" % csv_dir )
+        
+        if os.path.exists( csv_dir ):
+            empty_dir( csv_dir )                # remove previous files
+        if not os.path.exists( csv_dir ):
+            os.makedirs( csv_dir )              # create destination dir
+        
+        dir_list = os.listdir( xlsx_dir )
+        dir_list.sort()
+        for xlsx_filename in dir_list:          # convert ru xlsx -> ru csv and save
+            """
+            # TEST
+            if xlsx_filename != "ERRHS_4_01_data_1858.xlsx":
+                logging.info( "skip xlsx_filename:  %s" % xlsx_filename )
+                continue
+            """
+            xlsx2csv( xlsx_dir, xlsx_filename, csv_dir )
+
+
+
+def xlsx2csv( xlsx_dir, xlsx_filename, csv_dir ):
+    logging.info( "xlsx2csv() %s" % xlsx_filename )
+
+    xlsx_pathname = os.path.join( xlsx_dir, xlsx_filename )
+    if not os.path.isfile( xlsx_pathname ):
+        return
+    
+    root, ext = os.path.splitext( xlsx_filename )
+    csv_filename = root + ".csv"
+    csv_pathname = os.path.join( csv_dir, csv_filename )
+    
+    
+    logging.debug(  "input: %s" % xlsx_pathname )
+    logging.debug( "output: %s" % csv_pathname )
+    
+    sep = str(u'|').encode('utf-8')
+    kwargs_pandas = { 
+        'sep' : sep, 
+        'line_terminator' : '\n' 
+    }
+    
+    # dataverse column names
+    dv_column_names = [
+        "id",                   #  0
+        "territory",            #  1
+        "ter_code",             #  2
+        "town",                 #  3
+        "district",             #  4
+        "year",                 #  5
+        "month",                #  6
+        "value",                #  7
+        "value_unit",           #  8
+        "value_label",          #  9
+        "datatype",             # 10
+        "histclass1",           # 11
+        "histclass2",           # 12
+        "histclass3",           # 13
+        "histclass4",           # 14
+        "histclass5",           # 15
+        "histclass6",           # 16
+        "histclass7",           # 17
+        "histclass8",           # 18
+        "histclass9",           # 19
+        "histclass10",          # 20
+        "class1",               # 21
+        "class2",               # 22
+        "class3",               # 23
+        "class4",               # 24
+        "class5",               # 25
+        "class6",               # 26
+        "class7",               # 27
+        "class8",               # 28
+        "class9",               # 29
+        "class10",              # 30
+        "comment_source",       # 31
+        "source",               # 32
+        "volume",               # 33
+        "page",                 # 34
+        "naborshik_id",         # 35
+        "comment_naborshik",    # 36
+        "base_year"             # 37
+    ]
+    
+    df_xls = pd.read_excel( xlsx_pathname, index_col = False, convert_float = False, dtype = str )
+    nrows = len( df_xls.index )
+    
+    nround = 0
+    # spurious '.0' added to integer values that became float; 
+    # re-round column PAGE (uppercase in dataverse files)
+    decimals = 0
+    for row in df_xls.index:
+        # We check "PAGE" for all files
+        old_val = df_xls.loc[ row, "PAGE" ]
+        if type( old_val ) is float and not math.isnan( old_val ):
+            new_val = str( long( round( old_val, decimals ) ) )
+            if old_val != new_val:
+                df_xls.loc[ row, "PAGE" ] = new_val
+                nround += 1
+        
+        # HISTCLASS1 & CLASS2 for some files
+        if xlsx_filename in [ "ERRHS_1_02_data_1897.xlsx", "ERRHS_1_02_data_1959.xlsx", "ERRHS_1_02_data_2002.xlsx" ]: 
+            old_val = df_xls.loc[ row, "HISTCLASS1" ]
+            if type( old_val ) is float and not math.isnan( old_val ):
+                new_val = str( long( round( old_val, decimals ) ) )
+                if old_val != new_val:
+                    df_xls.loc[ row, "HISTCLASS1" ] = new_val
+                    nround += 1
+        
+            old_val = df_xls.loc[ row, "CLASS2" ]
+            if type( old_val ) is float and not math.isnan( old_val ):
+                new_val = str( long( round( old_val, decimals ) ) )
+                if old_val != new_val:
+                    df_xls.loc[ row, "CLASS2" ] = new_val
+                    nround += 1
+    
+    if nround == 0:
+        logging.info( "nrows: %d, nothing rounded" % nrows )
+    else:
+        logging.info( "nrows: %d, nround: %d" % ( nrows, nround ) )
+    
+    df_xls.to_csv( csv_pathname, encoding = 'utf-8', index = False, **kwargs_pandas )
+
+
+
 def translate_csv( config_parser, handle_name ):
     global Nexcept
     logging.info( "" )
@@ -1559,7 +1720,7 @@ def compile_filecatalogue( config_parser, language ):
     
     tmp_dir = config_parser.get( "config", "tmppath" )
     
-    csv_subdir  = "csv-" + language
+    csv_subdir  = "csv-"  + language
     fcat_subdir = "fcat-" + language
     
     csv_basedir = os.path.join( tmp_dir, "dataverse", csv_subdir )
@@ -1596,7 +1757,16 @@ def compile_filecatalogue( config_parser, language ):
 
 
 def csv2xlsx( language, vocab_units, csv_dir, csv_filename, xlsx_dir ): 
-    logging.info( "convert_csv2xlsx() %s" % csv_filename )
+    logging.info( "csv2xlsx() %s" % csv_filename )
+    
+    """
+    autoupdate.py:1703: UnicodeWarning: Unicode equal comparison failed to convert both arguments to Unicode - interpreting them as being unequal
+    if old_val == '.':
+    sys:1: DtypeWarning: Columns (7) have mixed types. Specify dtype option on import or set low_memory=False.
+    sys:1: DtypeWarning: Columns (7,34) have mixed types. Specify dtype option on import or set low_memory=False.
+    sys:1: DtypeWarning: Columns (9) have mixed types. Specify dtype option on import or set low_memory=False.
+    sys:1: DtypeWarning: Columns (11,22) have mixed types. Specify dtype option on import or set low_memory=False.
+    """
     
     #if csv_filename != "ERRHS_2_01_data_1795-en.csv":
     #    logging.info( "skip input: %s" % csv_filename )
@@ -1648,7 +1818,7 @@ def csv2xlsx( language, vocab_units, csv_dir, csv_filename, xlsx_dir ):
         "naborshik_id",         # 35
         "comment_naborshik",    # 36
         "base_year"             # 37
-    ]                           
+    ]
     
     
     #delimiter = b'|'       # leading b required with __future__, otherwise: TypeError: "delimiter" must be an 1-character string
@@ -1671,7 +1841,8 @@ def csv2xlsx( language, vocab_units, csv_dir, csv_filename, xlsx_dir ):
     kwargs_pandas = \
     {
         "encoding" : "utf-8",
-        "sep"      : sep
+        "sep"      : sep            # no effect
+        #,"dtype"    : { "page" : "object" }
         #,"dtype"    : "str"         # how to prevent stupid int to float coversion?
         #,"line_terminator" : '\n'   # TypeError: parser_f() got an unexpected keyword argument "line_terminator"
     }
@@ -1679,8 +1850,6 @@ def csv2xlsx( language, vocab_units, csv_dir, csv_filename, xlsx_dir ):
     # read csv into pandas dataframe 1
     df1 = pd.read_csv( csv_pathname, **kwargs_pandas )
     nrows = len( df1.index )
-    
-    #df1.loc[ 0 ] = df1.loc[ 0 ].astype( int )
     
     missing_units = set()
     
@@ -1709,6 +1878,8 @@ def csv2xlsx( language, vocab_units, csv_dir, csv_filename, xlsx_dir ):
                 logging.error( msg )
         else:
             continue
+    
+        #page = df1.loc[ row, "PAGE" ]
     
     if nround == 0:
         logging.info( "nrows: %d, nothing rounded" % nrows )
@@ -1823,13 +1994,14 @@ def format_secs( seconds ):
 
 
 if __name__ == "__main__":
-    DO_RETRIEVE_DOC   = False      # documentation: dataverse  => local_disk
-    DO_RETRIEVE_VOCAB = False      # vocabulary: dataverse  => mongodb
-    DO_RETRIEVE_ERRHS = False      # ERRHS data: dataverse  => local_disk, xlsx -> csv
-    DO_TRANSLATE_CSV  = False      # translate Russian csv files to English variants
-    DO_POSTGRES_DB    = False      # ERRHS data: local_disk => postgresql, csv -> table
-    DO_MONGO_DB       = False      # ERRHS data: postgresql => mongodb
-    DO_FILE_CATALOGUE = True      # ERRHS data: csv -> filecatalogue xlsx
+    DO_RETRIEVE_DOC   = False      # -1- documentation: dataverse  => local_disk
+    DO_RETRIEVE_VOCAB = False      # -2- vocabulary: dataverse => mongodb
+    DO_RETRIEVE_ERRHS = False      # -3- ERRHS data: dataverse => local_disk
+    DO_CONVERT_EXCEL  = True      # -4- convert xlsx files to csv
+    DO_TRANSLATE_CSV  = True      # -5- translate Russian csv files to English variants
+    DO_POSTGRES_DB    = False      # -6- ERRHS data: local_disk => postgresql, csv -> table
+    DO_MONGO_DB       = False      # -7- ERRHS data: postgresql => mongodb
+    DO_FILE_CATALOGUE = True      # -8- ERRHS data: csv -> filecatalogue xlsx
     
     #dv_format = ""
     dv_format = "original"  # does not work for ter_code (regions) vocab translations
@@ -1878,16 +2050,16 @@ if __name__ == "__main__":
     mongo_client  = MongoClient()
     
     if DO_RETRIEVE_VOCAB or DO_MONGO_DB:
-        logging.info( "-1- DO_RETRIEVE_VOCAB or DO_MONGO_DB" )
+        logging.info( "-0- DO_RETRIEVE_VOCAB or DO_MONGO_DB" )
         clear_mongo( mongo_client )
     
     if DO_RETRIEVE_DOC:
-        logging.info( "-2- DO_RETRIEVE_DOC" )
+        logging.info( "-1- DO_RETRIEVE_DOC" )
         copy_local  = True      # for zipped downloads
         update_documentation( config_parser, copy_local )
     
     if DO_RETRIEVE_VOCAB:
-        logging.info( "-3- DO_RETRIEVE_VOCAB" )
+        logging.info( "-2- DO_RETRIEVE_VOCAB" )
         # Downloaded vocabulary documents are not first stored in postgreSQL, 
         # they are processed on the fly, and directly put in MongoDB vocabulary
         copy_local = True       # to inspect
@@ -1898,12 +2070,16 @@ if __name__ == "__main__":
         update_vocabularies( config_parser, mongo_client, dv_format, copy_local, to_csv )
     
     if DO_RETRIEVE_ERRHS:
-        logging.info( "-4- DO_RETRIEVE_ERRHS" )
+        logging.info( "-3- DO_RETRIEVE_ERRHS" )
         copy_local  = True
-        to_csv      = True
+        to_csv      = False     # now separate option to convert excel
         remove_xlsx = False
         for handle_name in handle_names:
             retrieve_handle_docs( config_parser, handle_name, dv_format, copy_local, to_csv, remove_xlsx ) # dataverse  => local_disk
+    
+    if DO_CONVERT_EXCEL:
+        logging.info( "-4- DO_CONVERT_EXCEL" )
+        convert_excel( config_parser )
     
     if DO_TRANSLATE_CSV:
         logging.info( "-5- DO_TRANSLATE_CSV" )                      # ru => en
@@ -1911,7 +2087,7 @@ if __name__ == "__main__":
             translate_csv( config_parser, handle_name )             # csv-en/hdl_errhs_[type]/ERRHS_[datatype]_data_[year]-en.csv
     
     if DO_POSTGRES_DB:
-        logging.info( "-6- DO_POSTGRES_DB" )
+        logging.info( "-6- DO_POSTGRES_DB" )    # read russian csv files
         logging.StreamHandler().flush()
         for language in [ "ru", "en" ]:
             row_count( config_parser, language )
@@ -1932,8 +2108,8 @@ if __name__ == "__main__":
     
     if DO_FILE_CATALOGUE:
         logging.info( "-8- DO_FILE_CATALOGUE" )
-        for language in [ "en", "ru" ]:
-        #for language in [ "en" ]:
+        #for language in [ "en", "ru" ]:
+        for language in [ "en" ]:
             compile_filecatalogue( config_parser, language )                # create filecatalogue xlsx files
     
     logging.info( "total number of exceptions: %d" % Nexcept )
