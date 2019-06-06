@@ -1995,12 +1995,12 @@ def format_secs( seconds ):
 
 if __name__ == "__main__":
     DO_RETRIEVE_DOC   = False      # -1- documentation: dataverse  => local_disk
-    DO_RETRIEVE_VOCAB = False      # -2- vocabulary: dataverse => mongodb
+    DO_RETRIEVE_VOCAB = True      # -2- vocabulary: dataverse => mongodb
     DO_RETRIEVE_ERRHS = False      # -3- ERRHS data: dataverse => local_disk
-    DO_CONVERT_EXCEL  = True      # -4- convert xlsx files to csv
+    DO_CONVERT_EXCEL  = False      # -4- convert xlsx files to csv
     DO_TRANSLATE_CSV  = True      # -5- translate Russian csv files to English variants
-    DO_POSTGRES_DB    = False      # -6- ERRHS data: local_disk => postgresql, csv -> table
-    DO_MONGO_DB       = False      # -7- ERRHS data: postgresql => mongodb
+    DO_POSTGRES_DB    = True      # -6- ERRHS data: local_disk => postgresql, csv -> table
+    DO_MONGO_DB       = True      # -7- ERRHS data: postgresql => mongodb
     DO_FILE_CATALOGUE = True      # -8- ERRHS data: csv -> filecatalogue xlsx
     
     #dv_format = ""
