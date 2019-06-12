@@ -24,8 +24,8 @@ import pandas as pd
 from pymongo import MongoClient
 from sys import exc_info
 
-from openpyxl.styles import Alignment
-from openpyxl.utils import get_column_letter
+#from openpyxl.styles import Alignment
+#from openpyxl.utils import get_column_letter
 
 
 def preprocessor( use_gridfs, datafilter ):

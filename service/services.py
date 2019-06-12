@@ -370,7 +370,7 @@ def load_vocab( config_parser, vocab_fname, vocab, pos_rus, pos_eng ):
     logging.info( "vocab_path: %s" % vocab_path )
     
     #vocab_file = open( vocab_path, "r" )
-    vocab_file = codecs.open( vocab_path, "r", encoding = 'utf-8' )
+    vocab_file = codecs.open( vocab_path, "r", encoding = "utf-8" )
     
     nline = 0
     for csv_line in iter( vocab_file ):
@@ -1677,6 +1677,7 @@ def topics():
 # Years - Get available years for year selection at GUI step 2
 @app.route( "/years" )
 def years():
+    time0 = time()      # seconds since the epoch
     logging.info( "/years" )
     
     logging.info( "request.args: %s" % str( request.args ) )
@@ -1699,7 +1700,8 @@ def years():
     connection.close()
     
     logging.debug( "json_string: %s" % str( json_string ) )
-    
+    str_elapsed = format_secs( time() - time0 )
+    logging.info( "/years took %s" % str_elapsed )
     logging.debug( "/years return Response" )
     return Response( json_string, mimetype = "application/json; charset=utf-8" )
 # /years years()

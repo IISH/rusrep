@@ -26,11 +26,14 @@ FL-06-Mar-2019 HISTCLASS1 & CLASS2 digits strip spurious .0 float ending
 FL-21-Mar-2019 Prepare downloads for filecatalogue
 FL-21-Mar-2019 PostgreSQL increase max_connections
 FL-28-Mar-2019 downloads for filecatalogue
-FL-04-Jun-2019 
+FL-08-Jun-2019 openpyxl for xslx to csv coversion
+FL-08-Jun-2019 from backports import csv; openpyxl helper
+FL-11-Jun-2019 
 
 ToDo:
+- split retrieve_vocabularies in 3 functions
 - replace urllib by requests
-- update the extra packages in site_packages
+- replace vocab.py
 
 - running this script from the command line gives the following terminal output:
 $ ./autoupdate.sh 
@@ -53,7 +56,8 @@ def load_json( apiurl ):
 def empty_dir( dst_dir ):
 def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", copy_local = False, to_csv = False, remove_xlsx = True ):
 def update_documentation( config_parser, copy_local, remove_xlsx = False ):
-def update_vocabularies( config_parser, mongo_client, dv_format, copy_local = False, to_csv = False, remove_xlsx = False):
+def retrieve_vocabularies( config_parser, mongo_client, dv_format, copy_local = True, to_csv = False, remove_xlsx = False):
+def convert_vocabularies():
 def retrieve_handle_docs( config_parser, handle_name, dv_format = "", copy_local = False, to_csv = False, remove_xlsx = False ):
 def row_count( config_parser, language ):
 def clear_postgres_tale( config_parser, language ):
@@ -64,8 +68,9 @@ def update_handle_docs( config_parser, mongo_client ):
 def clear_mongo( mongo_client ):
 def topic_counts( config_parser, language ):
 def load_vocab( config_parser, vocab_fname, vocab, pos_rus, pos_eng ):
-def convert_excel( config_parser ):
-def xlsx2csv( xlsx_dir, xlsx_filename, csv_dir ):
+def convert_excel( config_parser, excel_package ):
+def xlsx2csv_pandas( xlsx_dir, xlsx_filename, csv_dir, extra ):
+def xlsx2csv_openpyxl( xlsx_dir, xlsx_filename, csv_dir, extra ):
 def translate_csv( config_parser, handle_name ):
 def compile_filecatalogue( config_parser, language ):
 def csv2xlsx( language, vocab_units, csv_dir, csv_filename, xlsx_dir ):
@@ -84,9 +89,11 @@ import codecs
 import ConfigParser
 import csv
 import getpass
+import io
 import json
 import logging
 import math
+import openpyxl
 import os
 import pandas as pd
 import psycopg2
@@ -95,6 +102,7 @@ import requests
 import sys
 import shutil
 
+from backports import csv
 from bidict import bidict
 from datetime import date, datetime
 from pymongo import MongoClient
@@ -351,13 +359,8 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", co
                         
                         # pandas doc: dtype : Type name or dict of column -> type, default None
                         # Data type for data or columns. E.g. {‘a’: np.float64, ‘b’: np.int32} 
-                        # Use str or object to preserve and not interpret dtype. 
+                        # Use str or object to preserve and not interprete dtype. 
                         # If converters are specified, they will be applied INSTEAD of dtype conversion.
-                        #data_xls = pd.read_excel( filepath, index_col = False,  dtype = str )      # ValueError: Unable to convert column Term_RUS to type <type 'str'>
-                        #data_xls = pd.read_excel( filepath, index_col = False,  dtype = object )   # 2018.05.14: large ints become negative!
-                        #data_xls = pd.read_excel( filepath, index_col = False )                    # 2018.05.14: large ints become negative!
-                        #data_xls = pd.read_excel( filepath, index_col = False, convert_float = False, dtype = str )
-                        #data_xls = pd.read_excel( filepath, index_col = False, convert_float = False, dtype = str, converters = { 'DATATYPE': str } )
                         #converters = { 'DATATYPE': str, 'HISTCLASS1': str }
                         #data_xls = pd.read_excel( filepath, index_col = False, convert_float = False, dtype = str, converters = converters )
                         data_xls = pd.read_excel( filepath, index_col = False, convert_float = False, dtype = str )
@@ -412,15 +415,16 @@ def update_documentation( config_parser, copy_local, remove_xlsx = False ):
 
 
 
-def update_vocabularies( config_parser, mongo_client, dv_format, copy_local = False, to_csv = False, remove_xlsx = False):
-    logging.info( "%s update_vocabularies()" % __file__ )
+def retrieve_vocabularies( config_parser, mongo_client, dv_format, copy_local = True, to_csv = False, remove_xlsx = False):
+    logging.info( "%s retrieve_vocabularies()" % __file__ )
     """
-    update_vocabularies():
+    retrieve_vocabularies():
     -1- retrieves ERRHS_Vocabulary_*.tab files from dataverse
     -2- with copy_local = True stores them locally
     -3- stores the new data in MogoDB db = "vocabulary", collection = 'data'
     """
     
+    # -1- Dataverse
     handle_name = "hdl_vocabularies"
     logging.info( "retrieving documents from dataverse for handle name %s ..." % handle_name )
     
@@ -447,6 +451,10 @@ def update_vocabularies( config_parser, mongo_client, dv_format, copy_local = Fa
     for doc in docs:
         logging.debug( doc )
     
+    # -2- vocabularies xlsx => csv
+    convert_vocabularies( handle_name )
+    
+    # -3- MongoDB
     # parameters to retrieve the vocabulary files
     dv_host = config_parser.get( "config", "dataverse_root" )
     apikey = config_parser.get( "config", "ristatkey" )
@@ -486,13 +494,41 @@ def update_vocabularies( config_parser, mongo_client, dv_format, copy_local = Fa
         #logging.debug( item )
         if 'YEAR' in item:
             item[ 'YEAR' ] = re.sub( r'\.0', '', str( item[ 'YEAR' ] ) )
+            #logging.debug( "YEAR: %s" % item[ 'YEAR' ] )
         if 'basisyear' in item:
             item[ 'basisyear' ] = re.sub( r'\.0', '', str( item[ 'basisyear' ] ) )
+            #logging.debug( "basisyear: %s" % item[ 'basisyear' ] )
     
     dbname_vocab = config_parser.get( "config", "vocabulary" )
     db_vocab = mongo_client.get_database( dbname_vocab )
     logging.info( "inserting vocabulary in mongodb '%s'" % dbname_vocab )
     result = db_vocab.data.insert( vocab_json )
+
+
+
+def convert_vocabularies( handle_name ):
+    logging.info( "convert_vocabularies() %s" % handle_name )
+    
+    tmp_dir = config_parser.get( "config", "tmppath" )
+    vocab_dir = "vocab"
+    xlsx_dir  = os.path.join( tmp_dir, "dataverse", vocab_dir, "xlsx", handle_name )
+    csv_dir   = os.path.join( tmp_dir, "dataverse", vocab_dir, "csv", handle_name )
+    logging.info( "vocabulary  input: %s" % xlsx_dir )
+    logging.info( "vocabulary output: %s" % csv_dir )
+    
+    if os.path.exists( csv_dir ):
+        empty_dir( csv_dir )                # remove previous files
+    if not os.path.exists( csv_dir ):
+        os.makedirs( csv_dir )              # create destination dir
+    
+    dir_list = []
+    if os.path.isdir( xlsx_dir ):
+        dir_list = os.listdir( xlsx_dir )
+    
+        for xlsx_filename in dir_list:
+            logging.info( "vocabulary filename %s" % xlsx_filename )
+            extra = ''
+            xlsx2csv_openpyxl( xlsx_dir, xlsx_filename, csv_dir, extra )
 
 
 
@@ -620,7 +656,7 @@ def store_handle_docs( config_parser, handle_name, language ):
     logging.info( "store_handle_docs() %s" % handle_name )
     
     tmp_dir = config_parser.get( "config", "tmppath" )
-    csv_dir_l = "csv-" +language
+    csv_dir_l = "csv-" + language
     csv_dir  = os.path.join( tmp_dir, "dataverse", csv_dir_l, handle_name )
     dir_list = []
     if os.path.isdir( csv_dir ):
@@ -1352,15 +1388,25 @@ def load_vocab( config_parser, vocab_fname, vocab, pos_rus, pos_eng ):
 
 
 
-def convert_excel( config_parser ):
+def convert_excel( config_parser, excel_package ):
     global Nexcept
     logging.info( "" )
-    logging.info( "convert_excel()" )
+    logging.info( "convert_excel() excel_package: %s" % excel_package )
     
     tmp_dir = config_parser.get( "config", "tmppath" )
     
     xlsx_subdir = "xlsx"
     csv_subdir  = "csv-ru"
+    
+    if excel_package == "pandas":
+        #csv_subdir  = "csv-pandas-ru"     # test
+        pass
+    elif excel_package == "openpyxl":
+        #csv_subdir  = "csv-openpyxl-ru"   # test
+        pass
+    
+    # dataverse xlsx has no -ru or -en, but we want to be explicit
+    extra = "-ru"   # for output csv file
     
     xlsx_basedir = os.path.join( tmp_dir, "dataverse", xlsx_subdir )
     
@@ -1398,21 +1444,24 @@ def convert_excel( config_parser ):
                 logging.info( "skip xlsx_filename:  %s" % xlsx_filename )
                 continue
             """
-            xlsx2csv( xlsx_dir, xlsx_filename, csv_dir )
+            
+            if excel_package == "pandas":
+                xlsx2csv_pandas( xlsx_dir, xlsx_filename, csv_dir, extra )
+            elif excel_package == "openpyxl":
+                xlsx2csv_openpyxl( xlsx_dir, xlsx_filename, csv_dir, extra )
 
 
 
-def xlsx2csv( xlsx_dir, xlsx_filename, csv_dir ):
-    logging.info( "xlsx2csv() %s" % xlsx_filename )
+def xlsx2csv_pandas( xlsx_dir, xlsx_filename, csv_dir, extra ):
+    logging.info( "xlsx2csv_pandas() %s" % xlsx_filename )
 
     xlsx_pathname = os.path.join( xlsx_dir, xlsx_filename )
     if not os.path.isfile( xlsx_pathname ):
         return
     
     root, ext = os.path.splitext( xlsx_filename )
-    csv_filename = root + ".csv"
+    csv_filename = root + extra + ".csv"
     csv_pathname = os.path.join( csv_dir, csv_filename )
-    
     
     logging.debug(  "input: %s" % xlsx_pathname )
     logging.debug( "output: %s" % csv_pathname )
@@ -1506,6 +1555,92 @@ def xlsx2csv( xlsx_dir, xlsx_filename, csv_dir ):
 
 
 
+def xlsx2csv_openpyxl( xlsx_dir, xlsx_filename, csv_dir, extra ):
+    logging.info( "xlsx2csv_openpyxl() %s" % xlsx_filename )
+
+    xlsx_pathname = os.path.join( xlsx_dir, xlsx_filename )
+    if not os.path.isfile( xlsx_pathname ):
+        return
+    
+    root, ext = os.path.splitext( xlsx_filename )
+    csv_filename = root + extra + ".csv"
+    csv_pathname = os.path.join( csv_dir, csv_filename )
+    
+    # ERRHS_1_10_data_1897.xlsx     correct losing trailing 0: 1.1 => 1.10
+    # 0123456789
+    datatype_file = None
+    if  xlsx_filename.startswith( "ERRHS_" ) and xlsx_filename[ 9 ] == '0':
+        datatype_file = "%s.%s%s"% ( xlsx_filename[ 6 ],  xlsx_filename[ 8 ],xlsx_filename[ 9 ] ) 
+        logging.info( "datatype_file: %s" % datatype_file )
+    
+    logging.debug(  "input: %s" % xlsx_pathname )
+    logging.debug( "output: %s" % csv_pathname )
+    
+    # ERRHS dataverse column names
+    dv_column_names = [
+        "id",                   #  0
+        "territory",            #  1
+        "ter_code",             #  2
+        "town",                 #  3
+        "district",             #  4
+        "year",                 #  5
+        "month",                #  6
+        "value",                #  7
+        "value_unit",           #  8
+        "value_label",          #  9
+        "datatype",             # 10
+        "histclass1",           # 11
+        "histclass2",           # 12
+        "histclass3",           # 13
+        "histclass4",           # 14
+        "histclass5",           # 15
+        "histclass6",           # 16
+        "histclass7",           # 17
+        "histclass8",           # 18
+        "histclass9",           # 19
+        "histclass10",          # 20
+        "class1",               # 21
+        "class2",               # 22
+        "class3",               # 23
+        "class4",               # 24
+        "class5",               # 25
+        "class6",               # 26
+        "class7",               # 27
+        "class8",               # 28
+        "class9",               # 29
+        "class10",              # 30
+        "comment_source",       # 31
+        "source",               # 32
+        "volume",               # 33
+        "page",                 # 34
+        "naborshik_id",         # 35
+        "comment_naborshik",    # 36
+        "base_year"             # 37
+    ]
+    
+    encoding  = "utf-8"
+    delimiter = '|'     # notice that we imported backports.csv
+    newline   = '\n'
+    
+    # parameter guess_types = False has been dropped (unfortunately)
+    workbook = openpyxl.load_workbook( xlsx_pathname, read_only = True, data_only = True )
+    worksheet = workbook.get_active_sheet()
+    
+    with io.open( csv_pathname, "w", newline = newline, encoding = encoding ) as csv_file:
+        writer = csv.writer( csv_file, delimiter = delimiter )
+        
+        for row in worksheet.iter_rows():
+            cell_list = []
+            for c, cell in enumerate( row ):
+                if datatype_file is not None and dv_column_names[ c ] == "DATATYPE":
+                    cell_list.append( datatype_file )   # restore trailing '0'
+                else:
+                    cell_list.append( cell.value )
+            
+            writer.writerow( cell_list )
+
+
+
 def translate_csv( config_parser, handle_name ):
     global Nexcept
     logging.info( "" )
@@ -1554,6 +1689,10 @@ def translate_csv( config_parser, handle_name ):
     dir_list = os.listdir( csv_dir )
     dir_list.sort()
     for csv_name in dir_list:
+        #if csv_name != "ERRHS_4_01_data_1858-ru.csv":
+        #    logging.info( "SKIP: %s" % csv_name )
+        #    continue
+        
         nexceptions = 0
         exceptions = []
         
@@ -1599,25 +1738,33 @@ def translate_csv( config_parser, handle_name ):
                         vocab = vocab_units
                         vocab_name = "vocab_units"
                         rus_d = { "rus" : rus_str }
+                    
                     elif name in regions:
                         vocab = vocab_regions
                         vocab_name = "vocab_regions"
                         i_terr = header.index( "TER_CODE" )
                         terr = rus_cols[ i_terr ]
                         terr_d = { "terr" : terr }
+                    
                     elif name in histclasses:
                         vocab = vocab_histclasses
                         vocab_name = "histclasses"
                         i_byear = header.index( "BASE_YEAR" )
                         i_dtype = header.index( "DATATYPE" )
                         byear = rus_cols[ i_byear ]
+                        
+                        # years read by pandas get '.0'
+                        #decimals = 0
+                        #byear = round( float( byear ), decimals )
+                        
                         dtype = rus_cols[ i_dtype ]
-                        rus_d = rus_d = { "rus" : rus_str, "byear" : byear, "dtype" : dtype }
+                        rus_d = { "rus" : rus_str, "byear" : byear, "dtype" : dtype }
+                    
                     elif name in modclasses:
                         vocab_name = "modclasses"
                         vocab = vocab_modclasses
                         dtype = rus_cols[ i_dtype ]
-                        rus_d = rus_d = { "rus" : rus_str, "dtype " : dtype  }
+                        rus_d = { "rus" : rus_str, "dtype " : dtype  }
                     
                     if rus_str in [ "", ".", ". " ]:
                         eng_str = rus_str
@@ -1631,6 +1778,7 @@ def translate_csv( config_parser, handle_name ):
                             logging.debug( "translate: vocab_name: %s, %s %s, key: %s" % ( vocab_name, name, rus_str, terr_s ) )
                             try:
                                 rus_eng_val = vocab[ terr_s ]
+                                logging.debug( "rus_eng_val: %s" % rus_eng_val )
                                 rus_eng_d = json.loads( rus_eng_val )
                                 eng_str = rus_eng_d[ "eng" ]
                                 logging.debug( "translate: %s %s => %s" % ( name, rus_str, eng_str ) )
@@ -1772,6 +1920,13 @@ def csv2xlsx( language, vocab_units, csv_dir, csv_filename, xlsx_dir ):
     #    logging.info( "skip input: %s" % csv_filename )
     #    return
     
+    # ERRHS_1_10_data_1897.xlsx     correct losing trailing 0: 1.1 => 1.10
+    # 0123456789
+    datatype_file = None
+    if csv_filename[ 9 ] == '0' and csv_filename.startswith( "ERRHS_" ):
+        datatype_file = "%s.%s%s"% ( csv_filename[ 6 ],  csv_filename[ 8 ],csv_filename[ 9 ] ) 
+        logging.info( "datatype_file: %s" % datatype_file )
+    
     csv_pathname = os.path.join( csv_dir, csv_filename )
     if not os.path.isfile( csv_pathname ):
         return
@@ -1880,6 +2035,10 @@ def csv2xlsx( language, vocab_units, csv_dir, csv_filename, xlsx_dir ):
             continue
     
         #page = df1.loc[ row, "PAGE" ]
+        
+        if datatype_file is not None:       # 1.1 => 1.10 restore
+            df1.loc[ row, "DATATYPE" ] = datatype_file
+    
     
     if nround == 0:
         logging.info( "nrows: %d, nothing rounded" % nrows )
@@ -1994,10 +2153,10 @@ def format_secs( seconds ):
 
 
 if __name__ == "__main__":
-    DO_RETRIEVE_DOC   = False      # -1- documentation: dataverse  => local_disk
+    DO_RETRIEVE_DOC   = True      # -1- documentation: dataverse  => local_disk
     DO_RETRIEVE_VOCAB = True      # -2- vocabulary: dataverse => mongodb
-    DO_RETRIEVE_ERRHS = False      # -3- ERRHS data: dataverse => local_disk
-    DO_CONVERT_EXCEL  = False      # -4- convert xlsx files to csv
+    DO_RETRIEVE_ERRHS = True      # -3- ERRHS data: dataverse => local_disk
+    DO_CONVERT_EXCEL  = True      # -4- convert xlsx files to csv
     DO_TRANSLATE_CSV  = True      # -5- translate Russian csv files to English variants
     DO_POSTGRES_DB    = True      # -6- ERRHS data: local_disk => postgresql, csv -> table
     DO_MONGO_DB       = True      # -7- ERRHS data: postgresql => mongodb
@@ -2063,11 +2222,20 @@ if __name__ == "__main__":
         # Downloaded vocabulary documents are not first stored in postgreSQL, 
         # they are processed on the fly, and directly put in MongoDB vocabulary
         copy_local = True       # to inspect
+        
         if dv_format == "":
             to_csv = False      # we get .tab
         else:
             to_csv = True       # we get .xlsx
-        update_vocabularies( config_parser, mongo_client, dv_format, copy_local, to_csv )
+        
+        to_csv = False
+        retrieve_vocabularies( config_parser, mongo_client, dv_format, copy_local, to_csv )
+        
+        #package = "pandas"     # years get '.0'
+        #package = "xlrd"       # not implemented
+        excel_package = "openpyxl"    # applies losing trailing 0's correction
+        #update_vocabularies( config_parser, mongo_client, dv_format, excel_package, copy_local, to_csv, excel_package )
+        
     
     if DO_RETRIEVE_ERRHS:
         logging.info( "-3- DO_RETRIEVE_ERRHS" )
@@ -2079,10 +2247,14 @@ if __name__ == "__main__":
     
     if DO_CONVERT_EXCEL:
         logging.info( "-4- DO_CONVERT_EXCEL" )
-        convert_excel( config_parser )
+        #package = "pandas"     # too slow (due to post-read coorections)
+        #package = "xlrd"       # not implemented
+        excel_package = "openpyxl"    # applies losing trailing 0's correction
+        convert_excel( config_parser, excel_package )
     
     if DO_TRANSLATE_CSV:
         logging.info( "-5- DO_TRANSLATE_CSV" )                      # ru => en
+        # TODO process existing files, not trying all handle_names
         for handle_name in handle_names:                            # csv-ru/hdl_errhs_[type]/ERRHS_[datatype]_data_[year]-ru.csv
             translate_csv( config_parser, handle_name )             # csv-en/hdl_errhs_[type]/ERRHS_[datatype]_data_[year]-en.csv
     
@@ -2108,8 +2280,8 @@ if __name__ == "__main__":
     
     if DO_FILE_CATALOGUE:
         logging.info( "-8- DO_FILE_CATALOGUE" )
-        #for language in [ "en", "ru" ]:
-        for language in [ "en" ]:
+        for language in [ "ru", "en" ]:
+        #for language in [ "en" ]:  # test
             compile_filecatalogue( config_parser, language )                # create filecatalogue xlsx files
     
     logging.info( "total number of exceptions: %d" % Nexcept )
