@@ -28,7 +28,7 @@ FL-21-Mar-2019 PostgreSQL increase max_connections
 FL-28-Mar-2019 downloads for filecatalogue
 FL-08-Jun-2019 openpyxl for xslx to csv coversion
 FL-08-Jun-2019 from backports import csv; openpyxl helper
-FL-11-Jun-2019 
+FL-13-Jun-2019 
 
 ToDo:
 - split retrieve_vocabularies in 3 functions
@@ -1410,6 +1410,15 @@ def convert_excel( config_parser, excel_package ):
     
     xlsx_basedir = os.path.join( tmp_dir, "dataverse", xlsx_subdir )
     
+    # read regions vocab, to correct territory names via ter_code
+    vocab_regions = dict()      # special, not bidict() !
+    vocab_regions = load_vocab( config_parser, "ERRHS_Vocabulary_regions.csv", vocab_regions, 1, 2 )
+    """
+    logging.info( "ERRHS_Vocabulary_regions.csv" )
+    for key, val in vocab_regions.items():
+        logging.info( "key: %s, val: %s" % ( key, val ) )
+    """
+    
     # read russian excel files
     dir_list = os.listdir( xlsx_basedir )
     dir_list.sort()
@@ -1448,7 +1457,7 @@ def convert_excel( config_parser, excel_package ):
             if excel_package == "pandas":
                 xlsx2csv_pandas( xlsx_dir, xlsx_filename, csv_dir, extra )
             elif excel_package == "openpyxl":
-                xlsx2csv_openpyxl( xlsx_dir, xlsx_filename, csv_dir, extra )
+                xlsx2csv_openpyxl( xlsx_dir, xlsx_filename, csv_dir, extra, vocab_regions )
 
 
 
@@ -1522,7 +1531,7 @@ def xlsx2csv_pandas( xlsx_dir, xlsx_filename, csv_dir, extra ):
     # re-round column PAGE (uppercase in dataverse files)
     decimals = 0
     for row in df_xls.index:
-        # We check "PAGE" for all files
+        # Check "PAGE" for all files
         old_val = df_xls.loc[ row, "PAGE" ]
         if type( old_val ) is float and not math.isnan( old_val ):
             new_val = str( long( round( old_val, decimals ) ) )
@@ -1530,7 +1539,7 @@ def xlsx2csv_pandas( xlsx_dir, xlsx_filename, csv_dir, extra ):
                 df_xls.loc[ row, "PAGE" ] = new_val
                 nround += 1
         
-        # HISTCLASS1 & CLASS2 for some files
+        # HISTCLASS1 & CLASS2 integer strings for some files
         if xlsx_filename in [ "ERRHS_1_02_data_1897.xlsx", "ERRHS_1_02_data_1959.xlsx", "ERRHS_1_02_data_2002.xlsx" ]: 
             old_val = df_xls.loc[ row, "HISTCLASS1" ]
             if type( old_val ) is float and not math.isnan( old_val ):
@@ -1555,7 +1564,7 @@ def xlsx2csv_pandas( xlsx_dir, xlsx_filename, csv_dir, extra ):
 
 
 
-def xlsx2csv_openpyxl( xlsx_dir, xlsx_filename, csv_dir, extra ):
+def xlsx2csv_openpyxl( xlsx_dir, xlsx_filename, csv_dir, extra, vocab_regions ):
     logging.info( "xlsx2csv_openpyxl() %s" % xlsx_filename )
 
     xlsx_pathname = os.path.join( xlsx_dir, xlsx_filename )
@@ -1576,8 +1585,8 @@ def xlsx2csv_openpyxl( xlsx_dir, xlsx_filename, csv_dir, extra ):
     logging.debug(  "input: %s" % xlsx_pathname )
     logging.debug( "output: %s" % csv_pathname )
     
-    # ERRHS dataverse column names
-    dv_column_names = [
+    # ERRHS postgres column names
+    pg_column_names = [
         "id",                   #  0
         "territory",            #  1
         "ter_code",             #  2
@@ -1617,25 +1626,73 @@ def xlsx2csv_openpyxl( xlsx_dir, xlsx_filename, csv_dir, extra ):
         "comment_naborshik",    # 36
         "base_year"             # 37
     ]
+    ncolumns_pg = len( pg_column_names )
     
     encoding  = "utf-8"
     delimiter = '|'     # notice that we imported backports.csv
     newline   = '\n'
     
     # parameter guess_types = False has been dropped (unfortunately)
-    workbook = openpyxl.load_workbook( xlsx_pathname, read_only = True, data_only = True )
+    read_only = False       # need to modify some columns/cells
+    workbook = openpyxl.load_workbook( xlsx_pathname, read_only = read_only, data_only = True )
     worksheet = workbook.get_active_sheet()
     
     with io.open( csv_pathname, "w", newline = newline, encoding = encoding ) as csv_file:
         writer = csv.writer( csv_file, delimiter = delimiter )
+        dv_column_names = []
         
-        for row in worksheet.iter_rows():
-            cell_list = []
-            for c, cell in enumerate( row ):
-                if datatype_file is not None and dv_column_names[ c ] == "DATATYPE":
-                    cell_list.append( datatype_file )   # restore trailing '0'
-                else:
-                    cell_list.append( cell.value )
+        for r, row in enumerate( worksheet.iter_rows() ):
+            ter_name = None
+            
+            if r == 0:
+                for c, cell in enumerate( row ):
+                    name = cell.value
+                    #logging.debug( "%d: %s" % ( c, name ) )
+                    dv_column_names.append( name )
+                
+                cell_list = dv_column_names
+                ncolumns_dv = len( dv_column_names )
+                #logging.info( "number of columns: %d" % ncolumns_dv )
+                if ncolumns_dv != ncolumns_pg:
+                    logging.warn( "number of columns: %d, expected: %d" % ( ncolumns_dv, ncolumns_pg ) )
+                
+            else:
+                #logging.info( "row: %d" % r )
+                cell_list = []
+                for c, cell in enumerate( row ):
+                    column_name = dv_column_names[ c ]
+                    
+                    if column_name == "TERRITORY":
+                        ter_name = cell.value
+                    
+                    elif column_name == "TER_CODE":
+                        ter_code = cell.value
+                        #logging.info( "ter_code: |%s|" % ter_code )
+                        terr_d = { "terr" : ter_code }
+                        terr_s = json.dumps( terr_d )
+                        rus_eng_s = vocab_regions[ terr_s  ]
+                        #logging.info( "%s: %s" % ( type( rus_eng_s ), rus_eng_s ) )
+                        
+                        if rus_eng_s is not None:
+                            rus_eng = json.loads( rus_eng_s )
+                            #logging.info( "%s: %s" % ( type( rus_eng ), rus_eng ) )
+                            rus_ter_name = rus_eng[ u'rus' ]
+                            
+                            if rus_ter_name != ter_name:
+                                logging.warn( "row: %d, ter_code: %s, territory: %s ==> %s" % ( r, ter_code, ter_name, rus_ter_name  ) )
+                        
+                        cell_list.append( rus_ter_name )
+                        cell_list.append( ter_code )
+                    
+                    #elif column_name == "VALUE":
+                    # round values right here ?!
+                    
+                    elif column_name == "DATATYPE":
+                        if  datatype_file is not None:
+                            cell_list.append( datatype_file )   # restore trailing '0'
+                    
+                    else:
+                        cell_list.append( cell.value )
             
             writer.writerow( cell_list )
 
@@ -2153,14 +2210,16 @@ def format_secs( seconds ):
 
 
 if __name__ == "__main__":
-    DO_RETRIEVE_DOC   = True      # -1- documentation: dataverse  => local_disk
-    DO_RETRIEVE_VOCAB = True      # -2- vocabulary: dataverse => mongodb
-    DO_RETRIEVE_ERRHS = True      # -3- ERRHS data: dataverse => local_disk
-    DO_CONVERT_EXCEL  = True      # -4- convert xlsx files to csv
-    DO_TRANSLATE_CSV  = True      # -5- translate Russian csv files to English variants
-    DO_POSTGRES_DB    = True      # -6- ERRHS data: local_disk => postgresql, csv -> table
-    DO_MONGO_DB       = True      # -7- ERRHS data: postgresql => mongodb
-    DO_FILE_CATALOGUE = True      # -8- ERRHS data: csv -> filecatalogue xlsx
+    DO_CLEAR_DB       = False   # MongoDB, PostgreSQL
+    
+    DO_RETRIEVE_DOC   = False   # -1- documentation: dataverse  => local_disk
+    DO_RETRIEVE_VOCAB = False   # -2- vocabulary: dataverse => mongodb
+    DO_RETRIEVE_ERRHS = False   # -3- ERRHS data: dataverse => local_disk
+    DO_CONVERT_EXCEL  = True   # -4- convert Russian xlsx files to Russian csv files
+    DO_TRANSLATE_CSV  = False   # -5- translate Russian csv files to English variants
+    DO_POSTGRES_DB    = False   # -6- ERRHS data: local_disk => postgresql, csv -> table
+    DO_MONGO_DB       = False   # -7- ERRHS data: postgresql => mongodb
+    DO_FILE_CATALOGUE = False   # -8- ERRHS data: csv -> filecatalogue xlsx
     
     #dv_format = ""
     dv_format = "original"  # does not work for ter_code (regions) vocab translations
@@ -2208,7 +2267,7 @@ if __name__ == "__main__":
     config_parser.read( RUSSIANREPO_CONFIG_PATH )
     mongo_client  = MongoClient()
     
-    if DO_RETRIEVE_VOCAB or DO_MONGO_DB:
+    if DO_CLEAR_DB and ( DO_RETRIEVE_VOCAB or DO_MONGO_DB ):
         logging.info( "-0- DO_RETRIEVE_VOCAB or DO_MONGO_DB" )
         clear_mongo( mongo_client )
     
@@ -2262,8 +2321,10 @@ if __name__ == "__main__":
         logging.info( "-6- DO_POSTGRES_DB" )    # read russian csv files
         logging.StreamHandler().flush()
         for language in [ "ru", "en" ]:
-            row_count( config_parser, language )
-            clear_postgres_table( config_parser, language )
+            if DO_CLEAR_DB:
+                row_count( config_parser, language )
+                clear_postgres_table( config_parser, language )
+            
             row_count( config_parser, language )
             for handle_name in handle_names:
                 store_handle_docs( config_parser, handle_name, language )   # local_disk => postgresql
