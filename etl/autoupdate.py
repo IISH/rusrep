@@ -1423,13 +1423,13 @@ def convert_excel( config_parser, excel_package ):
     dir_list = os.listdir( xlsx_basedir )
     dir_list.sort()
     for handle_name in dir_list:
-        """
+        #"""
         # TEST
-        #if handle_name != "hdl_errhs_agriculture":
-        if handle_name != "hdl_errhs_population":
+        if handle_name != "hdl_errhs_agriculture":
+        #if handle_name != "hdl_errhs_population":
             logging.info( "skip handle_name: %s" % handle_name )
             continue
-        """
+        #"""
         
         logging.info( "handle_name:  %s" % handle_name )
         
@@ -1665,6 +1665,7 @@ def xlsx2csv_openpyxl( xlsx_dir, xlsx_filename, csv_dir, extra, vocab_regions = 
                 cell_list = []
                 for c, cell in enumerate( row ):
                     column_name = dv_column_names[ c ]
+                    #logging.debug( "c: %d, column: %s, value: %s" % ( c, column_name, cell.value ) )
                     
                     if vocab_regions is None:
                         # vocab files; no editing
@@ -1673,6 +1674,7 @@ def xlsx2csv_openpyxl( xlsx_dir, xlsx_filename, csv_dir, extra, vocab_regions = 
                         # data files; edit some columns
                         if column_name == "TERRITORY":
                             ter_name = cell.value
+                            # do NOT append cell.value here, together with ter_code below
                         
                         elif column_name == "TER_CODE":
                             ter_code = cell.value
@@ -1703,7 +1705,8 @@ def xlsx2csv_openpyxl( xlsx_dir, xlsx_filename, csv_dir, extra, vocab_regions = 
                         elif column_name == "DATATYPE":
                             if  datatype_file is not None:
                                 cell_list.append( datatype_file )   # restore trailing '0'
-                        
+                            else:
+                                cell_list.append( cell.value )      # unchanged
                         else:
                             cell_list.append( cell.value )
                 
@@ -1824,12 +1827,16 @@ def translate_csv( config_parser, handle_name ):
                         vocab_name = "histclasses"
                         i_byear = header.index( "BASE_YEAR" )
                         i_dtype = header.index( "DATATYPE" )
+                        
+                        """
+                        len_header = len( header )
+                        #if i_byear + 1 > len_header:
+                        logging.debug( "header length: %d" % len_header )
+                        logging.debug( "i_byear: %d" % i_byear )
+                        logging.debug( "rus_cols length: %d" % len( rus_cols ) )
+                        """
+                        
                         byear = rus_cols[ i_byear ]
-                        
-                        # years read by pandas get '.0'
-                        #decimals = 0
-                        #byear = round( float( byear ), decimals )
-                        
                         dtype = rus_cols[ i_dtype ]
                         rus_d = { "rus" : rus_str, "byear" : byear, "dtype" : dtype }
                     
