@@ -1655,8 +1655,10 @@ def xlsx2csv_openpyxl( xlsx_dir, xlsx_filename, csv_dir, extra, vocab_regions = 
                 cell_list = dv_column_names
                 ncolumns_dv = len( dv_column_names )
                 #logging.info( "number of columns: %d" % ncolumns_dv )
-                if ncolumns_dv != ncolumns_pg:
-                    logging.warn( "number of columns: %d, expected: %d" % ( ncolumns_dv, ncolumns_pg ) )
+                if vocab_regions is not None:
+                    # only check data files, not relevant for vocab files
+                    if ncolumns_dv != ncolumns_pg:
+                        logging.warn( "number of columns: %d, expected: %d" % ( ncolumns_dv, ncolumns_pg ) )
                 
             else:
                 #logging.info( "row: %d" % r )
