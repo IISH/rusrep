@@ -28,7 +28,7 @@ FL-21-Mar-2019 PostgreSQL increase max_connections
 FL-28-Mar-2019 downloads for filecatalogue
 FL-08-Jun-2019 openpyxl for xslx to csv coversion
 FL-08-Jun-2019 from backports import csv; openpyxl helper
-FL-13-Jun-2019 
+FL-14-Jun-2019 
 
 ToDo:
 - split retrieve_vocabularies in 3 functions
@@ -1564,7 +1564,7 @@ def xlsx2csv_pandas( xlsx_dir, xlsx_filename, csv_dir, extra ):
 
 
 
-def xlsx2csv_openpyxl( xlsx_dir, xlsx_filename, csv_dir, extra, vocab_regions ):
+def xlsx2csv_openpyxl( xlsx_dir, xlsx_filename, csv_dir, extra, vocab_regions = None):
     logging.info( "xlsx2csv_openpyxl() %s" % xlsx_filename )
 
     xlsx_pathname = os.path.join( xlsx_dir, xlsx_filename )
@@ -1628,8 +1628,10 @@ def xlsx2csv_openpyxl( xlsx_dir, xlsx_filename, csv_dir, extra, vocab_regions ):
     ]
     ncolumns_pg = len( pg_column_names )
     
+    ntername_change = 0     # count TERRITORY changes
+    
     encoding  = "utf-8"
-    delimiter = '|'     # notice that we imported backports.csv
+    delimiter = '|'         # notice that we imported backports.csv
     newline   = '\n'
     
     # parameter guess_types = False has been dropped (unfortunately)
@@ -1662,39 +1664,51 @@ def xlsx2csv_openpyxl( xlsx_dir, xlsx_filename, csv_dir, extra, vocab_regions ):
                 for c, cell in enumerate( row ):
                     column_name = dv_column_names[ c ]
                     
-                    if column_name == "TERRITORY":
-                        ter_name = cell.value
-                    
-                    elif column_name == "TER_CODE":
-                        ter_code = cell.value
-                        #logging.info( "ter_code: |%s|" % ter_code )
-                        terr_d = { "terr" : ter_code }
-                        terr_s = json.dumps( terr_d )
-                        rus_eng_s = vocab_regions[ terr_s  ]
-                        #logging.info( "%s: %s" % ( type( rus_eng_s ), rus_eng_s ) )
-                        
-                        if rus_eng_s is not None:
-                            rus_eng = json.loads( rus_eng_s )
-                            #logging.info( "%s: %s" % ( type( rus_eng ), rus_eng ) )
-                            rus_ter_name = rus_eng[ u'rus' ]
-                            
-                            if rus_ter_name != ter_name:
-                                logging.warn( "row: %d, ter_code: %s, territory: %s ==> %s" % ( r, ter_code, ter_name, rus_ter_name  ) )
-                        
-                        cell_list.append( rus_ter_name )
-                        cell_list.append( ter_code )
-                    
-                    #elif column_name == "VALUE":
-                    # round values right here ?!
-                    
-                    elif column_name == "DATATYPE":
-                        if  datatype_file is not None:
-                            cell_list.append( datatype_file )   # restore trailing '0'
-                    
-                    else:
+                    if vocab_regions is None:
+                        # vocab files; no editing
                         cell_list.append( cell.value )
-            
+                    else:
+                        # data files; edit some columns
+                        if column_name == "TERRITORY":
+                            ter_name = cell.value
+                        
+                        elif column_name == "TER_CODE":
+                            ter_code = cell.value
+                            #logging.info( "ter_code: |%s|" % ter_code )
+                            terr_d = { "terr" : ter_code }
+                            terr_s = json.dumps( terr_d )
+                            rus_eng_s = vocab_regions.get( terr_s )
+                            #logging.info( "%s: %s" % ( type( rus_eng_s ), rus_eng_s ) )
+                            
+                            if rus_eng_s is None:
+                                logging.warn( "terr_s is not a key: %s" % terr_s )
+                                rus_ter_name = ter_name     # keep existing value
+                            else:
+                                rus_eng = json.loads( rus_eng_s )
+                                #logging.info( "%s: %s" % ( type( rus_eng ), rus_eng ) )
+                                rus_ter_name = rus_eng[ u'rus' ]
+                                
+                                if rus_ter_name != ter_name:
+                                    logging.debug( "row: %d, ter_code: %s, territory change: %s ==> %s" % ( r, ter_code, ter_name, rus_ter_name  ) )
+                                    ntername_change += 1
+                            
+                            cell_list.append( rus_ter_name )
+                            cell_list.append( ter_code )
+                        
+                        #elif column_name == "VALUE":
+                        # round values right here ?!
+                        
+                        elif column_name == "DATATYPE":
+                            if  datatype_file is not None:
+                                cell_list.append( datatype_file )   # restore trailing '0'
+                        
+                        else:
+                            cell_list.append( cell.value )
+                
             writer.writerow( cell_list )
+    
+    if ntername_change > 0:
+        logging.info( "Number of records with change in TERRITORY column: %d" % ntername_change )
 
 
 
@@ -2210,16 +2224,16 @@ def format_secs( seconds ):
 
 
 if __name__ == "__main__":
-    DO_CLEAR_DB       = False   # MongoDB, PostgreSQL
+    DO_CLEAR_DB       = True   # True: update MongoDB & PostgreSQL
     
-    DO_RETRIEVE_DOC   = False   # -1- documentation: dataverse  => local_disk
-    DO_RETRIEVE_VOCAB = False   # -2- vocabulary: dataverse => mongodb
-    DO_RETRIEVE_ERRHS = False   # -3- ERRHS data: dataverse => local_disk
+    DO_RETRIEVE_DOC   = True   # -1- documentation: dataverse  => local_disk
+    DO_RETRIEVE_VOCAB = True   # -2- vocabulary: dataverse => mongodb
+    DO_RETRIEVE_ERRHS = True   # -3- ERRHS data: dataverse => local_disk
     DO_CONVERT_EXCEL  = True   # -4- convert Russian xlsx files to Russian csv files
-    DO_TRANSLATE_CSV  = False   # -5- translate Russian csv files to English variants
-    DO_POSTGRES_DB    = False   # -6- ERRHS data: local_disk => postgresql, csv -> table
-    DO_MONGO_DB       = False   # -7- ERRHS data: postgresql => mongodb
-    DO_FILE_CATALOGUE = False   # -8- ERRHS data: csv -> filecatalogue xlsx
+    DO_TRANSLATE_CSV  = True   # -5- translate Russian csv files to English variants
+    DO_POSTGRES_DB    = True   # -6- ERRHS data: local_disk => postgresql, csv -> table
+    DO_MONGO_DB       = True   # -7- ERRHS data: postgresql => mongodb
+    DO_FILE_CATALOGUE = True   # -8- ERRHS data: csv -> filecatalogue xlsx
     
     #dv_format = ""
     dv_format = "original"  # does not work for ter_code (regions) vocab translations
