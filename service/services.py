@@ -1510,20 +1510,27 @@ def documentation():
     configparser   = get_configparser()
     dv_host        = configparser.get( "config", "dataverse_root" )
     api_root       = configparser.get( "config", "api_root" )
-    ristat_key     = configparser.get( "config", "ristatkey" )
+    #ristat_key     = configparser.get( "config", "ristatkey" )
+    ristat_key     = configparser.get( "config", "ristatkey_expired" )
     ristat_name    = configparser.get( "config", "ristatname" )
     ristatdocs     = configparser.get( "config", "hdl_documentation" )
     
     logging.info( "dv_host: %s" % dv_host )
-    logging.info( "ristat_key: %s" % ristat_key )
+    logging.debug( "ristat_key: %s" % ristat_key )
+    logging.info( "ristat_name: %s" % ristat_name )
     
     papers = []
     
     try:
         connection = Connection( dv_host, ristat_key )
+        logging.debug( "connection succeeded" )
     except:
-        type_, value, tb = sys.exc_info()
-        logging.error( "%s" % value )
+        logging.error( "connection failed" )
+        #type_, value, tb = sys.exc_info()
+        #logging.error( "%s" % value )
+        etype = sys.exc_info()[ 0:1 ]
+        value = sys.exc_info()[ 1:2 ]
+        logging.error( "etype: %s, value: %s" % ( etype, value ) )
         return Response( json.dumps( papers ), mimetype = "application/json; charset=utf-8" )
     
     dataverse = connection.get_dataverse( ristat_name )
@@ -1531,7 +1538,9 @@ def documentation():
         logging.info( "ristat_key: %s" % ristat_key )
         logging.error( "COULD NOT GET A DATAVERSE CONNECTION" )
         return Response( json.dumps( papers ), mimetype = "application/json; charset=utf-8" )
-
+    
+    logging.debug( "get_dataverse succeeded" )
+    logging.debug( "title: %s" % dataverse.title )
     settings = DataFilter( request.args )
     
     logging.debug( "request.args: %s" % request.args )
