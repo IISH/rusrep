@@ -1505,7 +1505,51 @@ def test():
 @app.route( "/documentation" )
 def documentation():
     logging.debug( "/documentation" )
-    logging.debug( "Python version: %s" % sys.version )
+    logging.debug( "request.args: %s" % request.args )
+
+    language = request.args.get( "lang", "en" )
+    logging.debug( "language: %s" % language )
+
+    config_parser = get_configparser()
+    tmp_dir       = config_parser.get( "config", "tmppath" )
+
+    download_dir = os.path.join( tmp_dir, "dataverse" )
+    download_fname = "doclist-" + language + ".json"
+    download_path = os.path.join( download_dir, download_fname )
+    
+    logging.debug( "download_dir: %s" % download_dir )
+    logging.debug( "download_fname: %s" % download_fname )
+    logging.debug( "download_path: %s" % download_path )
+    
+    file_json = codecs.open(download_path, 'r', "utf-8" )
+    docs_json = file_json.read()
+    file_json.close()
+
+    logging.debug( docs_json )
+    return Response( docs_json, mimetype = "application/json; charset=utf-8" )
+# /documentation documentation()
+
+
+
+def documentation_dv():
+    logging.debug( "/documentation_dv" )
+    #logging.debug( "Python version: %s" % sys.version )
+
+    settings = DataFilter( request.args )
+    
+    logging.debug( "request.args: %s" % request.args )
+    logging.debug( "settings: %s" % settings )
+    
+    datatype = ""
+    try:
+        datatype = int( request.args.get( "datatype" ) )
+    except:
+        pass
+    
+    datafilter = settings.datafilter
+    
+    logging.debug( "datatype: %s, type: %s" % ( datatype, type( datatype ) ) )
+    logging.debug( "datafilter: %s" % str( datafilter ) )
 
     configparser   = get_configparser()
     dv_host        = configparser.get( "config", "dataverse_root" )
@@ -1541,21 +1585,6 @@ def documentation():
     
     logging.debug( "get_dataverse succeeded" )
     logging.debug( "title: %s" % dataverse.title )
-    settings = DataFilter( request.args )
-    
-    logging.debug( "request.args: %s" % request.args )
-    logging.debug( "settings: %s" % settings )
-    
-    datatype = ""
-    try:
-        datatype = int( request.args.get( "datatype" ) )
-    except:
-        pass
-    
-    datafilter = settings.datafilter
-    
-    logging.debug( "datatype: %s, type: %s" % ( datatype, type( datatype ) ) )
-    logging.debug( "datafilter: %s" % str( datafilter ) )
     
     name_start = "ERRHS_" + str( datatype ) + "_"
     logging.debug( "name_start: %s" % name_start )
@@ -1620,7 +1649,7 @@ def documentation():
         logging.debug( paper )
     
     return Response( json.dumps( papers ), mimetype = "application/json; charset=utf-8" )
-# /documentation documentation()
+# /documentation documentation_dv()
 
 
 # Topics - Get topics and process them as terms for GUI

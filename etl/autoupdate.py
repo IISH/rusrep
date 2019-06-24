@@ -28,7 +28,7 @@ FL-21-Mar-2019 PostgreSQL increase max_connections
 FL-28-Mar-2019 downloads for filecatalogue
 FL-08-Jun-2019 openpyxl for xslx to csv coversion
 FL-08-Jun-2019 from backports import csv; openpyxl helper
-FL-14-Jun-2019 
+FL-24-Jun-2019 document info request from GUI
 
 ToDo:
 - split retrieve_vocabularies in 3 functions
@@ -55,6 +55,8 @@ To retain the current behavior and silence the warning, pass 'sort=True'.
 def load_json( apiurl ):
 def empty_dir( dst_dir ):
 def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", copy_local = False, to_csv = False, remove_xlsx = True ):
+def loadjson( json_dataurl ):
+def documents_info( config_parser, language ):
 def update_documentation( config_parser, copy_local, remove_xlsx = False ):
 def retrieve_vocabularies( config_parser, mongo_client, dv_format, copy_local = True, to_csv = False, remove_xlsx = False):
 def convert_vocabularies():
@@ -99,8 +101,11 @@ import pandas as pd
 import psycopg2
 import re
 import requests
+import simplejson
 import sys
 import shutil
+import urllib
+import urllib2
 
 from backports import csv
 from bidict import bidict
@@ -399,19 +404,171 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", co
 
 
 
+def loadjson( json_dataurl ):
+    logging.debug( "loadjson() %s" % json_dataurl )
+
+    req = urllib2.Request( json_dataurl )
+    opener = urllib2.build_opener()
+    f = opener.open( req )
+    dataframe = simplejson.load( f )
+    return dataframe
+
+
+
+def documents_info( config_parser, language ):
+    logging.debug( "documents_info()" )
+    
+    tmp_dir     = config_parser.get( "config", "tmppath" )
+    dv_host     = config_parser.get( "config", "dataverse_root" )
+    api_root    = config_parser.get( "config", "api_root" )
+    ristat_key  = config_parser.get( "config", "ristatkey" )
+    #ristat_key  = config_parser.get( "config", "ristatkey_expired" )
+    ristat_name = config_parser.get( "config", "ristatname" )
+    ristatdocs  = config_parser.get( "config", "hdl_documentation" )
+    
+    logging.info( "dv_host: %s" % dv_host )
+    logging.debug( "ristat_key: %s" % ristat_key )
+    logging.info( "ristat_name: %s" % ristat_name )
+    
+    download_dir = os.path.join( tmp_dir, "dataverse" )
+    download_fname = "doclist-" + language + ".json"
+    download_path = os.path.join( download_dir, download_fname )
+    
+    logging.debug( "download_dir: %s" % download_dir )
+    logging.debug( "download_fname: %s" % download_fname )
+    logging.debug( "download_path: %s" % download_path )
+    
+    papers = []
+    
+    try:
+        connection = Connection( dv_host, ristat_key )
+        logging.debug( "connection succeeded" )
+    except:
+        logging.error( "connection failed" )
+        #type_, value, tb = sys.exc_info()
+        #logging.error( "%s" % value )
+        etype = sys.exc_info()[ 0:1 ]
+        value = sys.exc_info()[ 1:2 ]
+        logging.error( "etype: %s, value: %s" % ( etype, value ) )
+        return Response( json.dumps( papers ), mimetype = "application/json; charset=utf-8" )
+    
+    dataverse = connection.get_dataverse( ristat_name )
+    if not dataverse:
+        logging.info( "ristat_key: %s" % ristat_key )
+        logging.error( "COULD NOT GET A DATAVERSE CONNECTION" )
+        return Response( json.dumps( papers ), mimetype = "application/json; charset=utf-8" )
+    
+    logging.debug( "get_dataverse succeeded" )
+    logging.debug( "title: %s" % dataverse.title )
+    
+    datatype = ""
+    settings = DataFilter( { "lang" : language } )
+    datafilter = settings.datafilter
+    """
+    settings = DataFilter( request.args )
+    
+    try:
+        logging.debug( "request.args: %s" % request.args )
+        logging.debug( "settings: %s" % settings )
+        datatype = int( request.args.get( "datatype" ) )
+    except:
+        pass
+    
+    datafilter = settings.datafilter
+    
+    logging.debug( "datatype: %s, type: %s" % ( datatype, type( datatype ) ) )
+    logging.debug( "datafilter: %s" % str( datafilter ) )
+    """
+    
+    name_start = "ERRHS_" + str( datatype ) + "_"
+    logging.debug( "name_start: %s" % name_start )
+    
+    for item in dataverse.get_contents():
+        handle = str( item[ "protocol" ] ) + ':' + str( item[ "authority" ] ) + '/' + str( item[ "identifier" ] )
+        if handle == ristatdocs:
+            datasetid = item[ "id" ]
+            url = "http://" + dv_host + "/api/datasets/" + str( datasetid ) + "/?&key=" + str( ristat_key )
+            logging.debug( "url: %s" % url )
+            dataframe = loadjson( url )
+            for files in dataframe[ "data" ][ "latestVersion" ][ "files" ]:
+                paperitem = {}
+                paperitem[ "id" ] = str( files[ "datafile" ][ "id" ] )
+                paperitem[ "name" ] = str( files[ "datafile" ][ "name" ] )
+                paperitem[ "url" ] = "%s/service/download?id=%s" % ( api_root, paperitem[ "id" ] )
+                logging.debug( "paperitem: %s" % paperitem )
+                
+                name = str( files[ "datafile" ][ "name" ] )
+                
+                if datatype != "":      # use datatype to limit the returned documents
+                    # find substring between the first two underscores
+                    sub_name = ""
+                    p1 = name.find( "_" )
+                    if p1 != -1:
+                        p2 = name.find( "_", p1+1 )
+                        if p2 != -1:
+                            sub_name = name[ p1+1:p2 ]
+                            logging.debug( "sub_name: %s" % sub_name )
+                            try:
+                                sub_digits = int( sub_name )
+                                if sub_digits != datatype:
+                                    continue    # datatype does not match: skip
+                            except:
+                                pass            # allow
+                
+                try:
+                    if "lang" in settings.datafilter:
+                        varpat = r"(_%s)" % ( settings.datafilter[ "lang" ] )
+                        pattern = re.compile( varpat, re.IGNORECASE )
+                        found = pattern.findall( paperitem[ "name" ] )
+                        if found:
+                            papers.append( paperitem )
+                    else:   # paperitem without language specified: add
+                        papers.append( paperitem )
+                    
+                    if "topic" in settings.datafilter:
+                        varpat = r"(_%s_.+_\d+_+%s.|class|region)" % ( settings.datafilter[ "topic" ], settings.datafilter[ "lang" ] )
+                        pattern = re.compile( varpat, re.IGNORECASE )
+                        found = pattern.findall( paperitem[ "name" ] )
+                        if found:
+                            papers.append( paperitem )
+                    else:
+                        if "lang" not in settings.datafilter: 
+                            papers.append( paperitem )
+                except:
+                    if "lang" not in settings.datafilter:
+                        papers.append( paperitem )
+    
+    logging.debug( "papers in response:" )
+    for paper in papers:
+        logging.debug( paper )
+    
+    #return Response( json.dumps( papers ), mimetype = "application/json; charset=utf-8" )
+    docs_json = json.dumps( papers )
+    #logging.debug( type( docs_json ) )
+    #logging.debug( docs_json )
+    
+    file_json = codecs.open(download_path, 'w', "utf-8" )
+    file_json.write( docs_json.encode( "utf-8" ) )
+    file_json.close()
+
+
+
 def update_documentation( config_parser, copy_local, remove_xlsx = False ):
     logging.info( "%s update_documentation()" % __file__ )
-
+    
     handle_name = "hdl_documentation"
     logging.info( "retrieving documents from dataverse for handle name %s ..." % handle_name )
     dst_dir = "doc"
     dv_format = ""
     ( docs, ids ) = documents_by_handle( config_parser, handle_name, dst_dir, dv_format, copy_local, remove_xlsx )
+    
     ndoc =  len( docs )
     logging.info( "%d documents retrieved from dataverse" % ndoc )
     if ndoc == 0:
-        logging.info( "no documents, nothing to do." )
-        return
+        logging.info( "no documents, nothing donloaded." )
+    
+    for language in [ "ru", "en" ]:
+        documents_info( config_parser, language )
 
 
 
@@ -2249,8 +2406,8 @@ if __name__ == "__main__":
     
     log_file = True
     
-    #log_level = logging.DEBUG
-    log_level = logging.INFO
+    log_level = logging.DEBUG
+    #log_level = logging.INFO
     #log_level = logging.WARNING
     #log_level = logging.ERROR
     #log_level = logging.CRITICAL
