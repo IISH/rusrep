@@ -230,6 +230,7 @@ def load_vocabulary( vocab_type, language, datatype, base_year ):
         if datatype:
             vocab_filter[ "DATATYPE" ] = "MOD_" + datatype
     
+    logging.debug( "vocab_name: %s" % vocab_name )
     logging.debug( "vocab_filter: %s" % vocab_filter )
     
     eng_data = {}
@@ -253,10 +254,12 @@ def load_vocabulary( vocab_type, language, datatype, base_year ):
     params = {}
     if vocab_type == "topics":
         params[ "vocabulary" ] = vocab_name
+    
     elif vocab_type == "regions":
         params[ "vocabulary" ] = vocab_name
         if base_year:
             params[ "basisyear" ] = base_year
+    
     else:
         params[ "vocabulary" ] = vocab_type
         if base_year:

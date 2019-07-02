@@ -29,6 +29,7 @@ FL-28-Mar-2019 downloads for filecatalogue
 FL-08-Jun-2019 openpyxl for xslx to csv coversion
 FL-08-Jun-2019 from backports import csv; openpyxl helper
 FL-24-Jun-2019 document info request from GUI
+FL-02-Jul-2019 use requests instead of urllib[2]
 
 ToDo:
 - split retrieve_vocabularies in 3 functions
@@ -52,7 +53,7 @@ To retain the current behavior and silence the warning, pass 'sort=True'.
   return pd.concat( lexicon )
 
 --------------------------------------------------------------------------------
-def load_json( apiurl ):
+#def load_json( apiurl ):
 def empty_dir( dst_dir ):
 def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", copy_local = False, to_csv = False, remove_xlsx = True ):
 def loadjson( json_dataurl ):
@@ -85,11 +86,12 @@ from __future__ import ( absolute_import, division, print_function, unicode_lite
 from builtins import ( ascii, bytes, chr, dict, filter, hex, input, int, list, map, 
     next, object, oct, open, pow, range, round, super, str, zip )
 
-from six.moves import configparser, StringIO, urllib
+from six.moves import configparser, StringIO
 
 import codecs
 import ConfigParser
 import csv
+import dateutil
 import getpass
 import io
 import json
@@ -104,8 +106,6 @@ import requests
 import simplejson
 import sys
 import shutil
-import urllib
-import urllib2
 
 from backports import csv
 from bidict import bidict
@@ -125,6 +125,7 @@ from dataverse import Connection
 from vocab import vocabulary, classupdate
 from service.configutils import DataFilter
 
+autoupdate = False
 Nexcept = 0
 
 # column comment_source of postgresql table russianrepository of db ristat
@@ -167,18 +168,9 @@ def get_configparser():
 # get_configparser()
 
 
-def load_json( url ):
-    logging.debug( "load_json() %s" % url )
-
-    wp = urllib.request.urlopen( url )
-    pw = wp.read()
-    dataframe = json.loads( pw )
-    return dataframe
-
-
-
 def empty_dir( dst_dir ):
     global Nexcept
+    
     logging.info( "empty_dir() %s" % dst_dir )
     logging.info( "removing previous downloads" )
     
@@ -231,8 +223,37 @@ def empty_dir( dst_dir ):
 
 
 
+def read_autoupdate( autoupdate_path ):
+    update = False
+    
+    with open( autoupdate_path, 'r' ) as fd:
+        text = fd.readline()
+        text.strip()
+        logging.info( "read_autoupdate() |%s|" % text )
+        
+        dt_req = dateutil.parser.parse( text )      # e.g. 02-Jul-2019
+        dt_now = datetime.now()
+        
+        logging.info( "request: %s" % str( dt_req ) )
+        logging.info( "dt now : %s" % str( dt_now ) )
+        
+        duration = dt_now - dt_req
+        seconds = duration.seconds
+        logging.info( "seconds: %d" % seconds )
+        
+        seconds_per_day = 24 * 60 * 60
+        if seconds < seconds_per_day:
+            update = True
+    
+    logging.info( "read_autoupdate() %s" % update )
+    return update
+
+
+
 def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", copy_local = False, to_csv = False, remove_xlsx = True ):
+    global autoupdate
     global Nexcept
+    
     logging.info( "documents_by_handle() copy_local: %s, to_csv: %s" % ( copy_local, to_csv ) )
     logging.debug( "handle_name: %s" % handle_name )
     logging.info( "dst_dir: %s, dv_format: %s, copy_local: %s, to_csv: %s" % ( dst_dir, dv_format, copy_local, to_csv ) )
@@ -299,7 +320,8 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", co
             url  = "https://" + str( dv_host ) + "/api/datasets/" + str( datasetid )
             url += "?key=" + str( ristat_key )
             
-            dataframe = load_json( url )
+            resp = requests.get( url )
+            dataframe = resp.json()
             
             files = dataframe[ 'data' ][ 'latestVersion' ][ 'files' ]
             logging.info( "number of files: %d" % len( files ) )
@@ -333,20 +355,23 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", co
                         os.makedirs( download_dir )
                     
                     filename = paperitem[ 'name' ]
+                    logging.info( "filename: %s" % filename )
                     filepath = "%s/%s" % ( download_dir, filename )
                     logging.debug( "filepath: %s" % filepath )
                     
                     # read dataverse document from url, write contents to filepath
-                    filein = urllib.request.urlopen( url )
-                    fileout = open( filepath, 'wb' )
-                    fileout.write( filein.read() )
-                    #resp_in = requests.get( url )
-                    #fileout = codecs.open( filepath, 'wb', encoding = "utf-8" )
-                    #fileout.write( resp_in.text )
+                    resp_in = requests.get( url )
+                    with open( filepath, 'wb' ) as fd:
+                        for chunk in resp_in.iter_content( chunk_size = 512 ):
+                            fd.write( chunk )
+                        os.fsync( fd )
                     
-                    fileout.flush()
-                    os.fsync( fileout )
-                    fileout.close()
+                    if filename == "Autoupdate.txt":
+                        autoupdate = read_autoupdate( filepath )
+                        logging.info( "autoupdate: %s" % autoupdate )
+                        if not autoupdate:
+                            logging.info( "skip autoupdate" )
+                            return ( papers, ids )
                     
                     if to_csv:
                         if not os.path.exists( csv_dir ):
@@ -404,17 +429,6 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", co
 
 
 
-def loadjson( json_dataurl ):
-    logging.debug( "loadjson() %s" % json_dataurl )
-
-    req = urllib2.Request( json_dataurl )
-    opener = urllib2.build_opener()
-    f = opener.open( req )
-    dataframe = simplejson.load( f )
-    return dataframe
-
-
-
 def documents_info( config_parser, language ):
     logging.debug( "documents_info()" )
     
@@ -464,21 +478,6 @@ def documents_info( config_parser, language ):
     datatype = ""
     settings = DataFilter( { "lang" : language } )
     datafilter = settings.datafilter
-    """
-    settings = DataFilter( request.args )
-    
-    try:
-        logging.debug( "request.args: %s" % request.args )
-        logging.debug( "settings: %s" % settings )
-        datatype = int( request.args.get( "datatype" ) )
-    except:
-        pass
-    
-    datafilter = settings.datafilter
-    
-    logging.debug( "datatype: %s, type: %s" % ( datatype, type( datatype ) ) )
-    logging.debug( "datafilter: %s" % str( datafilter ) )
-    """
     
     name_start = "ERRHS_" + str( datatype ) + "_"
     logging.debug( "name_start: %s" % name_start )
@@ -489,7 +488,10 @@ def documents_info( config_parser, language ):
             datasetid = item[ "id" ]
             url = "http://" + dv_host + "/api/datasets/" + str( datasetid ) + "/?&key=" + str( ristat_key )
             logging.debug( "url: %s" % url )
-            dataframe = loadjson( url )
+            
+            resp = requests.get( url )
+            dataframe = resp.json()
+            
             for files in dataframe[ "data" ][ "latestVersion" ][ "files" ]:
                 paperitem = {}
                 paperitem[ "id" ] = str( files[ "datafile" ][ "id" ] )
@@ -573,6 +575,8 @@ def update_documentation( config_parser, copy_local, remove_xlsx = False ):
 
 
 def retrieve_vocabularies( config_parser, mongo_client, dv_format, copy_local = True, to_csv = False, remove_xlsx = False):
+    global autoupdate
+    
     logging.info( "%s retrieve_vocabularies()" % __file__ )
     """
     retrieve_vocabularies():
@@ -594,6 +598,11 @@ def retrieve_vocabularies( config_parser, mongo_client, dv_format, copy_local = 
         ascii_dir = dst_dir
     
     ( docs, ids ) = documents_by_handle( config_parser, handle_name, dst_dir, dv_format, copy_local, to_csv, remove_xlsx )
+    
+    if not autoupdate:
+        logging.info( "retrieve_vocabularies() autoupdate cancelled!" )
+        return      # <<<
+    
     ndoc =  len( docs )
     logging.info( "%d documents retrieved from dataverse" % ndoc )
     if ndoc == 0:
@@ -612,6 +621,9 @@ def retrieve_vocabularies( config_parser, mongo_client, dv_format, copy_local = 
     convert_vocabularies( handle_name )
     
     # -3- MongoDB
+    # Going to up update MongoDB contenst; clear it first
+    clear_mongo( mongo_client )
+    
     # parameters to retrieve the vocabulary files
     dv_host = config_parser.get( "config", "dataverse_root" )
     apikey = config_parser.get( "config", "ristatkey" )
@@ -681,11 +693,16 @@ def convert_vocabularies( handle_name ):
     dir_list = []
     if os.path.isdir( xlsx_dir ):
         dir_list = os.listdir( xlsx_dir )
+        dir_list.sort()
     
         for xlsx_filename in dir_list:
-            logging.info( "vocabulary filename %s" % xlsx_filename )
-            extra = ''
-            xlsx2csv_openpyxl( xlsx_dir, xlsx_filename, csv_dir, extra )
+            if xlsx_filename.endswith( ".xlsx" ):
+                logging.info( "vocabulary filename: %s" % xlsx_filename )
+                extra = ''
+                xlsx2csv_openpyxl( xlsx_dir, xlsx_filename, csv_dir, extra )
+            else:
+                logging.info( "skip filename: %s" % xlsx_filename )
+                continue
 
 
 
@@ -909,6 +926,7 @@ def test_csv_file( path_name ):
 def filter_csv( config_parser, csv_dir, in_filename ):
     global Nexcept
     global pkey
+    
     logging.info( "filter_csv() %s" % in_filename )
     
     # Notice: the applied filtering is reflected in the returned out_file, 
@@ -1428,6 +1446,7 @@ def topic_counts( config_parser, langage ):
 
 def load_vocab( config_parser, vocab_fname, vocab, pos_rus, pos_eng ):
     global Nexcept
+    
     logging.info( "load_vocab() vocab_fname: %s" % vocab_fname )
     # if pos_extar is not None, it is needed to make the keys and/or values unique
     handle_name = "hdl_vocabularies"
@@ -1547,6 +1566,7 @@ def load_vocab( config_parser, vocab_fname, vocab, pos_rus, pos_eng ):
 
 def convert_excel( config_parser, excel_package ):
     global Nexcept
+    
     logging.info( "" )
     logging.info( "convert_excel() excel_package: %s" % excel_package )
     
@@ -1876,6 +1896,7 @@ def xlsx2csv_openpyxl( xlsx_dir, xlsx_filename, csv_dir, extra, vocab_regions = 
 
 def translate_csv( config_parser, handle_name ):
     global Nexcept
+    
     logging.info( "" )
     logging.info( "translate_csv()" )
     logging.info( "translating csv documents for handle name %s ..." % handle_name )
@@ -2081,6 +2102,7 @@ def translate_csv( config_parser, handle_name ):
 def compile_filecatalogue( config_parser, language ):
     # convert the -en and -ru csv files to xlsx files with copyright tab
     global Nexcept
+    
     logging.info( "" )
     logging.info( "compile_filecatalogue() language = %s" % language )
     
@@ -2390,10 +2412,8 @@ def format_secs( seconds ):
 
 
 if __name__ == "__main__":
-    DO_CLEAR_DB       = True   # True: update MongoDB & PostgreSQL
-    
-    DO_RETRIEVE_DOC   = True   # -1- documentation: dataverse  => local_disk
-    DO_RETRIEVE_VOCAB = True   # -2- vocabulary: dataverse => mongodb
+    DO_RETRIEVE_VOCAB = True   # -1- vocabulary: dataverse => mongodb
+    DO_RETRIEVE_DOC   = True   # -2- documentation: dataverse  => local_disk
     DO_RETRIEVE_ERRHS = True   # -3- ERRHS data: dataverse => local_disk
     DO_CONVERT_EXCEL  = True   # -4- convert Russian xlsx files to Russian csv files
     DO_TRANSLATE_CSV  = True   # -5- translate Russian csv files to English variants
@@ -2406,8 +2426,8 @@ if __name__ == "__main__":
     
     log_file = True
     
-    log_level = logging.DEBUG
-    #log_level = logging.INFO
+    #log_level = logging.DEBUG
+    log_level = logging.INFO
     #log_level = logging.WARNING
     #log_level = logging.ERROR
     #log_level = logging.CRITICAL
@@ -2447,17 +2467,8 @@ if __name__ == "__main__":
     config_parser.read( RUSSIANREPO_CONFIG_PATH )
     mongo_client  = MongoClient()
     
-    if DO_CLEAR_DB and ( DO_RETRIEVE_VOCAB or DO_MONGO_DB ):
-        logging.info( "-0- DO_RETRIEVE_VOCAB or DO_MONGO_DB" )
-        clear_mongo( mongo_client )
-    
-    if DO_RETRIEVE_DOC:
-        logging.info( "-1- DO_RETRIEVE_DOC" )
-        copy_local  = True      # for zipped downloads
-        update_documentation( config_parser, copy_local )
-    
     if DO_RETRIEVE_VOCAB:
-        logging.info( "-2- DO_RETRIEVE_VOCAB" )
+        logging.info( "-1- DO_RETRIEVE_VOCAB" )
         # Downloaded vocabulary documents are not first stored in postgreSQL, 
         # they are processed on the fly, and directly put in MongoDB vocabulary
         copy_local = True       # to inspect
@@ -2470,11 +2481,27 @@ if __name__ == "__main__":
         to_csv = False
         retrieve_vocabularies( config_parser, mongo_client, dv_format, copy_local, to_csv )
         
+        # global autoupdate parameter set via dataverse Autoupdate.txt in vocabularies dir
+        if not autoupdate:
+            logging.info( "__main__: autoupdate cancelled!" )
+            logging.info( "stop: %s" % datetime.now() )
+            str_elapsed = format_secs( time() - time0 )
+            logging.info( "processing took %s" % str_elapsed )
+    
+            # This should be called at application exit,
+            # and no further use of the logging system should be made after this call.
+            logging.shutdown()
+            sys.exit(0)
+        
         #package = "pandas"     # years get '.0'
         #package = "xlrd"       # not implemented
         excel_package = "openpyxl"    # applies losing trailing 0's correction
         #update_vocabularies( config_parser, mongo_client, dv_format, excel_package, copy_local, to_csv, excel_package )
-        
+    
+    if DO_RETRIEVE_DOC:
+        logging.info( "-2- DO_RETRIEVE_DOC" )
+        copy_local  = True      # for zipped downloads
+        update_documentation( config_parser, copy_local )
     
     if DO_RETRIEVE_ERRHS:
         logging.info( "-3- DO_RETRIEVE_ERRHS" )
@@ -2501,9 +2528,8 @@ if __name__ == "__main__":
         logging.info( "-6- DO_POSTGRES_DB" )    # read russian csv files
         logging.StreamHandler().flush()
         for language in [ "ru", "en" ]:
-            if DO_CLEAR_DB:
-                row_count( config_parser, language )
-                clear_postgres_table( config_parser, language )
+            row_count( config_parser, language )
+            clear_postgres_table( config_parser, language )
             
             row_count( config_parser, language )
             for handle_name in handle_names:
@@ -2515,6 +2541,7 @@ if __name__ == "__main__":
             #topic_counts( config_parser )                                  # postgresql datasets.topics counts
     
     if DO_MONGO_DB:
+        # Notice: MongoDB was cleared in step DO_RETRIEVE_VOCAB if autoupdate was not False
         logging.info( "-7- DO_MONGO_DB" )
         for language in [ "ru", "en" ]:
             update_handle_docs( config_parser, mongo_client, language )     # postgresql => mongodb
