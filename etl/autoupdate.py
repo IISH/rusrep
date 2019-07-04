@@ -235,9 +235,12 @@ def read_autoupdate( autoupdate_path ):
         try:
             dt_dv = dateutil.parser.parse( text )       # e.g. 02-Jul-2019 in dataverse
             dt_au = datetime.now()                      # autoupdate
+            if dt_dv > dt_au:
+                logging.warn( "ignoring future date string" )
+                return False
         except:
             logging.warn( "ignoring invalid date string" )
-            return update
+            return False
         
         logging.debug( "dt_dv: %s" % str( dt_dv ) )
         logging.debug( "dt_au: %s" % str( dt_au ) )
@@ -255,6 +258,8 @@ def read_autoupdate( autoupdate_path ):
         
         if seconds < seconds_per_day:
             update = True
+        else:
+            logging.warn( "ignoring expired date string" )
     
     logging.info( "read_autoupdate() %s" % update )
     return update
