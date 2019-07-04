@@ -30,6 +30,7 @@ FL-08-Jun-2019 openpyxl for xslx to csv coversion
 FL-08-Jun-2019 from backports import csv; openpyxl helper
 FL-24-Jun-2019 document info request from GUI
 FL-02-Jul-2019 use requests instead of urllib[2]
+FL-04-Jul-2019 autoupdate steered by dataverse
 
 ToDo:
 - split retrieve_vocabularies in 3 functions
@@ -112,7 +113,7 @@ from bidict import bidict
 from datetime import date, datetime
 from pymongo import MongoClient
 from sys import exc_info
-from time import ctime, time
+from time import ctime, mktime, time
 
 sys.path.insert( 0, os.path.abspath( os.path.join(os.path.dirname( "__file__" ), './' ) ) )
 sys.path.insert( 0, os.path.abspath( os.path.join(os.path.dirname( "__file__" ), '../' ) ) )
@@ -229,19 +230,25 @@ def read_autoupdate( autoupdate_path ):
     with open( autoupdate_path, 'r' ) as fd:
         text = fd.readline()
         text.strip()
-        logging.info( "read_autoupdate() |%s|" % text )
+        logging.info( "read_autoupdate() %s" % text )
         
-        dt_req = dateutil.parser.parse( text )      # e.g. 02-Jul-2019
-        dt_now = datetime.now()
+        dt_dv = dateutil.parser.parse( text )       # e.g. 02-Jul-2019 in dataverse
+        dt_au = datetime.now()                      # autoupdate
         
-        logging.info( "request: %s" % str( dt_req ) )
-        logging.info( "dt now : %s" % str( dt_now ) )
+        logging.debug( "dt_dv: %s" % str( dt_dv ) )
+        logging.debug( "dt_au: %s" % str( dt_au ) )
         
-        duration = dt_now - dt_req
-        seconds = duration.seconds
-        logging.info( "seconds: %d" % seconds )
+        secs_dv = mktime( dt_dv.timetuple() )
+        secs_au = mktime( dt_au.timetuple() )
+        seconds = secs_au - secs_dv
         
         seconds_per_day = 24 * 60 * 60
+        
+        logging.info( "secs_dv: %d" % secs_dv )
+        logging.info( "secs_au: %d" % secs_au )
+        logging.info( "seconds: %d" % seconds )
+        logging.info( "per day: %d" % seconds_per_day )
+        
         if seconds < seconds_per_day:
             update = True
     
