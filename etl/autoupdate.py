@@ -232,8 +232,12 @@ def read_autoupdate( autoupdate_path ):
         text.strip()
         logging.info( "read_autoupdate() %s" % text )
         
-        dt_dv = dateutil.parser.parse( text )       # e.g. 02-Jul-2019 in dataverse
-        dt_au = datetime.now()                      # autoupdate
+        try:
+            dt_dv = dateutil.parser.parse( text )       # e.g. 02-Jul-2019 in dataverse
+            dt_au = datetime.now()                      # autoupdate
+        except:
+            logging.warn( "ignoring invalid date string" )
+            return update
         
         logging.debug( "dt_dv: %s" % str( dt_dv ) )
         logging.debug( "dt_au: %s" % str( dt_au ) )
