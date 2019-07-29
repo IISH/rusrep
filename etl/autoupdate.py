@@ -31,6 +31,7 @@ FL-08-Jun-2019 from backports import csv; openpyxl helper
 FL-24-Jun-2019 document info request from GUI
 FL-02-Jul-2019 use requests instead of urllib[2]
 FL-04-Jul-2019 autoupdate steered by dataverse
+FL-29-Jul-2019 new ristat-key, but failed!
 
 ToDo:
 - split retrieve_vocabularies in 3 functions
@@ -281,7 +282,16 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", co
     logging.info( "dv_host: %s" % dv_host )
     logging.info( "ristat_name: %s" % ristat_name )
     
-    dv_connection = Connection( dv_host, ristat_key )
+    try:
+        dv_connection = Connection( dv_host, ristat_key )
+    except:
+        logging.error( "Dataverse connection failed, with parameters:" )
+        logging.info( "dv_host: %s" % dv_host )
+        #logging.info( "ristat_key: %s" % ristat_key )
+        type_, value, tb = sys.exc_info()
+        logging.error( "etype: %s, value: %s" % ( type_, value ) )
+        sys.exit( 1 )
+    
     dataverse = dv_connection.get_dataverse( ristat_name )
     if not dataverse:
         logging.info( "ristat_key: %s" % ristat_key )
