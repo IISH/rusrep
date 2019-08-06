@@ -32,6 +32,7 @@ FL-24-Jun-2019 document info request from GUI
 FL-02-Jul-2019 use requests instead of urllib[2]
 FL-04-Jul-2019 autoupdate steered by dataverse
 FL-29-Jul-2019 new ristat-key, but failed!
+FL-06-Aug-2019 AUTOUPDATE > 1 : force doing an autoupdate
 
 ToDo:
 - split retrieve_vocabularies in 3 functions
@@ -276,6 +277,7 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", co
     logging.info( "dst_dir: %s, dv_format: %s, copy_local: %s, to_csv: %s" % ( dst_dir, dv_format, copy_local, to_csv ) )
     
     dv_host     = config_parser.get( "config", "dataverse_root" )
+    dv_version  = config_parser.get( "config", "dv_version" )
     ristat_key  = config_parser.get( "config", "ristatkey" )
     ristat_name = config_parser.get( "config", "ristatname" )
     
@@ -351,23 +353,38 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", co
             
             files = dataframe[ 'data' ][ 'latestVersion' ][ 'files' ]
             logging.info( "number of files: %d" % len( files ) )
+            
             for dv_file in files:
-                logging.debug( str( dv_file ) )
+                logging.info( str( dv_file ) )
+                
                 datasetVersionId = str( dv_file[ "datasetVersionId" ] )
                 version          = str( dv_file[ "version" ] )
                 label            = str( dv_file[ "label" ] )
-                datafile         =      dv_file[ "datafile" ]
+                
+                if dv_version == "new":     # newer dataverse version
+                    dataFile = dv_file[ "dataFile" ]
+                    filename = str( dataFile[ 'filename' ] )
+                else:                       # newer dataverse version
+                    dataFile = dv_file[ "datafile" ]
+                    filename = str( dataFile[ 'name' ] )
+                 
+                for key in dataFile:
+                    logging.info( "key: %s, val: %s" % ( key, dataFile[ key ] ) )
+                
                 paperitem = {}
-                paperitem[ 'id' ]   = str( datafile[ 'id' ] )
-                originalFormatLabel = str( datafile[ 'originalFormatLabel' ] )
-                name = str( datafile[ 'name' ] )
-                basename, ext = os.path.splitext( name )
+                paperitem[ 'id' ]   = str( dataFile[ 'id' ] )
+                originalFormatLabel = str( dataFile.get( 'originalFormatLabel', "" ) )
+                # originalFormatLabel is no longer returned with new dataverse. 
+                
+                basename, ext = os.path.splitext( filename )
+                
                 logging.debug( "basename: %s, ext: %s, originalFormatLabel: %s" % ( basename, ext, originalFormatLabel ) )
                 if dv_format == "original" and ext == ".tab" and originalFormatLabel == "MS Excel (XLSX)":
-                    name = basename + ".xlsx"
-                    logging.debug( "tab => xlsx: %s" % name )
-                paperitem[ 'name' ] = name
-                ids[ paperitem[ 'id'] ] = name
+                    filename = basename + ".xlsx"
+                    logging.debug( "tab => xlsx: %s" % filename )
+                
+                paperitem[ 'name' ] = filename
+                ids[ paperitem[ 'id'] ] = filename
                 paperitem[ 'handle' ] = handle
                 paperitem[ 'url' ] = "http://data.sandbox.socialhistoryservices.org/service/download?id=%s" % paperitem[ 'id' ]
                 url  = "https://%s/api/access/datafile/%s" % ( dv_host, paperitem[ 'id' ] )
@@ -393,11 +410,15 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", co
                         os.fsync( fd )
                     
                     if filename == "Autoupdate.txt":
-                        autoupdate = read_autoupdate( filepath )
-                        logging.info( "autoupdate: %s" % autoupdate )
-                        if not autoupdate:
-                            logging.info( "skip autoupdate" )
-                            return ( papers, ids )
+                        if AUTOUPDATE > 1:      # force autoupdate
+                            logging.info( "force autoupdate" )
+                            autoupdate = True
+                        else:
+                            autoupdate = read_autoupdate( filepath )
+                            logging.info( "autoupdate: %s" % autoupdate )
+                            if not autoupdate:
+                                logging.info( "skip autoupdate" )
+                                return ( papers, ids )
                     
                     if to_csv:
                         if not os.path.exists( csv_dir ):
@@ -460,9 +481,9 @@ def documents_info( config_parser, language ):
     
     tmp_dir     = config_parser.get( "config", "tmppath" )
     dv_host     = config_parser.get( "config", "dataverse_root" )
+    dv_version  = config_parser.get( "config", "dv_version" )
     api_root    = config_parser.get( "config", "api_root" )
     ristat_key  = config_parser.get( "config", "ristatkey" )
-    #ristat_key  = config_parser.get( "config", "ristatkey_expired" )
     ristat_name = config_parser.get( "config", "ristatname" )
     ristatdocs  = config_parser.get( "config", "hdl_documentation" )
     
@@ -520,21 +541,27 @@ def documents_info( config_parser, language ):
             
             for files in dataframe[ "data" ][ "latestVersion" ][ "files" ]:
                 paperitem = {}
-                paperitem[ "id" ] = str( files[ "datafile" ][ "id" ] )
-                paperitem[ "name" ] = str( files[ "datafile" ][ "name" ] )
+                
+                if dv_version == "new":     # newer dataverse version
+                    dataFile = files[ "dataFile" ]
+                    filename = str( dataFile[ 'filename' ] )
+                else:                       # newer dataverse version
+                    dataFile = files[ "datafile" ]
+                    filename = str( dataFile[ 'name' ] )
+                
+                paperitem[ "id" ] = str( dataFile[ "id" ] )
+                paperitem[ "name" ] = filename
                 paperitem[ "url" ] = "%s/service/download?id=%s" % ( api_root, paperitem[ "id" ] )
                 logging.debug( "paperitem: %s" % paperitem )
-                
-                name = str( files[ "datafile" ][ "name" ] )
                 
                 if datatype != "":      # use datatype to limit the returned documents
                     # find substring between the first two underscores
                     sub_name = ""
-                    p1 = name.find( "_" )
+                    p1 = filename.find( "_" )
                     if p1 != -1:
-                        p2 = name.find( "_", p1+1 )
+                        p2 = filename.find( "_", p1+1 )
                         if p2 != -1:
-                            sub_name = name[ p1+1:p2 ]
+                            sub_name = filename[ p1+1:p2 ]
                             logging.debug( "sub_name: %s" % sub_name )
                             try:
                                 sub_digits = int( sub_name )
@@ -2439,13 +2466,13 @@ def format_secs( seconds ):
 
 if __name__ == "__main__":
     DO_RETRIEVE_VOCAB = True   # -1- vocabulary: dataverse => mongodb
-    DO_RETRIEVE_DOC   = True   # -2- documentation: dataverse  => local_disk
-    DO_RETRIEVE_ERRHS = True   # -3- ERRHS data: dataverse => local_disk
-    DO_CONVERT_EXCEL  = True   # -4- convert Russian xlsx files to Russian csv files
-    DO_TRANSLATE_CSV  = True   # -5- translate Russian csv files to English variants
-    DO_POSTGRES_DB    = True   # -6- ERRHS data: local_disk => postgresql, csv -> table
-    DO_MONGO_DB       = True   # -7- ERRHS data: postgresql => mongodb
-    DO_FILE_CATALOGUE = True   # -8- ERRHS data: csv -> filecatalogue xlsx
+    DO_RETRIEVE_DOC   = False   # -2- documentation: dataverse  => local_disk
+    DO_RETRIEVE_ERRHS = False   # -3- ERRHS data: dataverse => local_disk
+    DO_CONVERT_EXCEL  = False   # -4- convert Russian xlsx files to Russian csv files
+    DO_TRANSLATE_CSV  = False   # -5- translate Russian csv files to English variants
+    DO_POSTGRES_DB    = False   # -6- ERRHS data: local_disk => postgresql, csv -> table
+    DO_MONGO_DB       = False   # -7- ERRHS data: postgresql => mongodb
+    DO_FILE_CATALOGUE = False   # -8- ERRHS data: csv -> filecatalogue xlsx
     
     #dv_format = ""
     dv_format = "original"  # does not work for ter_code (regions) vocab translations
@@ -2508,7 +2535,8 @@ if __name__ == "__main__":
         retrieve_vocabularies( config_parser, mongo_client, dv_format, copy_local, to_csv )
         
         # global autoupdate parameter set via dataverse Autoupdate.txt in vocabularies dir
-        if not autoupdate:
+        # AUTOUPDATE > 1 : ignore Autoupdate.txt
+        if AUTOUPDATE == 1 and not autoupdate:
             logging.info( "__main__: autoupdate cancelled!" )
             logging.info( "stop: %s" % datetime.now() )
             str_elapsed = format_secs( time() - time0 )
