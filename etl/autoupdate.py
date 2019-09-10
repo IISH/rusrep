@@ -33,6 +33,7 @@ FL-02-Jul-2019 use requests instead of urllib[2]
 FL-04-Jul-2019 autoupdate steered by dataverse
 FL-29-Jul-2019 new ristat-key, but failed!
 FL-06-Aug-2019 AUTOUPDATE > 1 : force doing an autoupdate
+FL-09-Sep-2019 
 
 ToDo:
 - split retrieve_vocabularies in 3 functions
@@ -352,22 +353,25 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", co
             dataframe = resp.json()
             
             files = dataframe[ 'data' ][ 'latestVersion' ][ 'files' ]
-            logging.info( "number of files: %d" % len( files ) )
+            nfiles = len( files )
+            logging.info( "number of files: %d" % nfiles )
             
-            for dv_file in files:
-                logging.info( str( dv_file ) )
+            for nfile, dv_file in enumerate( files ):
+                logging.info( "%d-of-%d: %s" % ( nfile+1, nfiles, str( dv_file ) ) )
                 
                 datasetVersionId = str( dv_file[ "datasetVersionId" ] )
                 version          = str( dv_file[ "version" ] )
                 label            = str( dv_file[ "label" ] )
                 
                 if dv_version == "new":     # newer dataverse version
+                    logging.info( "keys/vals in dataFile:" )
                     dataFile = dv_file[ "dataFile" ]
                     filename = str( dataFile[ 'filename' ] )
-                else:                       # newer dataverse version
+                else:                       # older dataverse version
+                    logging.info( "keys/vals in datafile:" )
                     dataFile = dv_file[ "datafile" ]
                     filename = str( dataFile[ 'name' ] )
-                 
+                
                 for key in dataFile:
                     logging.info( "key: %s, val: %s" % ( key, dataFile[ key ] ) )
                 
