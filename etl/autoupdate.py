@@ -33,7 +33,7 @@ FL-02-Jul-2019 use requests instead of urllib[2]
 FL-04-Jul-2019 autoupdate steered by dataverse
 FL-29-Jul-2019 new ristat-key, but failed!
 FL-06-Aug-2019 AUTOUPDATE > 1 : force doing an autoupdate
-FL-09-Sep-2019 
+FL-17-Sep-2019 
 
 ToDo:
 - split retrieve_vocabularies in 3 functions
@@ -383,7 +383,7 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", co
                 basename, ext = os.path.splitext( filename )
                 
                 logging.debug( "basename: %s, ext: %s, originalFormatLabel: %s" % ( basename, ext, originalFormatLabel ) )
-                if dv_format == "original" and ext == ".tab" and originalFormatLabel == "MS Excel (XLSX)":
+                if dv_format == "original" and ext == ".tab" and originalFormatLabel in ["MS Excel (XLSX)", "MS Excel Spreadsheet"]:
                     filename = basename + ".xlsx"
                     logging.debug( "tab => xlsx: %s" % filename )
                 
@@ -2470,13 +2470,13 @@ def format_secs( seconds ):
 
 if __name__ == "__main__":
     DO_RETRIEVE_VOCAB = True   # -1- vocabulary: dataverse => mongodb
-    DO_RETRIEVE_DOC   = False   # -2- documentation: dataverse  => local_disk
-    DO_RETRIEVE_ERRHS = False   # -3- ERRHS data: dataverse => local_disk
-    DO_CONVERT_EXCEL  = False   # -4- convert Russian xlsx files to Russian csv files
-    DO_TRANSLATE_CSV  = False   # -5- translate Russian csv files to English variants
-    DO_POSTGRES_DB    = False   # -6- ERRHS data: local_disk => postgresql, csv -> table
-    DO_MONGO_DB       = False   # -7- ERRHS data: postgresql => mongodb
-    DO_FILE_CATALOGUE = False   # -8- ERRHS data: csv -> filecatalogue xlsx
+    DO_RETRIEVE_DOC   = True   # -2- documentation: dataverse  => local_disk
+    DO_RETRIEVE_ERRHS = True   # -3- ERRHS data: dataverse => local_disk
+    DO_CONVERT_EXCEL  = True   # -4- convert Russian xlsx files to Russian csv files
+    DO_TRANSLATE_CSV  = True   # -5- translate Russian csv files to English variants
+    DO_POSTGRES_DB    = True   # -6- ERRHS data: local_disk => postgresql, csv -> table
+    DO_MONGO_DB       = True   # -7- ERRHS data: postgresql => mongodb
+    DO_FILE_CATALOGUE = True   # -8- ERRHS data: csv -> filecatalogue xlsx
     
     #dv_format = ""
     dv_format = "original"  # does not work for ter_code (regions) vocab translations
