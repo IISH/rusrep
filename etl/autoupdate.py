@@ -33,7 +33,7 @@ FL-02-Jul-2019 use requests instead of urllib[2]
 FL-04-Jul-2019 autoupdate steered by dataverse
 FL-29-Jul-2019 new ristat-key, but failed!
 FL-06-Aug-2019 AUTOUPDATE > 1 : force doing an autoupdate
-FL-17-Sep-2019 
+FL-11-Nov-2019 
 
 ToDo:
 - split retrieve_vocabularies in 3 functions
@@ -85,7 +85,7 @@ def format_secs( seconds ):
 """
 
 
-# future-0.17.1 imports for Python 2/3 compatibility
+# future-0.18.2 imports for Python 2/3 compatibility
 from __future__ import ( absolute_import, division, print_function, unicode_literals )
 from builtins import ( ascii, bytes, chr, dict, filter, hex, input, int, list, map, 
     next, object, oct, open, pow, range, round, super, str, zip )
@@ -2333,11 +2333,12 @@ def csv2xlsx( language, vocab_units, csv_dir, csv_filename, xlsx_dir ):
             missing_units.add( unit )
             continue
         elif decimals == 0:
+            old_val = df1.loc[ row, "VALUE" ]
+            #if old_val == '.': # UnicodeWarning: Unicode equal comparison failed to convert both arguments to Unicode - interpreting them as being unequal
+            if str( old_val ) == str( '.': )
+                continue
+            
             try:
-                old_val = df1.loc[ row, "VALUE" ]
-                if old_val == '.':
-                    continue
-                
                 new_val = str( long( round( float( old_val ), decimals ) ) )
                 if old_val != new_val:
                     df1.loc[ row, "VALUE" ] = new_val

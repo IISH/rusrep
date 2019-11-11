@@ -1,4 +1,4 @@
-# FL-08-Jun-2019
+# FL-11-Nov-2019
 
 # pip requirements file for RusRep with a Python-2.7.15
 # setuptools, pip, and virtualenv should already be present in the (virtual) python2.7
@@ -15,22 +15,22 @@
 #   sudo apt-get install libpq-dev
 
 
-future == 0.17.1
-six == 1.12.0
+future == 0.12.2
+six == 1.13.0
 simplejson == 3.16.0
-jsonmerge == 1.6.0      # also fetched jsonschema-3.0.1 functools32-3.2.3.post2
-#ldap == 1.0.2           # also fetched ldap3-2.5.2 pyasn1-0.4.5	# needed by?
-Flask == 1.0.2          # also fetched Jinja2-2.10.1 MarkupSafe-1.1.1 Werkzeug-0.15.2 Click-7.0 itsdangerous-1.1.0
+jsonmerge == 1.7.0      # also fetched jsonschema-3.1.1 functools32-3.2.3.post2
+#ldap == 1.0.2           # also fetched ldap3-2.5.2 pyasn1-0.4.7	# needed by?
+Flask == 1.1.1          # also fetched Jinja2-2.10.3 MarkupSafe-1.1.1 Werkzeug-0.16.0 Click-7.0 itsdangerous-1.1.0
 
 #psycopg2 == 2.8.2       # needs too much resources for my old Ubuntu?
-psycopg2 == 2.7.7
+psycopg2 == 2.7.3.2
 
 pymongo == 3.5.1        # supports MongoDB 2.4, 2.6, 3.0, 3.2, and 3.4
 #pymongo == 3.8.0        # supports MongoDB 2.6, 3.0, 3.2, 3.4, 3.6 and 4.0
 
-pandas == 0.24.2        # also fetched numpy-1.16.3 python-dateutil-2.8.0 pytz-2019.1
-bidict == 0.18.0
-XlsxWriter == 1.1.8
+pandas == 0.24.2        # also fetched numpy-1.16.5 python-dateutil-2.8.1 pytz-2019.3
+bidict == 0.18.3
+XlsxWriter == 1.2.5
 xlrd == 1.2.0
 openpyxl == 2.6.2       # also fetched et-xmlfile-1.0.1 jdcal-1.4.1
 backports.csv == 1.0.7 
@@ -40,9 +40,9 @@ PyICU == 2.3.1          # requires C++11, otherwise use PyICU-1.9.6
 
 #sortedcontainers == 2.1.0	# no longer used
 
+# TODO Start using the newer pyDataverse 0.2.1 from PyPI (notice: different API?!)
 # dataverse-client-python not yet in PyPI, fetch dataverse-0.1.2 from github
 # pip install -e git+https://github.com/IQSS/dataverse-client-python.git#egg=dataverse
-# also fetched bleach-3.1.0 certifi-2019.3.9 chardet-3.0.4 html5lib-1.0.1 idna-2.8 lxml-4.3.3 requests-2.22.0 urllib3-1.25.2 webencodings-0.5.1
-
+# also fetched bleach-3.1.0 certifi-2019.9.11 chardet-3.0.4 html5lib-1.0.1 idna-2.8 lxml-4.4.1 requests-2.22.0 urllib3-1.25.6 webencodings-0.5.1
 
 # [eof]
