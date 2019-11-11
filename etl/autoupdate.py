@@ -2335,7 +2335,7 @@ def csv2xlsx( language, vocab_units, csv_dir, csv_filename, xlsx_dir ):
         elif decimals == 0:
             old_val = df1.loc[ row, "VALUE" ]
             #if old_val == '.': # UnicodeWarning: Unicode equal comparison failed to convert both arguments to Unicode - interpreting them as being unequal
-            if str( old_val ) == str( '.': )
+            if str( old_val ) == str( '.' ):
                 continue
             
             try:
