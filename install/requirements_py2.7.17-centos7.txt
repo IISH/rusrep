@@ -1,0 +1,44 @@
+# FL-12-Nov-2019 Created
+# FL-19-Nov-2019 Changed
+
+# pip requirements file for RiStat/RusRep on CentOS-7.7 with a Python-2.7.17
+# setuptools, pip, and virtualenv should already be present in the (virtual) python2.7
+
+# install the packages below from a terminal: 
+# $ pip install -r requirements_py2.7.17-centos7.txt
+
+# Newer versions may (or may not) work; we used the versions below 
+# Notice: 
+# - the version of pymongo to be used depends on he MongoDB version
+# - psycopg2 needs the linux packages (here specified for CentOS-7.7): 
+#   yum install postgresql
+#   yum install python-psycopg2
+#   yum install libpq-dev
+
+# Package requirements below for autoupdate; 
+# Web GUI not tested on MacBook
+
+future == 0.18.2
+six == 1.13.0
+simplejson == 3.17.0
+
+python-ldap-3.2.0		# also installed pyasn1-0.4.8 pyasn1-modules-0.2.7; needed by rusrep/service/configutils.py
+
+Flask-1.1.1				# also installed Jinja2-2.10.3 MarkupSafe-1.1.1 Werkzeug-0.16.0 click-7.0 itsdangerous-1.1.0
+
+psycopg2 == 2.8.4
+pymongo == 3.9.0
+
+openpyxl-2.6.4			# also installed et-xmlfile-1.0.1 jdcal-1.4.1
+backports.csv == 1.0.7
+
+bidict == 0.18.3
+pandas == 0.24.2		# also installed numpy-1.16.5 python-dateutil-2.8.1 pytz-2019.3
+requests-2.22.0			# also installed certifi-2019.9.11 chardet-3.0.4 idna-2.8 urllib3-1.25.7
+
+# TODO Start using the newer pyDataverse 0.2.1 from PyPI (notice: different API?!)
+# dataverse-client-python not yet in PyPI, fetch dataverse-0.1.2 from github
+# pip install -e git+https://github.com/IQSS/dataverse-client-python.git#egg=dataverse
+# installed: bleach-3.1.0 dataverse lxml-4.4.1 webencodings-0.5.1
+
+[eof]
