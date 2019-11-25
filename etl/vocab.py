@@ -35,6 +35,7 @@ def vocabulary( host, apikey, ids, abs_ascii_dir ):
         basename, ext = os.path.splitext( filename )
         
         if ext == ".tab":
+            logging.debug( "ext: %s" % ext )
             filename = re.sub( '.tab', '', filename )
             url = "%s/api/access/datafile/%s?&key=%s&show_entity_ids=true&q=authorName:*" % ( host, thisid, apikey )
             f = urllib.urlopen( url )
@@ -42,12 +43,15 @@ def vocabulary( host, apikey, ids, abs_ascii_dir ):
             csvio = StringIO( str( data ) )
             dataframe = pd.read_csv( csvio, sep = '\t', dtype = 'unicode' )
         elif ext == ".xlsx":
+            logging.debug( "ext: %s" % ext )
             filename = basename + ".csv"
             pathname = os.path.join( abs_ascii_dir, filename )
             with open( pathname, 'r') as f:
                 data = f.read()
                 csvio = StringIO( str( data ) )
                 dataframe = pd.read_csv( csvio, sep = '|', dtype = 'unicode' )
+        else:
+            logging.debug( "ext: %s ??" % ext )
         
         # fetch columns from dataverse vocabulary file
         filter_columns = []

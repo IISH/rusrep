@@ -34,6 +34,7 @@ FL-04-Jul-2019 autoupdate steered by dataverse
 FL-29-Jul-2019 new ristat-key, but failed!
 FL-06-Aug-2019 AUTOUPDATE > 1 : force doing an autoupdate
 FL-19-Nov-2019 Separate retrieving documents from processing documents
+FL-25-Nov-2019 
 
 ToDo:
 - split retrieve_vocabularies in 3 functions
@@ -117,6 +118,7 @@ from backports import csv
 from bidict import bidict
 from datetime import date, datetime
 from pymongo import MongoClient
+from shutil import copy2
 from sys import exc_info
 from time import ctime, mktime, time
 
@@ -193,7 +195,7 @@ def empty_dir( dst_dir ):
             if fname.startswith( "ERRHS_" ):
                 mtime = os.path.getmtime( file_path )
                 timestamp = ctime( mtime )
-                logging.info( "removing file: (created: %s) %s" % ( timestamp, file_path ) )
+                logging.debug( "removing file: (created: %s) %s" % ( timestamp, file_path ) )
                 try:
                     os.unlink( file_path )
                 except:
@@ -340,7 +342,12 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", co
     if os.path.exists( csv_dir ):
         empty_dir( csv_dir )                # remove previous files
     
-    for item in dataverse.get_contents():
+    
+    dv_items = dataverse.get_contents()
+    nitems = len( dv_items )
+    logging.info( "downloading %d dataverse files" % nitems )
+    for i, item in enumerate( dv_items ):
+        logging.info( "downloading file %d-of-%d" % ( i+1, nitems ) )
         # item dict keys: protocol, authority, persistentUrl, identifier, type, id
         handle = str( item[ 'protocol' ] ) + ':' + str( item[ 'authority' ] ) + "/" + str( item[ 'identifier' ] )
         logging.debug( "handle: %s" % handle )
@@ -353,7 +360,13 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", co
             url  = "https://" + str( dv_host ) + "/api/datasets/" + str( datasetid )
             url += "?key=" + str( ristat_key )
             
-            resp = requests.get( url )
+            resp = {}
+            try:
+                resp = requests.get( url )
+            except:
+                logging.error( "FAILED TO GET DATA FROM URL: %s" % url )
+                sys.exit( 1 )
+            
             dataframe = resp.json()
             
             files = dataframe[ 'data' ][ 'latestVersion' ][ 'files' ]
@@ -628,7 +641,7 @@ def update_documentation( config_parser, copy_local, remove_xlsx = False ):
     ndoc =  len( docs )
     logging.info( "%d documents retrieved from dataverse" % ndoc )
     if ndoc == 0:
-        logging.info( "no documents, nothing donloaded." )
+        logging.info( "no documents, nothing downloaded." )
     
     for language in [ "ru", "en" ]:
         documents_info( config_parser, language )
@@ -682,6 +695,34 @@ def retrieve_vocabularies( config_parser, mongo_client, dv_format, copy_local = 
 
 def copy_src2dst():
     logging.info( "%s copy_src2dst()" % __file__ )
+    # Copy documentation from source (dataverse download) to destination directory (work dir)
+    tmp_dir = config_parser.get( "config", "tmppath" )
+    dv_dir_src = "dataverse_src"
+    dv_dir_dst = "dataverse_dst"
+    doc_dir = "doc"
+    handle_name = "hdl_documentation"
+    
+    src_dir = os.path.join( tmp_dir, dv_dir_src, doc_dir, handle_name )
+    dst_dir = os.path.join( tmp_dir, dv_dir_dst, doc_dir, handle_name )
+    logging.info( "copying dataverse doc files from: %s" % src_dir )
+    logging.info( "copying dataverse doc files to:   %s" % dst_dir )
+
+    if os.path.exists( dst_dir ):
+        empty_dir( dst_dir )        # remove previous files
+    else:
+        os.makedirs( dst_dir )
+    
+    dir_list = []
+    dir_list = os.listdir( src_dir )
+    dir_list.sort()
+    
+    for filename in dir_list:
+        logging.info( "filename: %s" % filename )
+        path_in  = os.path.join( src_dir, filename )
+        path_out = os.path.join( dst_dir, filename )
+        copy2( path_in, path_out )
+
+    logging.info( "%d files copied" % len( dir_list ) )
 
 
 
@@ -1526,9 +1567,9 @@ def load_vocab( config_parser, vocab_fname, vocab, pos_rus, pos_eng ):
     handle_name = "hdl_vocabularies"
     tmp_dir = config_parser.get( "config", "tmppath" )
     vocab_dir = os.path.join( tmp_dir, "dataverse_dst", "vocab/csv", handle_name )
-    logging.info( "vocab_dir: %s" % vocab_dir )
     vocab_path = os.path.join( vocab_dir, vocab_fname )
-    logging.info( "vocab_path: %s" % vocab_path )
+    logging.debug( "vocab_dir: %s" % vocab_dir )
+    logging.debug( "vocab_path: %s" % vocab_path )
     
     #vocab_file = open( vocab_path, "r" )
     vocab_file = codecs.open( vocab_path, "r", encoding = 'utf-8' )
@@ -1835,7 +1876,7 @@ def xlsx2csv_openpyxl( xlsx_dir, xlsx_filename, csv_dir, extra, vocab_regions = 
         datatype_file = "%s.%s%s"% ( xlsx_filename[ 6 ],  xlsx_filename[ 8 ],xlsx_filename[ 9 ] ) 
         logging.info( "datatype_file: %s" % datatype_file )
     
-    logging.debug(  "input: %s" % xlsx_pathname )
+    logging.debug( "input:  %s" % xlsx_pathname )
     logging.debug( "output: %s" % csv_pathname )
     
     # ERRHS postgres column names
@@ -1994,15 +2035,15 @@ def translate_csv( config_parser, handle_name ):
     vocab_modclasses = load_vocab( config_parser, "ERRHS_Vocabulary_modclasses.csv", vocab_modclasses, 0, 1 )
     
     tmp_dir = config_parser.get( "config", "tmppath" )
-    csv_dir = os.path.join( tmp_dir, "dataverse_src", "csv-ru", handle_name )
+    csv_dir = os.path.join( tmp_dir, "dataverse_dst", "csv-ru", handle_name )
     if os.path.exists( csv_dir ):
-        logging.info( "csv_dir: %s" % csv_dir )
+        logging.debug( "csv_dir: %s" % csv_dir )
     else:
-        logging.info( "not found, skip: csv_dir: %s" % csv_dir )
+        logging.debug( "not found, skip: csv_dir: %s" % csv_dir )
         return
     
-    eng_dir = os.path.join( tmp_dir, "dataverse_src", "csv-en", handle_name )
-    logging.info( "eng_dir: %s" % eng_dir )
+    eng_dir = os.path.join( tmp_dir, "dataverse_dst", "csv-en", handle_name )
+    logging.debug( "eng_dir: %s" % eng_dir )
     
     if os.path.exists( eng_dir ):
         empty_dir( eng_dir )                # remove previous files
@@ -2031,14 +2072,15 @@ def translate_csv( config_parser, handle_name ):
         if not os.path.isfile( csv_path ):
             continue
         
-        logging.info( csv_path )
+        logging.info( csv_name )
+        logging.debug( csv_path )
         basename, ext = os.path.splitext( csv_name )
         if basename.endswith( "-ru" ):
             basename = basename[ :-3 ]
         eng_name = basename + "-en" +  ext
-        logging.info( eng_name )
+        logging.debug( eng_name )
         eng_path = os.path.join( eng_dir, eng_name )
-        logging.info( eng_path )
+        logging.debug( eng_path )
         
         file_rus = open( csv_path, "r" )
         file_eng = open( eng_path, "w" )
@@ -2333,7 +2375,7 @@ def csv2xlsx( language, vocab_units, csv_dir, csv_filename, xlsx_dir ):
         "encoding" : "utf-8",
         "sep"      : sep            # no effect
         #,"dtype"    : { "page" : "object" }
-        #,"dtype"    : "str"         # how to prevent stupid int to float coversion?
+        ,"dtype"    : "str"         # how to prevent stupid int to float coversion?
         #,"line_terminator" : '\n'   # TypeError: parser_f() got an unexpected keyword argument "line_terminator"
     }
     
@@ -2363,7 +2405,7 @@ def csv2xlsx( language, vocab_units, csv_dir, csv_filename, xlsx_dir ):
                     df1.loc[ row, "VALUE" ] = new_val
                     nround += 1
             except:
-                logging.error( "convert_csv2xlsx() rounding failed" )
+                logging.error( "csv2xlsx() rounding failed" )
                 type_, value, tb = sys.exc_info()
                 msg = "%s: %s" % ( type_, value )
                 logging.error( msg )
@@ -2492,16 +2534,15 @@ if __name__ == "__main__":
     DO_RETRIEVE_VOCAB = False   # -1- vocabulary: dataverse => local_disk
     DO_RETRIEVE_DOC   = False   # -2- documentation: dataverse  => local_disk
     DO_RETRIEVE_ERRHS = False   # -3- ERRHS data: dataverse => local_disk
-    #DO_RETRIEVE_COPY  = False   # -4- local_disk retrieve dir => normal dir
     
-    # test from here...
-    DO_CONVERT_VOCAB  = False   # -4- convert Russian vocab xlsx files to Russian vocab csv files
-    DO_CONVERT_EXCEL  = False   # -4- convert Russian xlsx files to Russian csv files
-    DO_TRANSLATE_CSV  = False   # -5- translate Russian csv files to English variants
+    DO_DOC_COPY       = False   # -4- local_disk doc srx dir => doc dst dir
+    DO_CONVERT_VOCAB  = False   # -5- convert Russian vocab xlsx files to Russian vocab csv files
+    DO_CONVERT_EXCEL  = False   # -6- convert Russian xlsx files to Russian csv files
+    DO_TRANSLATE_CSV  = False   # -7- translate Russian csv files to English variants
     
-    DO_POSTGRES_DB    = False   # -6- ERRHS data: local_disk => postgresql, csv -> table
-    DO_MONGO_DB       = False   # -7- ERRHS data: postgresql => mongodb
-    DO_FILE_CATALOGUE = False   # -8- ERRHS data: csv -> filecatalogue xlsx
+    DO_POSTGRES_DB    = False   # -8- ERRHS data: local_disk => postgresql, csv -> table
+    DO_MONGO_DB       = False   # -9- ERRHS data: postgresql => mongodb
+    DO_FILE_CATALOGUE = True   # -10- ERRHS data: csv -> filecatalogue xlsx
     
     #dv_format = ""
     dv_format = "original"  # does not work for ter_code (regions) vocab translations
@@ -2514,11 +2555,14 @@ if __name__ == "__main__":
     #log_level = logging.ERROR
     #log_level = logging.CRITICAL
     
+    log_format = "%(asctime)s %(levelname)-8s %(message)s"
+    log_datefmt = "%Y-%m-%d %H:%M:%S"
+    
     if log_file:
         mode = 'w'
         #mode = 'a'      # debugging
         logging_filename = "autoupdate.log"
-        logging.basicConfig( filename = logging_filename, filemode = mode, level = log_level )
+        logging.basicConfig( filename = logging_filename, filemode = mode, level = log_level, format = log_format, datefmt = log_datefmt )
     else:
         logging.basicConfig( level = log_level )
 
@@ -2550,6 +2594,7 @@ if __name__ == "__main__":
     mongo_client  = MongoClient()
     
     
+    # DATAVERSE RETRIEVAL Phase; will exit() on retrieval error
     if DO_RETRIEVE_VOCAB:
         logging.info( "-1- DO_RETRIEVE_VOCAB" )
         # Downloaded vocabulary documents are not first stored in postgreSQL, 
@@ -2583,11 +2628,13 @@ if __name__ == "__main__":
         for handle_name in handle_names:
             retrieve_handle_docs( config_parser, handle_name, dv_format, copy_local, remove_xlsx ) # dataverse  => local_disk
     
-    #if DO_RETRIEVE_COPY: 
-    #    copy_src2dst()
+    # PROCESSING Phase
+    if DO_DOC_COPY: 
+        logging.info( "-4- DO_RETRIEVE_COPY" )
+        copy_src2dst()
     
     if DO_CONVERT_VOCAB:    # convert Russian vocab xlsx files to Russian vocab csv files
-        logging.info( "-4- DO_CONVERT_VOCAB" )
+        logging.info( "-5- DO_CONVERT_VOCAB" )
         #excel_package = "pandas"     # years get '.0'
         #excel_package = "xlrd"       # not implemented
         excel_package = "openpyxl"    # applies losing trailing 0's correction
@@ -2595,20 +2642,20 @@ if __name__ == "__main__":
         convert_vocabularies( excel_package )
     
     if DO_CONVERT_EXCEL:
-        logging.info( "-5- DO_CONVERT_EXCEL" )
+        logging.info( "-6- DO_CONVERT_EXCEL" )
         #excel_package = "pandas"     # too slow (due to post-read coorections)
         #excel_package = "xlrd"       # not implemented
         excel_package = "openpyxl"    # applies losing trailing 0's correction
         convert_excel( config_parser, excel_package )
     
     if DO_TRANSLATE_CSV:
-        logging.info( "-6- DO_TRANSLATE_CSV" )                      # ru => en
+        logging.info( "-7- DO_TRANSLATE_CSV" )                      # ru => en
         # TODO process existing files, not trying all handle_names
         for handle_name in handle_names:                            # csv-ru/hdl_errhs_[type]/ERRHS_[datatype]_data_[year]-ru.csv
             translate_csv( config_parser, handle_name )             # csv-en/hdl_errhs_[type]/ERRHS_[datatype]_data_[year]-en.csv
     
     if DO_POSTGRES_DB:
-        logging.info( "-7- DO_POSTGRES_DB" )    # read russian csv files
+        logging.info( "-8- DO_POSTGRES_DB" )    # read russian csv files
         logging.StreamHandler().flush()
         for language in [ "ru", "en" ]:
             row_count( config_parser, language )
@@ -2624,14 +2671,15 @@ if __name__ == "__main__":
             #topic_counts( config_parser )                                  # postgresql datasets.topics counts
     
     if DO_MONGO_DB:
+        logging.info( "-9- DO_MONGO_DB" )
+        # TODO check mongo duplicate actions?
         mongostore_vocabularies()       # separated from retrieval and conversion
         
-        logging.info( "-8- DO_MONGO_DB" )
         for language in [ "ru", "en" ]:
             update_handle_docs( config_parser, mongo_client, language )     # postgresql => mongodb
     
     if DO_FILE_CATALOGUE:
-        logging.info( "-9- DO_FILE_CATALOGUE" )
+        logging.info( "-10- DO_FILE_CATALOGUE" )
         for language in [ "ru", "en" ]:
         #for language in [ "en" ]:  # test
             compile_filecatalogue( config_parser, language )                # create filecatalogue xlsx files

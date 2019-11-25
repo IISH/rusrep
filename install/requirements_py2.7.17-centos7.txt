@@ -1,5 +1,5 @@
 # FL-12-Nov-2019 Created
-# FL-19-Nov-2019 Changed
+# FL-25-Nov-2019 Changed
 
 # pip requirements file for RiStat/RusRep on CentOS-7.7 with a Python-2.7.17
 # setuptools, pip, and virtualenv should already be present in the (virtual) python2.7
@@ -29,11 +29,12 @@ Flask-1.1.1				# also installed Jinja2-2.10.3 MarkupSafe-1.1.1 Werkzeug-0.16.0 c
 psycopg2 == 2.8.4
 pymongo == 3.9.0
 
+pandas == 0.24.2        # also installed numpy-1.16.5 python-dateutil-2.8.1 pytz-2019.3
 openpyxl-2.6.4			# also installed et-xmlfile-1.0.1 jdcal-1.4.1
 backports.csv == 1.0.7
+xlsxwriter-1.2.6
 
 bidict == 0.18.3
-pandas == 0.24.2		# also installed numpy-1.16.5 python-dateutil-2.8.1 pytz-2019.3
 requests-2.22.0			# also installed certifi-2019.9.11 chardet-3.0.4 idna-2.8 urllib3-1.25.7
 
 # TODO Start using the newer pyDataverse 0.2.1 from PyPI (notice: different API?!)
