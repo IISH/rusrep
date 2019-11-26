@@ -51,7 +51,8 @@ def vocabulary( host, apikey, ids, abs_ascii_dir ):
                 csvio = StringIO( str( data ) )
                 dataframe = pd.read_csv( csvio, sep = '|', dtype = 'unicode' )
         else:
-            logging.debug( "ext: %s ??" % ext )
+            logging.info( "skipping: %s" % filename )
+            continue
         
         # fetch columns from dataverse vocabulary file
         filter_columns = []
