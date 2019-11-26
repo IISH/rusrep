@@ -34,7 +34,7 @@ FL-04-Jul-2019 autoupdate steered by dataverse
 FL-29-Jul-2019 new ristat-key, but failed!
 FL-06-Aug-2019 AUTOUPDATE > 1 : force doing an autoupdate
 FL-19-Nov-2019 Separate retrieving documents from processing documents
-FL-25-Nov-2019 
+FL-26-Nov-2019 Cleanup
 
 ToDo:
 - split retrieve_vocabularies in 3 functions
@@ -60,15 +60,16 @@ To retain the current behavior and silence the warning, pass 'sort=True'.
 --------------------------------------------------------------------------------
 #def load_json( apiurl ):
 def empty_dir( dst_dir ):
-def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", copy_local = False, remove_xlsx = True ):
+def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "" ):
 def loadjson( json_dataurl ):
 def documents_info( config_parser, language ):
-def update_documentation( config_parser, copy_local, remove_xlsx = False ):
-def retrieve_vocabularies( config_parser, mongo_client, dv_format, copy_local = True, to_csv = False, remove_xlsx = False):
+def update_documentation( config_parser ):
+def retrieve_vocabularies( config_parser, dv_format ):
 def copy_src2dst():
 def convert_vocabularies( convert_vocabularies ):
-def mongostore_vocabularies():
-def retrieve_handle_docs( config_parser, handle_name, dv_format = "", copy_local = False, remove_xlsx = False ):
+def merge_vocabs( vocab_csv_dir ):
+def mongo_store_vocabularies():
+def retrieve_handle_docs( config_parser, handle_name, dv_format = "" ):
 def row_count( config_parser, language ):
 def clear_postgres_tale( config_parser, language ):
 def store_handle_docs( config_parser, handle_name, language ):
@@ -81,7 +82,8 @@ def load_vocab( config_parser, vocab_fname, vocab, pos_rus, pos_eng ):
 def convert_excel( config_parser, excel_package ):
 def xlsx2csv_pandas( xlsx_dir, xlsx_filename, csv_dir, extra ):
 def xlsx2csv_openpyxl( xlsx_dir, xlsx_filename, csv_dir, extra ):
-def translate_csv( config_parser, handle_name ):
+def translate_errhs_csvs( config_parser, handle_names ):
+def translate_csv( config_parser, handle_name, vocab_units, vocab_regions, vocab_histclasses, vocab_modclasses ):
 def compile_filecatalogue( config_parser, language ):
 def csv2xlsx( language, vocab_units, csv_dir, csv_filename, xlsx_dir ):
 def format_secs( seconds ):
@@ -273,14 +275,13 @@ def read_autoupdate( autoupdate_path ):
 
 
 
-def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", copy_local = False, remove_xlsx = True ):
+def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "" ):
     global autoupdate
     global Nexcept
     
     to_csv = False
-    logging.info( "documents_by_handle() copy_local: %s, to_csv: %s" % ( copy_local, to_csv ) )
-    logging.debug( "handle_name: %s" % handle_name )
-    logging.info( "dst_dir: %s, dv_format: %s, copy_local: %s, to_csv: %s" % ( dst_dir, dv_format, copy_local, to_csv ) )
+    logging.info( "documents_by_handle() andle_name: %s" % handle_name )
+    logging.info( "dst_dir: %s, dv_format: %s" % ( dst_dir, dv_format ) )
     
     dv_host     = config_parser.get( "config", "dataverse_root" )
     dv_version  = config_parser.get( "config", "dv_version" )
@@ -325,14 +326,16 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", co
         'line_terminator' : '\n' 
     }
     
-    dv_dir = "dataverse_src"
     tmp_dir = config_parser.get( "config", "tmppath" )
-    if copy_local:
-        download_dir = os.path.join( tmp_dir, dv_dir, dst_dir, handle_name )
-        logging.info( "downloading dataverse files to: %s" % download_dir )
-        if os.path.exists( download_dir ):
-            empty_dir( download_dir )           # remove previous files
+    dv_dir = "dataverse_src"
+    download_dir = os.path.join( tmp_dir, dv_dir, dst_dir, handle_name )
+    logging.info( "downloading dataverse files to: %s" % download_dir )
+    if os.path.exists( download_dir ):
+        empty_dir( download_dir )           # remove previous files
+    if not os.path.exists( download_dir ):
+        os.makedirs( download_dir )
     
+    """
     csv_dir = ""
     if dst_dir == "xlsx":
         csv_dir = os.path.join( tmp_dir, dv_dir, "csv-ru", handle_name )
@@ -340,8 +343,8 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", co
         csv_dir = os.path.join( tmp_dir, dv_dir, "vocab/csv", handle_name )
     
     if os.path.exists( csv_dir ):
-        empty_dir( csv_dir )                # remove previous files
-    
+        empty_dir( csv_dir )                    # remove previous files
+    """
     
     dv_items = dataverse.get_contents()
     nitems = len( dv_items )
@@ -414,60 +417,58 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", co
                     url += "&format=original"
                 logging.debug( url )
                 
-                if copy_local:
-                    if not os.path.exists( download_dir ):
-                        os.makedirs( download_dir )
-                    
-                    filename = paperitem[ 'name' ]
-                    logging.info( "filename: %s" % filename )
-                    filepath = "%s/%s" % ( download_dir, filename )
-                    logging.debug( "filepath: %s" % filepath )
-                    
-                    # read dataverse document from url, write contents to filepath
-                    resp_in = requests.get( url )
-                    with open( filepath, 'wb' ) as fd:
-                        for chunk in resp_in.iter_content( chunk_size = 512 ):
-                            fd.write( chunk )
-                        os.fsync( fd )
-                    
-                    if filename == "Autoupdate.txt":
-                        if AUTOUPDATE > 1:      # force autoupdate
-                            logging.info( "force autoupdate" )
-                            autoupdate = True
-                        else:
-                            autoupdate = read_autoupdate( filepath )
-                            logging.info( "autoupdate: %s" % autoupdate )
-                            if not autoupdate:
-                                logging.info( "skip autoupdate" )
-                                return ( papers, ids )
-                    
-                    if to_csv:
-                        if not os.path.exists( csv_dir ):
-                            os.makedirs( csv_dir )
-                        
-                        root, ext = os.path.splitext( filename )
-                        logging.info( "%s %s" % ( handle_name, root ) )
-                        if dst_dir == "xlsx":                               # ru & en in separate files
-                            csv_path  = "%s/%s-ru.csv" % ( csv_dir, root )  # input csv
-                        elif dst_dir == "vocab/xlsx":                       # both ru & en in same file
-                            csv_path  = "%s/%s.csv" % ( csv_dir, root )     # input csv
-                        logging.debug( "csv_path:  %s" % csv_path )
-                        
-                        #Xlsx2csv( filepath, **kwargs_xlsx2csv ).convert( csv_path )
-                        
-                        # pandas doc: dtype : Type name or dict of column -> type, default None
-                        # Data type for data or columns. E.g. {‘a’: np.float64, ‘b’: np.int32} 
-                        # Use str or object to preserve and not interprete dtype. 
-                        # If converters are specified, they will be applied INSTEAD of dtype conversion.
-                        #converters = { 'DATATYPE': str, 'HISTCLASS1': str }
-                        #data_xls = pd.read_excel( filepath, index_col = False, convert_float = False, dtype = str, converters = converters )
-                        data_xls = pd.read_excel( filepath, index_col = False, convert_float = False, dtype = str )
-                        
-                        data_xls.to_csv( csv_path, encoding = 'utf-8', index = False, **kwargs_pandas )
-                        
-                        if remove_xlsx and ext == ".xlsx":
-                            os.remove( filepath )   # keep the csv, remove the xlsx
+                filename = paperitem[ 'name' ]
+                logging.info( "filename: %s" % filename )
+                filepath = "%s/%s" % ( download_dir, filename )
+                logging.debug( "filepath: %s" % filepath )
                 
+                # read dataverse document from url, write contents to filepath
+                resp_in = requests.get( url )
+                with open( filepath, 'wb' ) as fd:
+                    for chunk in resp_in.iter_content( chunk_size = 512 ):
+                        fd.write( chunk )
+                    os.fsync( fd )
+                
+                if filename == "Autoupdate.txt":
+                    if AUTOUPDATE > 1:      # force autoupdate
+                        logging.info( "force autoupdate" )
+                        autoupdate = True
+                    else:
+                        autoupdate = read_autoupdate( filepath )
+                        logging.info( "autoupdate: %s" % autoupdate )
+                        if not autoupdate:
+                            logging.info( "skip autoupdate" )
+                            return ( papers, ids )
+                
+                """
+                if to_csv:
+                    if not os.path.exists( csv_dir ):
+                        os.makedirs( csv_dir )
+                    
+                    root, ext = os.path.splitext( filename )
+                    logging.info( "%s %s" % ( handle_name, root ) )
+                    if dst_dir == "xlsx":                               # ru & en in separate files
+                        csv_path  = "%s/%s-ru.csv" % ( csv_dir, root )  # input csv
+                    elif dst_dir == "vocab/xlsx":                       # both ru & en in same file
+                        csv_path  = "%s/%s.csv" % ( csv_dir, root )     # input csv
+                    logging.debug( "csv_path:  %s" % csv_path )
+                    
+                    #Xlsx2csv( filepath, **kwargs_xlsx2csv ).convert( csv_path )
+                    
+                    # pandas doc: dtype : Type name or dict of column -> type, default None
+                    # Data type for data or columns. E.g. {‘a’: np.float64, ‘b’: np.int32} 
+                    # Use str or object to preserve and not interprete dtype. 
+                    # If converters are specified, they will be applied INSTEAD of dtype conversion.
+                    #converters = { 'DATATYPE': str, 'HISTCLASS1': str }
+                    #data_xls = pd.read_excel( filepath, index_col = False, convert_float = False, dtype = str, converters = converters )
+                    data_xls = pd.read_excel( filepath, index_col = False, convert_float = False, dtype = str )
+                    
+                    data_xls.to_csv( csv_path, encoding = 'utf-8', index = False, **kwargs_pandas )
+                    
+                    if remove_xlsx and ext == ".xlsx":
+                        os.remove( filepath )   # keep the csv, remove the xlsx
+                """
+            
                 # FL-09-Jan-2017 should we not filter before downloading?
                 try:
                     if 'lang' in settings.datafilter:
@@ -629,14 +630,14 @@ def documents_info( config_parser, language ):
 
 
 
-def update_documentation( config_parser, copy_local, remove_xlsx = False ):
+def update_documentation( config_parser ):
     logging.info( "%s update_documentation()" % __file__ )
     
     handle_name = "hdl_documentation"
     logging.info( "retrieving documents from dataverse for handle name %s ..." % handle_name )
     dst_dir = "doc"
     dv_format = ""
-    ( docs, ids ) = documents_by_handle( config_parser, handle_name, dst_dir, dv_format, copy_local, remove_xlsx )
+    ( docs, ids ) = documents_by_handle( config_parser, handle_name, dst_dir, dv_format )
     
     ndoc =  len( docs )
     logging.info( "%d documents retrieved from dataverse" % ndoc )
@@ -648,7 +649,7 @@ def update_documentation( config_parser, copy_local, remove_xlsx = False ):
 
 
 
-def retrieve_vocabularies( config_parser, mongo_client, dv_format, copy_local = True, remove_xlsx = False):
+def retrieve_vocabularies( config_parser, dv_format ):
     global autoupdate
     
     logging.info( "%s retrieve_vocabularies()" % __file__ )
@@ -671,25 +672,27 @@ def retrieve_vocabularies( config_parser, mongo_client, dv_format, copy_local = 
         dst_dir   = "vocab/tab"
         ascii_dir = dst_dir
     
-    ( docs, ids ) = documents_by_handle( config_parser, handle_name, dst_dir, dv_format, copy_local, remove_xlsx )
+    ( dv_docs, dv_ids ) = documents_by_handle( config_parser, handle_name, dst_dir, dv_format )
     
     if not autoupdate:
         logging.info( "retrieve_vocabularies() autoupdate cancelled!" )
         return      # <<<
     
-    ndoc =  len( docs )
+    ndoc =  len( dv_docs )
     logging.info( "%d documents retrieved from dataverse" % ndoc )
     if ndoc == 0:
         logging.info( "no documents, nothing to do." )
         return
     
     logging.debug( "keys in ids:" )
-    for key in ids:
-        logging.debug( "key: %s, value: %s" % ( key, ids[ key ] ) )
+    for key in dv_ids:
+        logging.debug( "key: %s, value: %s" % ( key, dv_ids[ key ] ) )
         
-    logging.debug( "docs:" )
-    for doc in docs:
+    logging.debug( "dv_docs:" )
+    for doc in dv_docs:
         logging.debug( doc )
+
+    return dv_ids
 
 
 
@@ -709,7 +712,7 @@ def copy_src2dst():
 
     if os.path.exists( dst_dir ):
         empty_dir( dst_dir )        # remove previous files
-    else:
+    if not os.path.exists( dst_dir ):
         os.makedirs( dst_dir )
     
     dir_list = []
@@ -764,28 +767,91 @@ def convert_vocabularies( excel_package ):
 
 
 
-def mongostore_vocabularies():
-    logging.info( "%s mongostore_vocabularies()" % __file__ )
+def merge_vocabs( vocab_csv_dir ):
+    logging.info( "%s merge_vocab()" % __file__ )
+    
+    lexicon = []
+    len_totvocab = 0
+    
+    dir_list = []
+    if os.path.isdir( vocab_csv_dir ):
+        dir_list = os.listdir( vocab_csv_dir )
+    
+    logging.info( "using csv directory: %s" % vocab_csv_dir )
+    
+    for i, filename in enumerate( dir_list ):
+        basename, ext = os.path.splitext( filename )
+        if ext != ".csv":
+            logging.info( "skipping: %s" % filename )
+            continue
+        
+        logging.info( "filename %s" % filename )
+        pathname = os.path.join( vocab_csv_dir, filename )
+        
+        with open( pathname, 'r') as f:
+            data = f.read()
+            csvio = StringIO( str( data ) )
+            dataframe = pd.read_csv( csvio, sep = '|', dtype = 'unicode' )
+    
+        # fetch columns from dataverse vocabulary file
+        filter_columns = []
+        mapping = {}
+        for col in dataframe.columns:
+            findval = re.search( r'RUS|EN|ID|TOPIC_ID|TOPIC_ROOT|DATATYPE|YEAR|basisyear', col )
+            if findval:
+                mapping[ col ] = findval.group( 0 )
+                filter_columns.append( col )
+        
+        vocab = {}
+        if filter_columns:
+            logging.info( "filter_columns: %s" % filter_columns )
+            vocab = dataframe[ filter_columns ]
+            newcolumns = []
+            for field in vocab:
+                value = mapping[ field ]
+                newcolumns.append( value )
+            
+            vocab.columns = newcolumns
+            vocab = vocab.dropna()
+            vocab[ 'vocabulary' ] = basename
+            len_vocab = len( vocab )
+            len_totvocab += len_vocab
+            lexicon.append( vocab )
+            
+            logging.info( "id: %s, filename: %s, items: %d" % ( i, filename, len_vocab ) )
+        else:
+            logging.warning( "No filter_columns" )
+    
+    logging.info( "lexicon contains %d vocabularies containing %d items in total" % ( len( lexicon ), len_totvocab ) )
+    
+    # concatenate the vocabularies with pandas
+    return pd.concat( lexicon, sort = True )
+
+
+
+def mongo_store_vocabularies():
+    logging.info( "%s mongo_store_vocabularies()" % __file__ )
     
     # Going to up update MongoDB contents; clear it first
     clear_mongo( mongo_client )
     
     # parameters to retrieve the vocabulary files
     dv_host = config_parser.get( "config", "dataverse_root" )
-    apikey = config_parser.get( "config", "ristatkey" )
-    dbname = config_parser.get( "config", "vocabulary" )
+    apikey  = config_parser.get( "config", "ristatkey" )
+    dbname  = config_parser.get( "config", "vocabulary" )
+    
     logging.debug( "dv_host:   %s" % dv_host )
     logging.debug( "apikey: %s" % apikey )
     logging.debug( "dbname: %s" % dbname )
     
     vocab_json = [ {} ]
-    # the vocabulary files may already have been downloadeded by documents_by_handle();
-    # with ".tab" extension vocabulary() retrieves them again from dataverse, 
-    # with ".csv" extension vocabulary() retrieves them locally, 
-    # and --together with some filtering-- appends them to a big_vocabulary
     tmp_dir = config_parser.get( "config", "tmppath" )
-    abs_ascii_dir = os.path.join( tmp_dir, "dataverse_dst", ascii_dir, handle_name )
-    big_vocabulary = vocabulary( dv_host, apikey, ids, abs_ascii_dir )    # type: <class 'pandas.core.frame.DataFrame'>
+    handle_name = "hdl_vocabularies"
+    abs_ascii_dir = os.path.join( tmp_dir, "dataverse_dst", "vocab/csv", handle_name )
+    
+    # do not read again from dataverse
+    big_vocabulary = merge_vocabs( abs_ascii_dir  )
+    
     #print big_vocabulary.to_json( orient = 'records' )
     vocab_json = json.loads( big_vocabulary.to_json( orient = 'records' ) )  # type: <type 'list'>
     
@@ -821,13 +887,12 @@ def mongostore_vocabularies():
 
 
 
-def retrieve_handle_docs( config_parser, handle_name, dv_format = "", copy_local = False, remove_xlsx = False ):
-    logging.info( "" )
-    logging.info( "retrieve_handle_docs() copy_local: %s" % copy_local )
+def retrieve_handle_docs( config_parser, handle_name, dv_format = "" ):
+    logging.info( "retrieve_handle_docs()" )
 
     logging.info( "retrieving documents from dataverse for handle name %s ..." % handle_name )
     dst_dir = "xlsx"
-    ( docs, ids ) = documents_by_handle( config_parser, handle_name, dst_dir, dv_format, copy_local, remove_xlsx )
+    ( docs, ids ) = documents_by_handle( config_parser, handle_name, dst_dir, dv_format )
     ndoc =  len( docs )
     if ndoc == 0:
         logging.info( "no documents retrieved." )
@@ -1682,7 +1747,6 @@ def load_vocab( config_parser, vocab_fname, vocab, pos_rus, pos_eng ):
 def convert_excel( config_parser, excel_package ):
     global Nexcept
     
-    logging.info( "" )
     logging.info( "convert_excel() excel_package: %s" % excel_package )
     
     tmp_dir = config_parser.get( "config", "tmppath" )
@@ -2011,13 +2075,8 @@ def xlsx2csv_openpyxl( xlsx_dir, xlsx_filename, csv_dir, extra, vocab_regions = 
 
 
 
-def translate_csv( config_parser, handle_name ):
-    global Nexcept
-    
-    logging.info( "" )
-    logging.info( "translate_csv()" )
-    logging.info( "translating csv documents for handle name %s ..." % handle_name )
-    
+def translate_errhs_csvs( config_parser, handle_names ):
+    logging.info( "translate_errhs_csvs()" )
     vocab_units = bidict()
     vocab_units = load_vocab( config_parser, "ERRHS_Vocabulary_units.csv", vocab_units, 0, 1 )
     
@@ -2033,6 +2092,20 @@ def translate_csv( config_parser, handle_name ):
     
     vocab_modclasses = bidict()
     vocab_modclasses = load_vocab( config_parser, "ERRHS_Vocabulary_modclasses.csv", vocab_modclasses, 0, 1 )
+    
+    # TODO process existing files, not trying all handle_names
+    # csv-ru/hdl_errhs_[type]/ERRHS_[datatype]_data_[year]-ru.csv2xlsx
+    # csv-en/hdl_errhs_[type]/ERRHS_[datatype]_data_[year]-en.csv
+    for handle_name in handle_names:
+        translate_csv( config_parser, handle_name, vocab_units, vocab_regions, vocab_histclasses, vocab_modclasses )
+
+
+
+def translate_csv( config_parser, handle_name, vocab_units, vocab_regions, vocab_histclasses, vocab_modclasses ):
+    global Nexcept
+    
+    logging.info( "translate_csv()" )
+    logging.info( "translating csv documents for handle name %s ..." % handle_name )
     
     tmp_dir = config_parser.get( "config", "tmppath" )
     csv_dir = os.path.join( tmp_dir, "dataverse_dst", "csv-ru", handle_name )
@@ -2221,7 +2294,6 @@ def compile_filecatalogue( config_parser, language ):
     # convert the -en and -ru csv files to xlsx files with copyright tab
     global Nexcept
     
-    logging.info( "" )
     logging.info( "compile_filecatalogue() language = %s" % language )
     
     # rounding of data in value column is specified in ERRHS_Vocabulary_units.csv
@@ -2276,8 +2348,8 @@ def compile_filecatalogue( config_parser, language ):
         dir_list = os.listdir( csv_dir )
         dir_list.sort()
         for csv_filename in dir_list:
-            # convert csv -> xlsx and save
-            csv2xlsx( language, vocab_units, csv_dir, csv_filename, xlsx_dir )
+                # convert csv -> xlsx and save
+                csv2xlsx( language, vocab_units, csv_dir, csv_filename, xlsx_dir )
 
 
 
@@ -2396,7 +2468,7 @@ def csv2xlsx( language, vocab_units, csv_dir, csv_filename, xlsx_dir ):
         elif decimals == 0:
             old_val = df1.loc[ row, "VALUE" ]
             #if old_val == '.': # UnicodeWarning: Unicode equal comparison failed to convert both arguments to Unicode - interpreting them as being unequal
-            if str( old_val ) == str( '.' ):
+            if old_val.strip() == u'.':
                 continue
             
             try:
@@ -2406,6 +2478,8 @@ def csv2xlsx( language, vocab_units, csv_dir, csv_filename, xlsx_dir ):
                     nround += 1
             except:
                 logging.error( "csv2xlsx() rounding failed" )
+                logging.info( "type: %s, old_val: |%s|" % ( type( old_val ), old_val ) )
+                logging.info( "type: %s, new_val: |%s|" % ( type( new_val ), new_val ) )
                 type_, value, tb = sys.exc_info()
                 msg = "%s: %s" % ( type_, value )
                 logging.error( msg )
@@ -2531,17 +2605,17 @@ def format_secs( seconds ):
 
 
 if __name__ == "__main__":
-    DO_RETRIEVE_VOCAB = False   # -1- vocabulary: dataverse => local_disk
-    DO_RETRIEVE_DOC   = False   # -2- documentation: dataverse  => local_disk
-    DO_RETRIEVE_ERRHS = False   # -3- ERRHS data: dataverse => local_disk
+    DO_RETRIEVE_VOCAB = True   # -01- vocabulary: dataverse => local_disk
+    DO_RETRIEVE_DOC   = True   # -02- documentation: dataverse  => local_disk
+    DO_RETRIEVE_ERRHS = True   # -03- ERRHS data: dataverse => local_disk
     
-    DO_DOC_COPY       = False   # -4- local_disk doc srx dir => doc dst dir
-    DO_CONVERT_VOCAB  = False   # -5- convert Russian vocab xlsx files to Russian vocab csv files
-    DO_CONVERT_EXCEL  = False   # -6- convert Russian xlsx files to Russian csv files
-    DO_TRANSLATE_CSV  = False   # -7- translate Russian csv files to English variants
+    DO_DOC_COPY       = True   # -04- local_disk doc srx dir => doc dst dir
+    DO_CONVERT_VOCAB  = True   # -05- convert Russian vocab xlsx files to Russian vocab csv files
+    DO_CONVERT_EXCEL  = True   # -06- convert Russian xlsx files to Russian csv files
+    DO_TRANSLATE_CSV  = True   # -07- translate Russian csv files to English variants
     
-    DO_POSTGRES_DB    = False   # -8- ERRHS data: local_disk => postgresql, csv -> table
-    DO_MONGO_DB       = False   # -9- ERRHS data: postgresql => mongodb
+    DO_POSTGRES_DB    = True   # -08- ERRHS data: local_disk => postgresql, csv -> table
+    DO_MONGO_DB       = True   # -09- ERRHS data: postgresql => mongodb
     DO_FILE_CATALOGUE = True   # -10- ERRHS data: csv -> filecatalogue xlsx
     
     #dv_format = ""
@@ -2596,12 +2670,12 @@ if __name__ == "__main__":
     
     # DATAVERSE RETRIEVAL Phase; will exit() on retrieval error
     if DO_RETRIEVE_VOCAB:
+        logging.info( '' )
         logging.info( "-1- DO_RETRIEVE_VOCAB" )
         # Downloaded vocabulary documents are not first stored in postgreSQL, 
         # they are processed on the fly, and directly put in MongoDB vocabulary
-        copy_local = True       # to inspect
         
-        retrieve_vocabularies( config_parser, mongo_client, dv_format, copy_local )
+        dv_ids_vocab = retrieve_vocabularies( config_parser, dv_format )
         
         # global autoupdate parameter set via dataverse Autoupdate.txt in vocabularies dir
         # AUTOUPDATE > 1 : ignore Autoupdate.txt
@@ -2617,23 +2691,24 @@ if __name__ == "__main__":
             sys.exit( 0 )
     
     if DO_RETRIEVE_DOC:
+        logging.info( '' )
         logging.info( "-2- DO_RETRIEVE_DOC" )
-        copy_local  = True      # for zipped downloads
-        update_documentation( config_parser, copy_local )
+        update_documentation( config_parser )
     
     if DO_RETRIEVE_ERRHS:
+        logging.info( '' )
         logging.info( "-3- DO_RETRIEVE_ERRHS" )
-        copy_local  = True
-        remove_xlsx = False
         for handle_name in handle_names:
-            retrieve_handle_docs( config_parser, handle_name, dv_format, copy_local, remove_xlsx ) # dataverse  => local_disk
+            retrieve_handle_docs( config_parser, handle_name, dv_format ) # dataverse  => local_disk
     
     # PROCESSING Phase
     if DO_DOC_COPY: 
+        logging.info( '' )
         logging.info( "-4- DO_RETRIEVE_COPY" )
         copy_src2dst()
     
     if DO_CONVERT_VOCAB:    # convert Russian vocab xlsx files to Russian vocab csv files
+        logging.info( '' )
         logging.info( "-5- DO_CONVERT_VOCAB" )
         #excel_package = "pandas"     # years get '.0'
         #excel_package = "xlrd"       # not implemented
@@ -2642,19 +2717,21 @@ if __name__ == "__main__":
         convert_vocabularies( excel_package )
     
     if DO_CONVERT_EXCEL:
+        logging.info( '' )
         logging.info( "-6- DO_CONVERT_EXCEL" )
         #excel_package = "pandas"     # too slow (due to post-read coorections)
         #excel_package = "xlrd"       # not implemented
         excel_package = "openpyxl"    # applies losing trailing 0's correction
+        
         convert_excel( config_parser, excel_package )
     
     if DO_TRANSLATE_CSV:
+        logging.info( '' )
         logging.info( "-7- DO_TRANSLATE_CSV" )                      # ru => en
-        # TODO process existing files, not trying all handle_names
-        for handle_name in handle_names:                            # csv-ru/hdl_errhs_[type]/ERRHS_[datatype]_data_[year]-ru.csv
-            translate_csv( config_parser, handle_name )             # csv-en/hdl_errhs_[type]/ERRHS_[datatype]_data_[year]-en.csv
+        translate_errhs_csvs( config_parser, handle_names )
     
     if DO_POSTGRES_DB:
+        logging.info( '' )
         logging.info( "-8- DO_POSTGRES_DB" )    # read russian csv files
         logging.StreamHandler().flush()
         for language in [ "ru", "en" ]:
@@ -2671,19 +2748,21 @@ if __name__ == "__main__":
             #topic_counts( config_parser )                                  # postgresql datasets.topics counts
     
     if DO_MONGO_DB:
+        logging.info( '' )
         logging.info( "-9- DO_MONGO_DB" )
-        # TODO check mongo duplicate actions?
-        mongostore_vocabularies()       # separated from retrieval and conversion
+        mongo_store_vocabularies()
         
         for language in [ "ru", "en" ]:
             update_handle_docs( config_parser, mongo_client, language )     # postgresql => mongodb
     
     if DO_FILE_CATALOGUE:
+        logging.info( '' )
         logging.info( "-10- DO_FILE_CATALOGUE" )
         for language in [ "ru", "en" ]:
         #for language in [ "en" ]:  # test
             compile_filecatalogue( config_parser, language )                # create filecatalogue xlsx files
     
+    logging.info( '' )
     logging.info( "total number of exceptions: %d" % Nexcept )
     
     logging.info( "stop: %s" % datetime.now() )
