@@ -66,7 +66,7 @@ def documents_info( config_parser, language ):
 def update_documentation( config_parser ):
 def retrieve_vocabularies( config_parser, dv_format ):
 def copy_src2dst():
-def convert_vocabularies( convert_vocabularies ):
+def convert_vocabularies2csv( convert_vocabularies ):
 def merge_vocabs( vocab_csv_dir ):
 def mongo_store_vocabularies():
 def retrieve_handle_docs( config_parser, handle_name, dv_format = "" ):
@@ -79,13 +79,14 @@ def update_handle_docs( config_parser, mongo_client ):
 def clear_mongo( mongo_client ):
 def topic_counts( config_parser, language ):
 def load_vocab( config_parser, vocab_fname, vocab, pos_rus, pos_eng ):
-def convert_excel( config_parser, excel_package ):
+def convert_excel2csv( config_parser, excel_package ):
 def xlsx2csv_pandas( xlsx_dir, xlsx_filename, csv_dir, extra ):
 def xlsx2csv_openpyxl( xlsx_dir, xlsx_filename, csv_dir, extra ):
+def xlsx2csv_tablib( xlsx_dir, xlsx_filename, csv_dir, extra ):
 def translate_errhs_csvs( config_parser, handle_names ):
 def translate_csv( config_parser, handle_name, vocab_units, vocab_regions, vocab_histclasses, vocab_modclasses ):
-def compile_filecatalogue( config_parser, language ):
-def csv2xlsx( language, vocab_units, csv_dir, csv_filename, xlsx_dir ):
+def compile_filecatalogue( config_parser, language, excel_package, pd_engine ):
+def csv2xlsx_pandas( language, vocab_units, csv_dir, csv_filename, xlsx_dir ):
 def format_secs( seconds ):
 """
 
@@ -115,6 +116,7 @@ import requests
 import simplejson
 import sys
 import shutil
+import tablib
 
 from backports import csv
 from bidict import bidict
@@ -729,8 +731,8 @@ def copy_src2dst():
 
 
 
-def convert_vocabularies( excel_package ):
-    logging.info( "%s convert_vocabularies()" % __file__ )
+def convert_vocabularies2csv( excel_package ):
+    logging.info( "%s convert_vocabularies2csv()" % __file__ )
     
     tmp_dir = config_parser.get( "config", "tmppath" )
     vocab_dir = "vocab"
@@ -760,7 +762,13 @@ def convert_vocabularies( excel_package ):
                     xlsx2csv_pandas( xlsx_dir, xlsx_filename, csv_dir, extra )
                 elif excel_package == "openpyxl":
                     xlsx2csv_openpyxl( xlsx_dir, xlsx_filename, csv_dir, extra )
-            
+                elif excel_package == "tablib":
+                    xlsx2csv_tablib( xlsx_dir, xlsx_filename, csv_dir, extra )
+                else:
+                    logging.error( "excel_package: %s not supported" % excel_package )
+                    logging.error( "EXIT" )
+                    print( "EXIT" )
+                    sys.exit( 1 )
             else:
                 logging.info( "skip filename: %s" % xlsx_filename )
                 continue
@@ -1642,7 +1650,7 @@ def load_vocab( config_parser, vocab_fname, vocab, pos_rus, pos_eng ):
     nline = 0
     for csv_line in iter( vocab_file ):
         csv_line.strip()        # zap '\n'
-        #logging.debug( csv_line )
+        logging.debug( csv_line )
         if nline == 0:
             pass        # skip header
         else:
@@ -1744,10 +1752,10 @@ def load_vocab( config_parser, vocab_fname, vocab, pos_rus, pos_eng ):
 
 
 
-def convert_excel( config_parser, excel_package ):
+def convert_excel2csv( config_parser, excel_package ):
     global Nexcept
     
-    logging.info( "convert_excel() excel_package: %s" % excel_package )
+    logging.info( "convert_excel2csv() excel_package: %s" % excel_package )
     
     tmp_dir = config_parser.get( "config", "tmppath" )
     
@@ -1816,6 +1824,13 @@ def convert_excel( config_parser, excel_package ):
                 xlsx2csv_pandas( xlsx_dir, xlsx_filename, csv_dir, extra )
             elif excel_package == "openpyxl":
                 xlsx2csv_openpyxl( xlsx_dir, xlsx_filename, csv_dir, extra, vocab_regions )
+            elif excel_package == "tablib":
+                xlsx2csv_tablib( xlsx_dir, xlsx_filename, csv_dir, extra )
+            else:
+                logging.error( "excel_package: %s not supported" % excel_package )
+                logging.error( "EXIT" )
+                print( "EXIT" )
+                sys.exit( 1 )
 
 
 
@@ -2075,6 +2090,32 @@ def xlsx2csv_openpyxl( xlsx_dir, xlsx_filename, csv_dir, extra, vocab_regions = 
 
 
 
+def xlsx2csv_tablib( xlsx_dir, xlsx_filename, csv_dir, extra ):
+    logging.info( "xlsx2csv_tablib() %s" % xlsx_filename )
+
+    xlsx_pathname = os.path.join( xlsx_dir, xlsx_filename )
+    if not os.path.isfile( xlsx_pathname ):
+        return
+    
+    root, ext = os.path.splitext( xlsx_filename )
+    csv_filename = root + extra + ".csv"
+    csv_pathname = os.path.join( csv_dir, csv_filename )
+
+    logging.debug( "input:  %s" % xlsx_pathname )
+    logging.debug( "output: %s" % csv_pathname )
+
+    encoding  = "utf-8"
+    delimiter = '|'         # notice that we imported backports.csv
+    newline   = '\n'
+    
+    with io.open( csv_pathname, "w", newline = newline, encoding = encoding ) as csv_file: 
+        with io.open( xlsx_pathname, "rb" ) as xlsx_file:
+            data = tablib.Dataset()
+            data.xlsx = xlsx_file.read()
+            csv_file.write( data.export( "csv", delimiter = delimiter ) )
+
+
+
 def translate_errhs_csvs( config_parser, handle_names ):
     logging.info( "translate_errhs_csvs()" )
     vocab_units = bidict()
@@ -2290,7 +2331,7 @@ def translate_csv( config_parser, handle_name, vocab_units, vocab_regions, vocab
 
 
 
-def compile_filecatalogue( config_parser, language ):
+def compile_filecatalogue( config_parser, language, excel_package, pd_engine ):
     # convert the -en and -ru csv files to xlsx files with copyright tab
     global Nexcept
     
@@ -2348,13 +2389,22 @@ def compile_filecatalogue( config_parser, language ):
         dir_list = os.listdir( csv_dir )
         dir_list.sort()
         for csv_filename in dir_list:
-                # convert csv -> xlsx and save
-                csv2xlsx( language, vocab_units, csv_dir, csv_filename, xlsx_dir )
+            # convert csv -> xlsx and save
+            
+            if excel_package == "pandas":
+                csv2xlsx_pandas( language, vocab_units, csv_dir, csv_filename, xlsx_dir, pd_engine )
+            elif excel_package == "tablib":
+                csv2xlsx_tablib( language, vocab_units, csv_dir, csv_filename, xlsx_dir )
+            else:
+                logging.error( "excel_package: %s not supported" % excel_package )
+                logging.error( "EXIT" )
+                print( "EXIT" )
+                sys.exit( 1 )
 
 
 
-def csv2xlsx( language, vocab_units, csv_dir, csv_filename, xlsx_dir ): 
-    logging.info( "csv2xlsx() %s" % csv_filename )
+def csv2xlsx_pandas( language, vocab_units, csv_dir, csv_filename, xlsx_dir, pd_engine ): 
+    logging.info( "csv2xlsx_pandas() %s" % csv_filename )
     
     """
     autoupdate.py:1703: UnicodeWarning: Unicode equal comparison failed to convert both arguments to Unicode - interpreting them as being unequal
@@ -2519,9 +2569,11 @@ def csv2xlsx( language, vocab_units, csv_dir, csv_filename, xlsx_dir ):
     xlsx_filename = root + ".xlsx"
     xlsx_pathname = os.path.join( xlsx_dir, xlsx_filename )
     
-    #engine = "openpyxl"
-    engine = "xlsxwriter"
-    writer = pd.ExcelWriter( xlsx_pathname, engine = engine )
+    # from input parameter
+    #pd_engine = "openpyxl"
+    #pd_engine = "xlsxwriter"
+    
+    writer = pd.ExcelWriter( xlsx_pathname, engine = pd_engine )
     
     try:
         df1.to_excel( writer, "Table", encoding = "utf-8", index = False )
@@ -2588,6 +2640,32 @@ def csv2xlsx( language, vocab_units, csv_dir, csv_filename, xlsx_dir ):
 
 
 
+def csv2xlsx_tablib( language, vocab_units, csv_dir, csv_filename, xlsx_dir ):
+    logging.info( "csv2xlsx_tablib() %s" % csv_filename )
+
+    csv_pathname = os.path.join( csv_dir, csv_filename )
+    if not os.path.isfile( csv_pathname ):
+        return
+    
+    root, ext = os.path.splitext( csv_filename )
+    xlsx_filename = root + extra + ".xlsx"
+    xlsx_pathname = os.path.join( xlsx_dir, xlsx_filename )
+
+    logging.debug( "input:  %s" % csv_pathname )
+    logging.debug( "output: %s" % xlsx_pathname )
+
+    encoding  = "utf-8"
+    delimiter = '|'         # notice that we imported backports.csv
+    newline   = '\n'
+    
+    with io.open( csv_pathname, "wb", newline = newline, encoding = encoding ) as xlsx_file: 
+        with io.open( xlsx_pathname, "r" ) as csv_file:
+            data = tablib.Dataset()
+            data.csv = csv_file.read()
+            csv_file.write( data.export( "xlsx", delimiter = delimiter ) )
+
+
+
 def format_secs( seconds ):
     nmin, nsec  = divmod( seconds, 60 )
     nhour, nmin = divmod( nmin, 60 )
@@ -2605,18 +2683,18 @@ def format_secs( seconds ):
 
 
 if __name__ == "__main__":
-    DO_RETRIEVE_VOCAB = True   # -01- vocabulary: dataverse => local_disk
-    DO_RETRIEVE_DOC   = True   # -02- documentation: dataverse  => local_disk
-    DO_RETRIEVE_ERRHS = True   # -03- ERRHS data: dataverse => local_disk
+    DO_RETRIEVE_VOCAB    = False   # -01- vocabulary: dataverse => local_disk
+    DO_RETRIEVE_DOC      = False   # -02- documentation: dataverse  => local_disk
+    DO_RETRIEVE_ERRHS    = False   # -03- ERRHS data: dataverse => local_disk
     
-    DO_DOC_COPY       = True   # -04- local_disk doc srx dir => doc dst dir
-    DO_CONVERT_VOCAB  = True   # -05- convert Russian vocab xlsx files to Russian vocab csv files
-    DO_CONVERT_EXCEL  = True   # -06- convert Russian xlsx files to Russian csv files
-    DO_TRANSLATE_CSV  = True   # -07- translate Russian csv files to English variants
+    DO_DOC_COPY          = False   # -04- local_disk doc srx dir => doc dst dir
+    DO_CONVERT_VOCAB2CSV = False   # -05- convert vocab xlsx files [ru + en] to vocab csv files [ru + en]
+    DO_CONVERT_EXCEL2CSV = False   # -06- convert Russian ERRHS xlsx files to Russian ERRHS csv files
+    DO_TRANSLATE_CSV     = True   # -07- translate Russian csv files to English csv files
     
-    DO_POSTGRES_DB    = True   # -08- ERRHS data: local_disk => postgresql, csv -> table
-    DO_MONGO_DB       = True   # -09- ERRHS data: postgresql => mongodb
-    DO_FILE_CATALOGUE = True   # -10- ERRHS data: csv -> filecatalogue xlsx
+    DO_POSTGRES_DB       = False   # -08- ERRHS data: local_disk => postgresql, csv -> table
+    DO_MONGO_DB          = False   # -09- ERRHS data: postgresql => mongodb
+    DO_FILE_CATALOGUE    = True   # -10- ERRHS data: csv -> filecatalogue xlsx
     
     #dv_format = ""
     dv_format = "original"  # does not work for ter_code (regions) vocab translations
@@ -2707,23 +2785,27 @@ if __name__ == "__main__":
         logging.info( "-4- DO_RETRIEVE_COPY" )
         copy_src2dst()
     
-    if DO_CONVERT_VOCAB:    # convert Russian vocab xlsx files to Russian vocab csv files
+    if DO_CONVERT_VOCAB2CSV:    # convert vocab xlsx files [ru + en] to vocab csv files [ru + en]
         logging.info( '' )
-        logging.info( "-5- DO_CONVERT_VOCAB" )
-        #excel_package = "pandas"     # years get '.0'
-        #excel_package = "xlrd"       # not implemented
-        excel_package = "openpyxl"    # applies losing trailing 0's correction
+        logging.info( "-5- DO_CONVERT_VOCAB2CSV" )
         
-        convert_vocabularies( excel_package )
+        #excel_package = "pandas"        # years get '.0'
+        #excel_package = "xlrd"          # not implemented
+        #excel_package = "openpyxl"      # applies losing trailing 0's correction
+        excel_package = "tablib"        # from Kenneth Reitz (requests)
+        
+        convert_vocabularies2csv( excel_package )
     
-    if DO_CONVERT_EXCEL:
+    if DO_CONVERT_EXCEL2CSV:    # convert Russian ERRHS xlsx files to Russian ERRHS csv files
         logging.info( '' )
-        logging.info( "-6- DO_CONVERT_EXCEL" )
-        #excel_package = "pandas"     # too slow (due to post-read coorections)
-        #excel_package = "xlrd"       # not implemented
-        excel_package = "openpyxl"    # applies losing trailing 0's correction
+        logging.info( "-6- DO_CONVERT_EXCEL2CSV" )
         
-        convert_excel( config_parser, excel_package )
+        #excel_package = "pandas"        # too slow (due to post-read coorections)
+        #excel_package = "xlrd"          # not implemented
+        #excel_package = "openpyxl"      # applies losing trailing 0's correction
+        excel_package = "tablib"        # from Kenneth Reitz (requests)
+        
+        convert_excel2csv( config_parser, excel_package )
     
     if DO_TRANSLATE_CSV:
         logging.info( '' )
@@ -2758,9 +2840,17 @@ if __name__ == "__main__":
     if DO_FILE_CATALOGUE:
         logging.info( '' )
         logging.info( "-10- DO_FILE_CATALOGUE" )
-        for language in [ "ru", "en" ]:
+        
+        #excel_package = "pandas"        # too slow (due to post-read coorections)
+        excel_package = "tablib"        # from Kenneth Reitz (requests)
+        
+        #pd_engine = "openpyxl"      # only for pandas
+        pd_engine = "xlsxwriter"    # only for pandas
+    
+        for language in [ "ru" ]:  # test
         #for language in [ "en" ]:  # test
-            compile_filecatalogue( config_parser, language )                # create filecatalogue xlsx files
+        #for language in [ "ru", "en" ]:
+            compile_filecatalogue( config_parser, language, excel_package, pd_engine )  # create filecatalogue xlsx files
     
     logging.info( '' )
     logging.info( "total number of exceptions: %d" % Nexcept )
