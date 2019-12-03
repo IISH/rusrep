@@ -34,7 +34,7 @@ FL-04-Jul-2019 autoupdate steered by dataverse
 FL-29-Jul-2019 new ristat-key, but failed!
 FL-06-Aug-2019 AUTOUPDATE > 1 : force doing an autoupdate
 FL-19-Nov-2019 Separate retrieving documents from processing documents
-FL-26-Nov-2019 Cleanup
+FL-03-Dec-2019 Now using tablib for excel processing
 
 ToDo:
 - split retrieve_vocabularies in 3 functions
@@ -87,6 +87,7 @@ def translate_errhs_csvs( config_parser, handle_names ):
 def translate_csv( config_parser, handle_name, vocab_units, vocab_regions, vocab_histclasses, vocab_modclasses ):
 def compile_filecatalogue( config_parser, language, excel_package, pd_engine ):
 def csv2xlsx_pandas( language, vocab_units, csv_dir, csv_filename, xlsx_dir ):
+def csv2xlsx_tablib( language, vocab_units, csv_dir, csv_filename, xlsx_dir ):
 def format_secs( seconds ):
 """
 
@@ -350,16 +351,19 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "" ):
     
     dv_items = dataverse.get_contents()
     nitems = len( dv_items )
-    logging.info( "downloading %d dataverse files" % nitems )
+    logging.info( "available dataverse handle items: %d" % nitems )
+    
     for i, item in enumerate( dv_items ):
-        logging.info( "downloading file %d-of-%d" % ( i+1, nitems ) )
+        logging.info( "handle item %d-of-%d" % ( i+1, nitems ) )
         # item dict keys: protocol, authority, persistentUrl, identifier, type, id
         handle = str( item[ 'protocol' ] ) + ':' + str( item[ 'authority' ] ) + "/" + str( item[ 'identifier' ] )
         logging.debug( "handle: %s" % handle )
-        clio_handle = config_parser.get( "config", handle_name )
-        logging.debug( "clio_handle: %s" % clio_handle )
+        dv_handle = config_parser.get( "config", handle_name )
+        logging.debug( "dv_handle: %s" % dv_handle )
         
-        if handle == clio_handle:
+        if handle != dv_handle:
+            logging.info( "handle_name: %s, skipping handle: %s" % ( handle_name, handle ) )
+        else:
             logging.info( "handle_name: %s, using handle: %s" % ( handle_name, handle ) )
             datasetid = item[ 'id' ]
             url  = "https://" + str( dv_host ) + "/api/datasets/" + str( datasetid )
@@ -376,26 +380,26 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "" ):
             
             files = dataframe[ 'data' ][ 'latestVersion' ][ 'files' ]
             nfiles = len( files )
-            logging.info( "number of files: %d" % nfiles )
+            logging.info( "number of files to download: %d" % nfiles )
             
             for nfile, dv_file in enumerate( files ):
-                logging.info( "%d-of-%d: %s" % ( nfile+1, nfiles, str( dv_file ) ) )
-                
+                logging.info( "download %d-of-%d" % ( nfile+1, nfiles ) )
+                logging.debug( "%s" % str( dv_file ))
+                             
                 datasetVersionId = str( dv_file[ "datasetVersionId" ] )
                 version          = str( dv_file[ "version" ] )
                 label            = str( dv_file[ "label" ] )
                 
                 if dv_version == "new":     # newer dataverse version
-                    logging.info( "keys/vals in dataFile:" )
                     dataFile = dv_file[ "dataFile" ]
                     filename = str( dataFile[ 'filename' ] )
                 else:                       # older dataverse version
-                    logging.info( "keys/vals in datafile:" )
                     dataFile = dv_file[ "datafile" ]
                     filename = str( dataFile[ 'name' ] )
                 
+                logging.info( "# of keys/vals in data file: %d" % len( dataFile ) )
                 for key in dataFile:
-                    logging.info( "key: %s, val: %s" % ( key, dataFile[ key ] ) )
+                    logging.debug( "key: %s, val: %s" % ( key, dataFile[ key ] ) )
                 
                 paperitem = {}
                 paperitem[ 'id' ]   = str( dataFile[ 'id' ] )
@@ -1121,7 +1125,7 @@ def filter_csv( config_parser, csv_dir, in_filename ):
     # which is copied to a postgres table; the input csv file is _unchanged_.
     
     # rounding of data in value column is specified in ERRHS_Vocabulary_units.csv
-    # Equality of pos_rus anf pos_eng is a hack, used to flag decimals from either rus or eng
+    # Equality of pos_rus and pos_eng is a hack, used to flag decimals from either rus or eng
     vocab_units = dict()
     if in_filename.endswith( "-ru.csv" ):
         vocab_units = load_vocab( config_parser, "ERRHS_Vocabulary_units.csv", vocab_units, 0, 0 )
@@ -1785,6 +1789,10 @@ def convert_excel2csv( config_parser, excel_package ):
         logging.info( "key: %s, val: %s" % ( key, val ) )
     """
     
+    vocab_units = dict()
+    vocab_units_ru = load_vocab( config_parser, "ERRHS_Vocabulary_units.csv", vocab_units, 0, 0 )
+    #vocab_units_en = load_vocab( config_parser, "ERRHS_Vocabulary_units.csv", vocab_units, 1, 1 )
+    
     # read russian excel files
     dir_list = os.listdir( xlsx_basedir )
     dir_list.sort()
@@ -1825,7 +1833,8 @@ def convert_excel2csv( config_parser, excel_package ):
             elif excel_package == "openpyxl":
                 xlsx2csv_openpyxl( xlsx_dir, xlsx_filename, csv_dir, extra, vocab_regions )
             elif excel_package == "tablib":
-                xlsx2csv_tablib( xlsx_dir, xlsx_filename, csv_dir, extra )
+                #xlsx2csv_tablib( xlsx_dir, xlsx_filename, csv_dir, extra )
+                xlsx2csv_tablib_filter( vocab_units_ru, xlsx_dir, xlsx_filename, csv_dir, extra )   # with rounding of VALUEs
             else:
                 logging.error( "excel_package: %s not supported" % excel_package )
                 logging.error( "EXIT" )
@@ -2105,7 +2114,7 @@ def xlsx2csv_tablib( xlsx_dir, xlsx_filename, csv_dir, extra ):
     logging.debug( "output: %s" % csv_pathname )
 
     encoding  = "utf-8"
-    delimiter = '|'         # notice that we imported backports.csv
+    delimiter = '|'
     newline   = '\n'
     
     with io.open( csv_pathname, "w", newline = newline, encoding = encoding ) as csv_file: 
@@ -2113,6 +2122,146 @@ def xlsx2csv_tablib( xlsx_dir, xlsx_filename, csv_dir, extra ):
             data = tablib.Dataset()
             data.xlsx = xlsx_file.read()
             csv_file.write( data.export( "csv", delimiter = delimiter ) )
+
+
+
+def xlsx2csv_tablib_filter( vocab_units_ru, xlsx_dir, xlsx_filename, csv_dir, extra ):
+    logging.info( "xlsx2csv_tablib() %s" % xlsx_filename )
+    
+    if xlsx_filename != "ERRHS_2_01_data_1959.xlsx":
+        logging.info( "SKIP %s" % xlsx_filename )
+        return
+    
+    xlsx_pathname = os.path.join( xlsx_dir, xlsx_filename )
+    if not os.path.isfile( xlsx_pathname ):
+        return
+    
+    root, ext = os.path.splitext( xlsx_filename )
+    csv_filename = root + extra + ".csv"
+    csv_pathname = os.path.join( csv_dir, csv_filename )
+
+    logging.debug( "input:  %s" % xlsx_pathname )
+    logging.debug( "output: %s" % csv_pathname )
+
+    # ERRHS postgres column names
+    pg_column_names = [
+        "id",                   #  0
+        "territory",            #  1
+        "ter_code",             #  2
+        "town",                 #  3
+        "district",             #  4
+        "year",                 #  5
+        "month",                #  6
+        "value",                #  7
+        "value_unit",           #  8
+        "value_label",          #  9
+        "datatype",             # 10
+        "histclass1",           # 11
+        "histclass2",           # 12
+        "histclass3",           # 13
+        "histclass4",           # 14
+        "histclass5",           # 15
+        "histclass6",           # 16
+        "histclass7",           # 17
+        "histclass8",           # 18
+        "histclass9",           # 19
+        "histclass10",          # 20
+        "class1",               # 21
+        "class2",               # 22
+        "class3",               # 23
+        "class4",               # 24
+        "class5",               # 25
+        "class6",               # 26
+        "class7",               # 27
+        "class8",               # 28
+        "class9",               # 29
+        "class10",              # 30
+        "comment_source",       # 31
+        "source",               # 32
+        "volume",               # 33
+        "page",                 # 34
+        "naborshik_id",         # 35
+        "comment_naborshik",    # 36
+        "base_year"             # 37
+    ]
+    ncolumns_pg = len( pg_column_names )
+    
+    nround = 0
+    value_loc = pg_column_names.index( "value" )
+    vunit_loc = pg_column_names.index( "value_unit" )
+    logging.debug( "value_loc: %d, vunit_loc: %d" % ( value_loc, vunit_loc ) )
+    
+    missing_units = set()
+        
+    encoding  = "utf-8"
+    delimiter = '|'
+    newline   = '\n'
+    
+    data_out = tablib.Dataset()
+    
+    with io.open( xlsx_pathname, "rb" ) as xlsx_file:
+        data_in  = tablib.Dataset()
+        
+        data_in.xlsx = xlsx_file.read()
+        
+        #print( data_in.headers )
+        data_out.headers = data_in.headers
+        for r, row_tuple in enumerate( data_in ):       # skips header; rows are tuples
+            #logging.debug( "row type: %s" % type( row_tuple ) )
+            # Proper ter_code name
+            # TODO ...
+            
+            # Rounding
+            row_list = list( row_tuple )
+            vunit = row_tuple[ vunit_loc ]
+            decimals = vocab_units_ru.get( vunit )
+            
+            if decimals is None:
+                missing_units.add( vunit )
+            else:
+                old_val = row_tuple[ value_loc ]
+                if isinstance( old_val, long ) or isinstance( old_val, float ):
+                    try:
+                        new_val = round( float( old_val ), decimals )
+                        if decimals == 0:
+                            new_val = long( new_val )
+                        if old_val != new_val:
+                            row_list[ value_loc ] = new_val
+                            nround += 1
+                            logging.debug( "row: %d, old_val: %s => new_val: %s" % ( r, old_val, new_val ) )
+                    except:
+                        logging.error( "xlsx2csv_tablib_filter() rounding failed" )
+                        logging.info( "type: %s, old_val: |%s|" % ( type( old_val ), old_val ) )
+                        logging.info( "type: %s, new_val: |%s|" % ( type( new_val ), new_val ) )
+                        type_, value, tb = sys.exc_info()
+                        msg = "%s: %s" % ( type_, value )
+                        logging.error( msg )
+                        sys.exit( 1 )
+                else:
+                    if isinstance( old_val, unicode ):
+                        pass
+                    else:
+                        logging.warn( "old_val: %s, type: %s" % ( str( old_val ), type( old_val ) ) )
+            
+            if nround > 0:
+                data_out.append( row_list )
+            else:
+                data_out.append( row_tuple )
+        
+        nrows = len( data_in )
+        if nround == 0:
+            logging.info( "nrows: %d, nothing rounded" % nrows )
+        else:
+            logging.info( "nrows: %d, nround: %d" % ( nrows, nround ) )
+        
+        nmissing = len( missing_units )
+        if nmissing > 0:
+            logging.warn( "missing vocab_unit keys: %d" % nmissing )
+            for unit in missing_units:
+                logging.warn( unit )
+    
+    with io.open( csv_pathname, "w", newline = newline, encoding = encoding ) as csv_file:
+        csv_file.write( data_out.export( "csv", delimiter = delimiter ) )
 
 
 
@@ -2160,7 +2309,13 @@ def translate_csv( config_parser, handle_name, vocab_units, vocab_regions, vocab
     logging.debug( "eng_dir: %s" % eng_dir )
     
     if os.path.exists( eng_dir ):
-        empty_dir( eng_dir )                # remove previous files
+        empty_dir( eng_dir )                # remove previous files    vocab_units = dict()
+    if in_filename.endswith( "-ru.csv" ):
+        vocab_units = load_vocab( config_parser, "ERRHS_Vocabulary_units.csv", vocab_units, 0, 0 )
+    elif in_filename.endswith( "-en.csv" ):
+        vocab_units = load_vocab( config_parser, "ERRHS_Vocabulary_units.csv", vocab_units, 1, 1 )
+    else:
+        logging.error( "in_filename does not end with either '-ru.csv' or '-en.csv'" )
     if not os.path.exists( eng_dir ):
         os.makedirs( eng_dir )
     
@@ -2648,21 +2803,29 @@ def csv2xlsx_tablib( language, vocab_units, csv_dir, csv_filename, xlsx_dir ):
         return
     
     root, ext = os.path.splitext( csv_filename )
-    xlsx_filename = root + extra + ".xlsx"
+    xlsx_filename = root + ".xlsx"
     xlsx_pathname = os.path.join( xlsx_dir, xlsx_filename )
 
     logging.debug( "input:  %s" % csv_pathname )
     logging.debug( "output: %s" % xlsx_pathname )
 
-    encoding  = "utf-8"
-    delimiter = '|'         # notice that we imported backports.csv
-    newline   = '\n'
+    encoding  = "utf-8"     # not a parameter of data.load()
+    delimiter = '|'
+    newline   = '\n'        # not a parameter of data.load()
     
-    with io.open( csv_pathname, "wb", newline = newline, encoding = encoding ) as xlsx_file: 
-        with io.open( xlsx_pathname, "r" ) as csv_file:
+    with io.open( xlsx_pathname, "wb" ) as xlsx_file:
+        with io.open( csv_pathname, "r" ) as csv_file:
             data = tablib.Dataset()
-            data.csv = csv_file.read()
-            csv_file.write( data.export( "xlsx", delimiter = delimiter ) )
+            try:
+                data.load( csv_file.read(), format = "csv", delimiter = delimiter )
+                xlsx_file.write( data.export( "xlsx" ) )
+            except:
+                logging.error( "csv2xlsx_tablib() load failed: %s" % csv_filename )
+                type_, value, tb = sys.exc_info()
+                msg = "%s: %s %s" % ( type_, xlsx_filename, value )
+                logging.error( msg )
+                logging.warn( csv_file.readline() )
+                sys.exit( 1 )
 
 
 
@@ -2683,17 +2846,17 @@ def format_secs( seconds ):
 
 
 if __name__ == "__main__":
-    DO_RETRIEVE_VOCAB    = False   # -01- vocabulary: dataverse => local_disk
-    DO_RETRIEVE_DOC      = False   # -02- documentation: dataverse  => local_disk
-    DO_RETRIEVE_ERRHS    = False   # -03- ERRHS data: dataverse => local_disk
+    DO_RETRIEVE_VOCAB    = True   # -01- vocabulary: dataverse => local_disk
+    DO_RETRIEVE_DOC      = True   # -02- documentation: dataverse  => local_disk
+    DO_RETRIEVE_ERRHS    = True   # -03- ERRHS data: dataverse => local_disk
     
-    DO_DOC_COPY          = False   # -04- local_disk doc srx dir => doc dst dir
-    DO_CONVERT_VOCAB2CSV = False   # -05- convert vocab xlsx files [ru + en] to vocab csv files [ru + en]
-    DO_CONVERT_EXCEL2CSV = False   # -06- convert Russian ERRHS xlsx files to Russian ERRHS csv files
+    DO_DOC_COPY          = True   # -04- local_disk doc srx dir => doc dst dir
+    DO_CONVERT_VOCAB2CSV = True   # -05- convert vocab xlsx files [ru + en] to vocab csv files [ru + en]
+    DO_CONVERT_EXCEL2CSV = True   # -06- convert Russian ERRHS xlsx files to Russian ERRHS csv files
     DO_TRANSLATE_CSV     = True   # -07- translate Russian csv files to English csv files
     
-    DO_POSTGRES_DB       = False   # -08- ERRHS data: local_disk => postgresql, csv -> table
-    DO_MONGO_DB          = False   # -09- ERRHS data: postgresql => mongodb
+    DO_POSTGRES_DB       = True   # -08- ERRHS data: local_disk => postgresql, csv -> table
+    DO_MONGO_DB          = True   # -09- ERRHS data: postgresql => mongodb
     DO_FILE_CATALOGUE    = True   # -10- ERRHS data: csv -> filecatalogue xlsx
     
     #dv_format = ""
