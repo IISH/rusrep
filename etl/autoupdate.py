@@ -35,6 +35,7 @@ FL-29-Jul-2019 new ristat-key, but failed!
 FL-06-Aug-2019 AUTOUPDATE > 1 : force doing an autoupdate
 FL-19-Nov-2019 Separate retrieving documents from processing documents
 FL-03-Dec-2019 Now using tablib for excel processing
+FL-05-Dec-2019 
 
 ToDo:
 - split retrieve_vocabularies in 3 functions
@@ -2127,10 +2128,6 @@ def xlsx2csv_tablib( xlsx_dir, xlsx_filename, csv_dir, extra ):
 
 def xlsx2csv_tablib_filter( vocab_units_ru, xlsx_dir, xlsx_filename, csv_dir, extra ):
     logging.info( "xlsx2csv_tablib() %s" % xlsx_filename )
-    
-    if xlsx_filename != "ERRHS_2_01_data_1959.xlsx":
-        logging.info( "SKIP %s" % xlsx_filename )
-        return
     
     xlsx_pathname = os.path.join( xlsx_dir, xlsx_filename )
     if not os.path.isfile( xlsx_pathname ):
