@@ -35,7 +35,7 @@ FL-29-Jul-2019 new ristat-key, but failed!
 FL-06-Aug-2019 AUTOUPDATE > 1 : force doing an autoupdate
 FL-19-Nov-2019 Separate retrieving documents from processing documents
 FL-03-Dec-2019 Now using tablib for excel processing
-FL-05-Dec-2019 
+FL-06-Dec-2019 Bug
 
 ToDo:
 - split retrieve_vocabularies in 3 functions
@@ -2265,7 +2265,8 @@ def xlsx2csv_tablib_filter( vocab_units_ru, xlsx_dir, xlsx_filename, csv_dir, ex
 def translate_errhs_csvs( config_parser, handle_names ):
     logging.info( "translate_errhs_csvs()" )
     vocab_units = bidict()
-    vocab_units = load_vocab( config_parser, "ERRHS_Vocabulary_units.csv", vocab_units, 0, 1 )
+    vocab_units = load_vocab( config_parser, "ERRHS_Vocabulary_units.csv", vocab_units, 0, 1 )  # ru => en
+    #vocab_units = load_vocab( config_parser, "ERRHS_Vocabulary_units.csv", vocab_units, 0, 1 )  # en => ru
     
     vocab_regions = dict()      # special, not bidict() !
     vocab_regions = load_vocab( config_parser, "ERRHS_Vocabulary_regions.csv", vocab_regions, 1, 2 )
@@ -2306,13 +2307,7 @@ def translate_csv( config_parser, handle_name, vocab_units, vocab_regions, vocab
     logging.debug( "eng_dir: %s" % eng_dir )
     
     if os.path.exists( eng_dir ):
-        empty_dir( eng_dir )                # remove previous files    vocab_units = dict()
-    if in_filename.endswith( "-ru.csv" ):
-        vocab_units = load_vocab( config_parser, "ERRHS_Vocabulary_units.csv", vocab_units, 0, 0 )
-    elif in_filename.endswith( "-en.csv" ):
-        vocab_units = load_vocab( config_parser, "ERRHS_Vocabulary_units.csv", vocab_units, 1, 1 )
-    else:
-        logging.error( "in_filename does not end with either '-ru.csv' or '-en.csv'" )
+        empty_dir( eng_dir )                # remove previous files
     if not os.path.exists( eng_dir ):
         os.makedirs( eng_dir )
     
@@ -2843,13 +2838,13 @@ def format_secs( seconds ):
 
 
 if __name__ == "__main__":
-    DO_RETRIEVE_VOCAB    = True   # -01- vocabulary: dataverse => local_disk
-    DO_RETRIEVE_DOC      = True   # -02- documentation: dataverse  => local_disk
-    DO_RETRIEVE_ERRHS    = True   # -03- ERRHS data: dataverse => local_disk
+    DO_RETRIEVE_VOCAB    = False   # -01- vocabulary: dataverse => local_disk
+    DO_RETRIEVE_DOC      = False   # -02- documentation: dataverse  => local_disk
+    DO_RETRIEVE_ERRHS    = False   # -03- ERRHS data: dataverse => local_disk
     
-    DO_DOC_COPY          = True   # -04- local_disk doc srx dir => doc dst dir
-    DO_CONVERT_VOCAB2CSV = True   # -05- convert vocab xlsx files [ru + en] to vocab csv files [ru + en]
-    DO_CONVERT_EXCEL2CSV = True   # -06- convert Russian ERRHS xlsx files to Russian ERRHS csv files
+    DO_DOC_COPY          = False   # -04- local_disk doc srx dir => doc dst dir
+    DO_CONVERT_VOCAB2CSV = False   # -05- convert vocab xlsx files [ru + en] to vocab csv files [ru + en]
+    DO_CONVERT_EXCEL2CSV = False   # -06- convert Russian ERRHS xlsx files to Russian ERRHS csv files
     DO_TRANSLATE_CSV     = True   # -07- translate Russian csv files to English csv files
     
     DO_POSTGRES_DB       = True   # -08- ERRHS data: local_disk => postgresql, csv -> table
