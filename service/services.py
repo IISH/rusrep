@@ -367,7 +367,7 @@ def load_vocab( config_parser, vocab_fname, vocab, pos_rus, pos_eng ):
     # if pos_extar is not None, it is needed to make the keys and/or values unique
     handle_name = "hdl_vocabularies"
     tmp_dir = config_parser.get( "config", "tmppath" )
-    vocab_dir = os.path.join( tmp_dir, "dataverse", "vocab/csv", handle_name )
+    vocab_dir = os.path.join( tmp_dir, "dataverse_dst", "vocab/csv", handle_name )
     logging.info( "vocab_dir: %s" % vocab_dir )
     vocab_path = os.path.join( vocab_dir, vocab_fname )
     logging.info( "vocab_path: %s" % vocab_path )
@@ -991,7 +991,7 @@ def collect_docs( qinput, download_dir, download_key ):
     configparser = get_configparser()
     tmp_dir = configparser.get( "config", "tmppath" )
     
-    doc_dir = os.path.join( tmp_dir, "dataverse", "doc", "hdl_documentation" )
+    doc_dir = os.path.join( tmp_dir, "dataverse_dst", "doc", "hdl_documentation" )
     doc_list = os.listdir( doc_dir )
     doc_list.sort()
     
@@ -1516,7 +1516,7 @@ def documentation():
     config_parser = get_configparser()
     tmp_dir       = config_parser.get( "config", "tmppath" )
 
-    download_dir = os.path.join( tmp_dir, "dataverse" )
+    download_dir = os.path.join( tmp_dir, "dataverse_dst/doc" )
     download_fname = "doclist-" + language + ".json"
     download_path = os.path.join( download_dir, download_fname )
     
@@ -2071,14 +2071,14 @@ def filecatalogdata():
         xlsx_filename = "ERRHS_%s_data_%s%s.xlsx" % ( datatype, base_year, extra )
         logging.debug( "xlsx_filename: %s" % xlsx_filename )
         fcat_subdir = "fcat-" + language
-        xlsx_dir = os.path.join( tmp_dir, "dataverse", fcat_subdir, handle_name )
+        xlsx_dir = os.path.join( tmp_dir, "dataverse_dst", fcat_subdir, handle_name )
         xlsx_pathname = os.path.join( xlsx_dir, xlsx_filename )
         
         if os.path.isfile( xlsx_pathname ):
             logging.debug( "copy existing filecat xlsx: %s" % xlsx_pathname )
             shutil.copy2( xlsx_pathname, download_dir )
         else:
-            csv_dir = os.path.join( tmp_dir, "dataverse", csv_subdir, handle_name )
+            csv_dir = os.path.join( tmp_dir, "dataverse_dst", csv_subdir, handle_name )
             csv_filename = "ERRHS_%s_data_%s%s.csv" % ( datatype, base_year, extra )
             logging.debug( "csv_filename: %s" % csv_filename )
             

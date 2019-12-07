@@ -35,7 +35,7 @@ FL-29-Jul-2019 new ristat-key, but failed!
 FL-06-Aug-2019 AUTOUPDATE > 1 : force doing an autoupdate
 FL-19-Nov-2019 Separate retrieving documents from processing documents
 FL-03-Dec-2019 Now using tablib for excel processing
-FL-06-Dec-2019 Bug
+FL-07-Dec-2019 Bug
 
 ToDo:
 - split retrieve_vocabularies in 3 functions
@@ -66,7 +66,7 @@ def loadjson( json_dataurl ):
 def documents_info( config_parser, language ):
 def update_documentation( config_parser ):
 def retrieve_vocabularies( config_parser, dv_format ):
-def copy_src2dst():
+def copy_doc_src2dst():
 def convert_vocabularies2csv( convert_vocabularies ):
 def merge_vocabs( vocab_csv_dir ):
 def mongo_store_vocabularies():
@@ -520,7 +520,7 @@ def documents_info( config_parser, language ):
     logging.debug( "ristat_key: %s" % ristat_key )
     logging.info( "ristat_name: %s" % ristat_name )
     
-    download_dir = os.path.join( tmp_dir, "dataverse_src" )
+    download_dir = os.path.join( tmp_dir, "dataverse_src/doc" )
     download_fname = "doclist-" + language + ".json"
     download_path = os.path.join( download_dir, download_fname )
     
@@ -631,7 +631,7 @@ def documents_info( config_parser, language ):
     #logging.debug( type( docs_json ) )
     #logging.debug( docs_json )
     
-    file_json = codecs.open(download_path, 'w', "utf-8" )
+    file_json = codecs.open( download_path, 'w', "utf-8" )
     file_json.write( docs_json.encode( "utf-8" ) )
     file_json.close()
 
@@ -703,8 +703,8 @@ def retrieve_vocabularies( config_parser, dv_format ):
 
 
 
-def copy_src2dst():
-    logging.info( "%s copy_src2dst()" % __file__ )
+def copy_doc_src2dst():
+    logging.info( "%s copy_doc_src2dst()" % __file__ )
     # Copy documentation from source (dataverse download) to destination directory (work dir)
     tmp_dir = config_parser.get( "config", "tmppath" )
     dv_dir_src = "dataverse_src"
@@ -733,6 +733,15 @@ def copy_src2dst():
         copy2( path_in, path_out )
 
     logging.info( "%d files copied" % len( dir_list ) )
+
+    # copy ru & en listing files
+    src_dir = os.path.join( tmp_dir, dv_dir_src, doc_dir )
+    dst_dir = os.path.join( tmp_dir, dv_dir_dst, doc_dir )
+    
+    for filename in [ "doclist-en.json", "doclist-ru.json" ]:
+        path_in  = os.path.join( src_dir, filename )
+        path_out = os.path.join( dst_dir, filename )
+        copy2( path_in, path_out )
 
 
 
@@ -2842,14 +2851,14 @@ if __name__ == "__main__":
     DO_RETRIEVE_DOC      = False   # -02- documentation: dataverse  => local_disk
     DO_RETRIEVE_ERRHS    = False   # -03- ERRHS data: dataverse => local_disk
     
-    DO_DOC_COPY          = False   # -04- local_disk doc srx dir => doc dst dir
+    DO_DOC_COPY          = True   # -04- local_disk doc srx dir => doc dst dir
     DO_CONVERT_VOCAB2CSV = False   # -05- convert vocab xlsx files [ru + en] to vocab csv files [ru + en]
     DO_CONVERT_EXCEL2CSV = False   # -06- convert Russian ERRHS xlsx files to Russian ERRHS csv files
-    DO_TRANSLATE_CSV     = True   # -07- translate Russian csv files to English csv files
+    DO_TRANSLATE_CSV     = False   # -07- translate Russian csv files to English csv files
     
-    DO_POSTGRES_DB       = True   # -08- ERRHS data: local_disk => postgresql, csv -> table
-    DO_MONGO_DB          = True   # -09- ERRHS data: postgresql => mongodb
-    DO_FILE_CATALOGUE    = True   # -10- ERRHS data: csv -> filecatalogue xlsx
+    DO_POSTGRES_DB       = False   # -08- ERRHS data: local_disk => postgresql, csv -> table
+    DO_MONGO_DB          = False   # -09- ERRHS data: postgresql => mongodb
+    DO_FILE_CATALOGUE    = False   # -10- ERRHS data: csv -> filecatalogue xlsx
     
     #dv_format = ""
     dv_format = "original"  # does not work for ter_code (regions) vocab translations
@@ -2938,7 +2947,7 @@ if __name__ == "__main__":
     if DO_DOC_COPY: 
         logging.info( '' )
         logging.info( "-4- DO_RETRIEVE_COPY" )
-        copy_src2dst()
+        copy_doc_src2dst()
     
     if DO_CONVERT_VOCAB2CSV:    # convert vocab xlsx files [ru + en] to vocab csv files [ru + en]
         logging.info( '' )
