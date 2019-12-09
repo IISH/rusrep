@@ -35,7 +35,7 @@ FL-29-Jul-2019 new ristat-key, but failed!
 FL-06-Aug-2019 AUTOUPDATE > 1 : force doing an autoupdate
 FL-19-Nov-2019 Separate retrieving documents from processing documents
 FL-03-Dec-2019 Now using tablib for excel processing
-FL-07-Dec-2019 Bug
+FL-09-Dec-2019 Update territory names in xlsx2csv_tablib_filter()
 
 ToDo:
 - split retrieve_vocabularies in 3 functions
@@ -84,6 +84,7 @@ def convert_excel2csv( config_parser, excel_package ):
 def xlsx2csv_pandas( xlsx_dir, xlsx_filename, csv_dir, extra ):
 def xlsx2csv_openpyxl( xlsx_dir, xlsx_filename, csv_dir, extra ):
 def xlsx2csv_tablib( xlsx_dir, xlsx_filename, csv_dir, extra ):
+def xlsx2csv_tablib_filter( vocab_regions, vocab_units_ru, xlsx_dir, xlsx_filename, csv_dir, extra ):
 def translate_errhs_csvs( config_parser, handle_names ):
 def translate_csv( config_parser, handle_name, vocab_units, vocab_regions, vocab_histclasses, vocab_modclasses ):
 def compile_filecatalogue( config_parser, language, excel_package, pd_engine ):
@@ -1047,6 +1048,7 @@ def store_handle_docs( config_parser, handle_name, language ):
         print( "EXIT" )
         sys.exit( 1 )
     
+    
     logging.info( "using configparser: %s" % configpath )
 
     config_parser.read( configpath )
@@ -1767,6 +1769,10 @@ def load_vocab( config_parser, vocab_fname, vocab, pos_rus, pos_eng ):
 
 
 def convert_excel2csv( config_parser, excel_package ):
+    # Convert Russian xlsx files to Russian csv files. 
+    # Some filtering is applied: 
+    # 1) rounding values, and 
+    # 2) creating the proper ter_names from the ter_codes
     global Nexcept
     
     logging.info( "convert_excel2csv() excel_package: %s" % excel_package )
@@ -1775,15 +1781,7 @@ def convert_excel2csv( config_parser, excel_package ):
     
     xlsx_subdir = "xlsx"
     csv_subdir  = "csv-ru"
-    
-    """
-    if excel_package == "pandas":
-        #csv_subdir  = "csv-pandas-ru"     # test
-        pass
-    elif excel_package == "openpyxl":
-        #csv_subdir  = "csv-openpyxl-ru"   # test
-        pass
-    """
+
     
     # dataverse xlsx has no -ru or -en, but we want to be explicit
     extra = "-ru"   # for output csv file
@@ -1834,7 +1832,7 @@ def convert_excel2csv( config_parser, excel_package ):
             """
             # TEST
             if xlsx_filename != "ERRHS_4_01_data_1858.xlsx":
-                logging.info( "skip xlsx_filename:  %s" % xlsx_filename )
+                logging.info( "SKIP xlsx_filename:  %s" % xlsx_filename )
                 continue
             """
             
@@ -1844,7 +1842,7 @@ def convert_excel2csv( config_parser, excel_package ):
                 xlsx2csv_openpyxl( xlsx_dir, xlsx_filename, csv_dir, extra, vocab_regions )
             elif excel_package == "tablib":
                 #xlsx2csv_tablib( xlsx_dir, xlsx_filename, csv_dir, extra )
-                xlsx2csv_tablib_filter( vocab_units_ru, xlsx_dir, xlsx_filename, csv_dir, extra )   # with rounding of VALUEs
+                xlsx2csv_tablib_filter( vocab_regions, vocab_units_ru, xlsx_dir, xlsx_filename, csv_dir, extra )
             else:
                 logging.error( "excel_package: %s not supported" % excel_package )
                 logging.error( "EXIT" )
@@ -2135,7 +2133,7 @@ def xlsx2csv_tablib( xlsx_dir, xlsx_filename, csv_dir, extra ):
 
 
 
-def xlsx2csv_tablib_filter( vocab_units_ru, xlsx_dir, xlsx_filename, csv_dir, extra ):
+def xlsx2csv_tablib_filter( vocab_regions, vocab_units_ru, xlsx_dir, xlsx_filename, csv_dir, extra ):
     logging.info( "xlsx2csv_tablib() %s" % xlsx_filename )
     
     xlsx_pathname = os.path.join( xlsx_dir, xlsx_filename )
@@ -2192,9 +2190,15 @@ def xlsx2csv_tablib_filter( vocab_units_ru, xlsx_dir, xlsx_filename, csv_dir, ex
     ]
     ncolumns_pg = len( pg_column_names )
     
+    ntername_change = 0
     nround = 0
-    value_loc = pg_column_names.index( "value" )
-    vunit_loc = pg_column_names.index( "value_unit" )
+    
+    territory_loc = pg_column_names.index( "territory" )
+    ter_code_loc  = pg_column_names.index( "ter_code" )
+    logging.debug( "territory_loc: %d, ter_code_loc: %d" % ( territory_loc, ter_code_loc ) )
+    
+    value_loc    = pg_column_names.index( "value" )
+    vunit_loc    = pg_column_names.index( "value_unit" )
     logging.debug( "value_loc: %d, vunit_loc: %d" % ( value_loc, vunit_loc ) )
     
     missing_units = set()
@@ -2214,11 +2218,34 @@ def xlsx2csv_tablib_filter( vocab_units_ru, xlsx_dir, xlsx_filename, csv_dir, ex
         data_out.headers = data_in.headers
         for r, row_tuple in enumerate( data_in ):       # skips header; rows are tuples
             #logging.debug( "row type: %s" % type( row_tuple ) )
-            # Proper ter_code name
-            # TODO ...
+            
+            # row_tuple immutable; need to make changes
+            row_list = list( row_tuple )
+            
+            # Proper ter_name from ter_code
+            ter_code = row_tuple[ ter_code_loc ]
+            ter_name = row_tuple[ territory_loc ]
+            
+            #logging.debug( "ter_code: |%s|" % ter_code )
+            terr_d = { "terr" : ter_code }
+            terr_s = json.dumps( terr_d )
+            rus_eng_s = vocab_regions.get( terr_s )
+            #logging.debug( "%s: %s" % ( type( rus_eng_s ), rus_eng_s ) )
+            
+            if rus_eng_s is None:
+                logging.warn( "terr_s is not a key: %s" % terr_s )
+                rus_ter_name = ter_name     # keep existing value
+            else:
+                rus_eng = json.loads( rus_eng_s )
+                #logging.info( "%s: %s" % ( type( rus_eng ), rus_eng ) )
+                rus_ter_name = rus_eng[ u'rus' ]
+                
+                if rus_ter_name != ter_name:
+                    logging.debug( "row: %d, ter_code: %s, territory change: %s ==> %s" % ( r, ter_code, ter_name, rus_ter_name  ) )
+                    ntername_change += 1
+                    row_list[ territory_loc ] = rus_ter_name
             
             # Rounding
-            row_list = list( row_tuple )
             vunit = row_tuple[ vunit_loc ]
             decimals = vocab_units_ru.get( vunit )
             
@@ -2249,16 +2276,11 @@ def xlsx2csv_tablib_filter( vocab_units_ru, xlsx_dir, xlsx_filename, csv_dir, ex
                     else:
                         logging.warn( "old_val: %s, type: %s" % ( str( old_val ), type( old_val ) ) )
             
-            if nround > 0:
-                data_out.append( row_list )
-            else:
-                data_out.append( row_tuple )
+            data_out.append( row_list )
         
         nrows = len( data_in )
-        if nround == 0:
-            logging.info( "nrows: %d, nothing rounded" % nrows )
-        else:
-            logging.info( "nrows: %d, nround: %d" % ( nrows, nround ) )
+        
+        logging.info( "nrows: %d, nterritory changes: %d, nrounded values: %d" % ( nrows, ntername_change, nround ) )
         
         nmissing = len( missing_units )
         if nmissing > 0:
@@ -2342,13 +2364,13 @@ def translate_csv( config_parser, handle_name, vocab_units, vocab_regions, vocab
         if not os.path.isfile( csv_path ):
             continue
         
-        logging.info( csv_name )
         logging.debug( csv_path )
         basename, ext = os.path.splitext( csv_name )
         if basename.endswith( "-ru" ):
             basename = basename[ :-3 ]
         eng_name = basename + "-en" +  ext
-        logging.debug( eng_name )
+        logging.info( "%s => %s" % ( csv_name, eng_name ) )
+        
         eng_path = os.path.join( eng_dir, eng_name )
         logging.debug( eng_path )
         
@@ -2851,12 +2873,12 @@ if __name__ == "__main__":
     DO_RETRIEVE_DOC      = False   # -02- documentation: dataverse  => local_disk
     DO_RETRIEVE_ERRHS    = False   # -03- ERRHS data: dataverse => local_disk
     
-    DO_DOC_COPY          = True   # -04- local_disk doc srx dir => doc dst dir
+    DO_DOC_COPY          = False   # -04- local_disk doc srx dir => doc dst dir
     DO_CONVERT_VOCAB2CSV = False   # -05- convert vocab xlsx files [ru + en] to vocab csv files [ru + en]
     DO_CONVERT_EXCEL2CSV = False   # -06- convert Russian ERRHS xlsx files to Russian ERRHS csv files
     DO_TRANSLATE_CSV     = False   # -07- translate Russian csv files to English csv files
     
-    DO_POSTGRES_DB       = False   # -08- ERRHS data: local_disk => postgresql, csv -> table
+    DO_POSTGRES_DB       = True   # -08- ERRHS data: local_disk => postgresql, csv -> table
     DO_MONGO_DB          = False   # -09- ERRHS data: postgresql => mongodb
     DO_FILE_CATALOGUE    = False   # -10- ERRHS data: csv -> filecatalogue xlsx
     
@@ -2912,6 +2934,7 @@ if __name__ == "__main__":
     
     # DATAVERSE RETRIEVAL Phase; will exit() on retrieval error
     if DO_RETRIEVE_VOCAB:
+        time0_ = time()
         logging.info( '' )
         logging.info( "-1- DO_RETRIEVE_VOCAB" )
         # Downloaded vocabulary documents are not first stored in postgreSQL, 
@@ -2932,24 +2955,41 @@ if __name__ == "__main__":
             logging.shutdown()
             sys.exit( 0 )
     
+        str_elapsed = format_secs( time() - time0_ )
+        logging.info( "VOCAB processing took %s" % str_elapsed )
+    
+    
     if DO_RETRIEVE_DOC:
+        time0_ = time()
         logging.info( '' )
         logging.info( "-2- DO_RETRIEVE_DOC" )
         update_documentation( config_parser )
     
+        str_elapsed = format_secs( time() - time0_ )
+        logging.info( "DOC processing took %s" % str_elapsed )
+    
     if DO_RETRIEVE_ERRHS:
+        time0_ = time()
         logging.info( '' )
         logging.info( "-3- DO_RETRIEVE_ERRHS" )
         for handle_name in handle_names:
             retrieve_handle_docs( config_parser, handle_name, dv_format ) # dataverse  => local_disk
-    
+        
+        str_elapsed = format_secs( time() - time0_ )
+        logging.info( "ERRHS processing took %s" % str_elapsed )
+        
     # PROCESSING Phase
     if DO_DOC_COPY: 
+        time0_ = time()
         logging.info( '' )
         logging.info( "-4- DO_RETRIEVE_COPY" )
         copy_doc_src2dst()
+        
+        str_elapsed = format_secs( time() - time0_ )
+        logging.info( "DOC_COPY processing took %s" % str_elapsed )
     
     if DO_CONVERT_VOCAB2CSV:    # convert vocab xlsx files [ru + en] to vocab csv files [ru + en]
+        time0_ = time()
         logging.info( '' )
         logging.info( "-5- DO_CONVERT_VOCAB2CSV" )
         
@@ -2959,8 +2999,12 @@ if __name__ == "__main__":
         excel_package = "tablib"        # from Kenneth Reitz (requests)
         
         convert_vocabularies2csv( excel_package )
+        
+        str_elapsed = format_secs( time() - time0_ )
+        logging.info( "VOCAB2CSV processing took %s" % str_elapsed )
     
     if DO_CONVERT_EXCEL2CSV:    # convert Russian ERRHS xlsx files to Russian ERRHS csv files
+        time0_ = time()
         logging.info( '' )
         logging.info( "-6- DO_CONVERT_EXCEL2CSV" )
         
@@ -2970,13 +3014,23 @@ if __name__ == "__main__":
         excel_package = "tablib"        # from Kenneth Reitz (requests)
         
         convert_excel2csv( config_parser, excel_package )
+        
+        str_elapsed = format_secs( time() - time0_ )
+        logging.info( "EXCEL2CSV processing took %s" % str_elapsed )
     
     if DO_TRANSLATE_CSV:
+        time0_ = time()
         logging.info( '' )
         logging.info( "-7- DO_TRANSLATE_CSV" )                      # ru => en
         translate_errhs_csvs( config_parser, handle_names )
     
+        str_elapsed = format_secs( time() - time0_ )
+        logging.info( "TRANSLATE_CSV processing took %s" % str_elapsed )
+    
     if DO_POSTGRES_DB:
+        # TODO do retrieve again
+        # TODO rewrite filter_csv
+        time0_ = time()
         logging.info( '' )
         logging.info( "-8- DO_POSTGRES_DB" )    # read russian csv files
         logging.StreamHandler().flush()
@@ -2992,16 +3046,24 @@ if __name__ == "__main__":
             
             # done on-the-fly in services/topic_counts()
             #topic_counts( config_parser )                                  # postgresql datasets.topics counts
+        
+        str_elapsed = format_secs( time() - time0_ )
+        logging.info( "POSTGRES_DB processing took %s" % str_elapsed )
     
     if DO_MONGO_DB:
+        time0_ = time()
         logging.info( '' )
         logging.info( "-9- DO_MONGO_DB" )
         mongo_store_vocabularies()
         
         for language in [ "ru", "en" ]:
             update_handle_docs( config_parser, mongo_client, language )     # postgresql => mongodb
+        
+        str_elapsed = format_secs( time() - time0_ )
+        logging.info( "MONGO_DB processing took %s" % str_elapsed )
     
     if DO_FILE_CATALOGUE:
+        time0_ = time()
         logging.info( '' )
         logging.info( "-10- DO_FILE_CATALOGUE" )
         
@@ -3015,6 +3077,10 @@ if __name__ == "__main__":
         #for language in [ "en" ]:  # test
         #for language in [ "ru", "en" ]:
             compile_filecatalogue( config_parser, language, excel_package, pd_engine )  # create filecatalogue xlsx files
+    
+        str_elapsed = format_secs( time() - time0_ )
+        logging.info( "FILE_CATALOGUE processing took %s" % str_elapsed )
+    
     
     logging.info( '' )
     logging.info( "total number of exceptions: %d" % Nexcept )
