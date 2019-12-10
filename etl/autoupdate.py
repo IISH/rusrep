@@ -36,6 +36,7 @@ FL-06-Aug-2019 AUTOUPDATE > 1 : force doing an autoupdate
 FL-19-Nov-2019 Separate retrieving documents from processing documents
 FL-03-Dec-2019 Now using tablib for excel processing
 FL-09-Dec-2019 Update territory names in xlsx2csv_tablib_filter()
+FL-09-Dec-2019 Eliminate now redundant filtereing before postgres insert
 
 ToDo:
 - split retrieve_vocabularies in 3 functions
@@ -1136,6 +1137,8 @@ def filter_csv( config_parser, csv_dir, in_filename ):
     # Notice: the applied filtering is reflected in the returned out_file, 
     # which is copied to a postgres table; the input csv file is _unchanged_.
     
+    """
+    # FL-10-Dec-2019 Assume tablib does not have the pandas problem
     # rounding of data in value column is specified in ERRHS_Vocabulary_units.csv
     # Equality of pos_rus and pos_eng is a hack, used to flag decimals from either rus or eng
     vocab_units = dict()
@@ -1146,6 +1149,7 @@ def filter_csv( config_parser, csv_dir, in_filename ):
     else:
         logging.error( "in_filename does not end with either '-ru.csv' or '-en.csv'" )
     #logging.info( "vocab_units: %s" % str( vocab_units ) )
+    """
     
     # dataverse column names
     dv_column_names = [
@@ -1346,6 +1350,8 @@ def filter_csv( config_parser, csv_dir, in_filename ):
             # should be solved when writing csv files, but pandas did not do what i want!
             #if in_filename.startswith( "ERRHS_1_02_data_1897" ):
             # FL-14-May-2019 also the other years
+            """
+            # FL-10-Dec-2019 Assume tablib does not have the pandas problem
             if in_filename.startswith( "ERRHS_1_02_data_" ):
                 # check some [hist]class values
                 histclass1_pos = csv_header_names.index( "histclass1" )
@@ -1371,6 +1377,7 @@ def filter_csv( config_parser, csv_dir, in_filename ):
                         fields[ class_pos ] = in_field_new
                 except:
                     pass
+            """
             
             # check comment_source length
             comment_pos = csv_header_names.index( "comment_source" )
@@ -1385,6 +1392,8 @@ def filter_csv( config_parser, csv_dir, in_filename ):
                 logging.warning( line )
                 #print( line )
             
+            """
+            # FL-10-Dec-2019 Assume tablib does not have this problem
             # check missing datatype
             datatype_pos = csv_header_names.index( "datatype" )
             datatype = fields[ datatype_pos ]
@@ -1396,7 +1405,10 @@ def filter_csv( config_parser, csv_dir, in_filename ):
                 #print( line )
             else:   # chop spurious decimals of stupid spreadsheets
                 fields[ datatype_pos ] = "%4.2f" % float( datatype )
+            """
             
+            """
+            # FL-10-Dec-2019 Value rounding done when creating csv files
             # round value to specified number of decimals
             value_pos = csv_header_names.index( "value" )
             value_str = fields[ value_pos ]
@@ -1427,6 +1439,7 @@ def filter_csv( config_parser, csv_dir, in_filename ):
                         fields[ value_pos ] = value_new     # replace
                 except:
                     pass    # no change
+            """
         
         #print( "|".join( fields ) )
         if ndiff > 0:
@@ -1441,6 +1454,8 @@ def filter_csv( config_parser, csv_dir, in_filename ):
             #logging.debug( "# of fields added: %d" % napp )
         #print( "# of fields: %d" % len( fields ) )
         
+        """
+        # FL-10-Dec-2019 Assume tablib does not have this problem
         # base_year, must be integer
         base_year_idx = None
         try:
@@ -1464,6 +1479,7 @@ def filter_csv( config_parser, csv_dir, in_filename ):
                     #sys.stderr.write( "%s\n" % msg )
         except ValueError:
             pass
+        """
         
         #print( 1, "|".join( fields ) )
         fields.append( "0" )                # indicator field, not in csv file
@@ -2869,18 +2885,18 @@ def format_secs( seconds ):
 
 
 if __name__ == "__main__":
-    DO_RETRIEVE_VOCAB    = False   # -01- vocabulary: dataverse => local_disk
-    DO_RETRIEVE_DOC      = False   # -02- documentation: dataverse  => local_disk
-    DO_RETRIEVE_ERRHS    = False   # -03- ERRHS data: dataverse => local_disk
+    DO_RETRIEVE_VOCAB    = True   # -01- vocabulary: dataverse => local_disk
+    DO_RETRIEVE_DOC      = True   # -02- documentation: dataverse  => local_disk
+    DO_RETRIEVE_ERRHS    = True   # -03- ERRHS data: dataverse => local_disk
     
-    DO_DOC_COPY          = False   # -04- local_disk doc srx dir => doc dst dir
-    DO_CONVERT_VOCAB2CSV = False   # -05- convert vocab xlsx files [ru + en] to vocab csv files [ru + en]
-    DO_CONVERT_EXCEL2CSV = False   # -06- convert Russian ERRHS xlsx files to Russian ERRHS csv files
-    DO_TRANSLATE_CSV     = False   # -07- translate Russian csv files to English csv files
+    DO_DOC_COPY          = True   # -04- local_disk doc srx dir => doc dst dir
+    DO_CONVERT_VOCAB2CSV = True   # -05- convert vocab xlsx files [ru + en] to vocab csv files [ru + en]
+    DO_CONVERT_EXCEL2CSV = True   # -06- convert Russian ERRHS xlsx files to Russian ERRHS csv files
+    DO_TRANSLATE_CSV     = True   # -07- translate Russian csv files to English csv files
     
     DO_POSTGRES_DB       = True   # -08- ERRHS data: local_disk => postgresql, csv -> table
-    DO_MONGO_DB          = False   # -09- ERRHS data: postgresql => mongodb
-    DO_FILE_CATALOGUE    = False   # -10- ERRHS data: csv -> filecatalogue xlsx
+    DO_MONGO_DB          = True   # -09- ERRHS data: postgresql => mongodb
+    DO_FILE_CATALOGUE    = True   # -10- ERRHS data: csv -> filecatalogue xlsx
     
     #dv_format = ""
     dv_format = "original"  # does not work for ter_code (regions) vocab translations
@@ -3037,8 +3053,8 @@ if __name__ == "__main__":
         for language in [ "ru", "en" ]:
             row_count( config_parser, language )
             clear_postgres_table( config_parser, language )
-            
             row_count( config_parser, language )
+            
             for handle_name in handle_names:
                 store_handle_docs( config_parser, handle_name, language )   # local_disk => postgresql
                 logging.StreamHandler().flush()
