@@ -37,27 +37,8 @@ FL-19-Nov-2019 Separate retrieving documents from processing documents
 FL-03-Dec-2019 Now using tablib for excel processing
 FL-09-Dec-2019 Update territory names in xlsx2csv_tablib_filter()
 FL-09-Dec-2019 Eliminate now redundant filtereing before postgres insert
+FL-09-Dec-2019 AUTOUPDATE bug
 
-ToDo:
-- split retrieve_vocabularies in 3 functions
-- replace urllib by requests
-- replace vocab.py
-
-- running this script from the command line gives the following terminal output:
-$ ./autoupdate.sh 
-/home/dpe/python2715/lib/python2.7/site-packages/psycopg2/__init__.py:144: UserWarning: 
-The psycopg2 wheel package will be renamed from release 2.8; in order to keep installing from binary please use "pip install psycopg2-binary" instead. For details see: <http://initd.org/psycopg/docs/install.html#binary-install-from-pypi>.
-
-/home/dpe/python2715/lib/python2.7/site-packages/pandas/io/excel.py:329: ParserWarning: Both a converter and dtype were specified for column DATATYPE - only the converter will be used
-  **kwds)
-/home/dpe/rusrep/etl/vocab.py:82: FutureWarning: Sorting because non-concatenation axis is not aligned. A future version
-of pandas will change to not sort by default.
-
-To accept the future behavior, pass 'sort=False'.
-
-To retain the current behavior and silence the warning, pass 'sort=True'.
-
-  return pd.concat( lexicon )
 
 --------------------------------------------------------------------------------
 #def load_json( apiurl ):
@@ -266,10 +247,10 @@ def read_autoupdate( autoupdate_path ):
         
         seconds_per_day = 24 * 60 * 60
         
-        logging.info( "secs_dv: %d" % secs_dv )
-        logging.info( "secs_au: %d" % secs_au )
+        logging.debug( "secs_dv: %d" % secs_dv )
+        logging.debug( "secs_au: %d" % secs_au )
         logging.info( "seconds: %d" % seconds )
-        logging.info( "per day: %d" % seconds_per_day )
+        logging.info( "seconds_per_day: %d" % seconds_per_day )
         
         if seconds < seconds_per_day:
             update = True
@@ -2930,8 +2911,13 @@ if __name__ == "__main__":
     logging.info( "Python version: %s" % python_version )
     
     AUTOUPDATE = os.environ[ "AUTOUPDATE" ]
-    logging.info( "AUTOUPDATE: %s" % AUTOUPDATE )
-    if AUTOUPDATE == '0':
+    try:
+        AUTOUPDATE = int( AUTOUPDATE )
+    except:
+        AUTOUPDATE = 0
+    
+    logging.info( "AUTOUPDATE: %d" % AUTOUPDATE )
+    if AUTOUPDATE == 0:
         logging.error( "Skipping autoupdate" )
         logging.error( "EXIT" )
         sys.exit( 0 )
@@ -2958,7 +2944,7 @@ if __name__ == "__main__":
         
         dv_ids_vocab = retrieve_vocabularies( config_parser, dv_format )
         
-        # global autoupdate parameter set via dataverse Autoupdate.txt in vocabularies dir
+        # global autoupdate  parameter set via dataverse Autoupdate.txt in vocabularies dir
         # AUTOUPDATE > 1 : ignore Autoupdate.txt
         if AUTOUPDATE == 1 and not autoupdate:
             logging.info( "__main__: autoupdate cancelled!" )
