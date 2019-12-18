@@ -37,17 +37,21 @@ FL-19-Nov-2019 Separate retrieving documents from processing documents
 FL-03-Dec-2019 Now using tablib for excel processing
 FL-09-Dec-2019 Update territory names in xlsx2csv_tablib_filter()
 FL-09-Dec-2019 Eliminate now redundant filtereing before postgres insert
-FL-09-Dec-2019 AUTOUPDATE bug
+FL-17-Dec-2019 AUTOUPDATE bug
+FL-18-Dec-2019 
 
+TODO
+- Use pyDataverse from PyPI
 
 --------------------------------------------------------------------------------
 #def load_json( apiurl ):
 def empty_dir( dst_dir ):
-def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "" ):
+def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", check_ts = False ):
 def loadjson( json_dataurl ):
 def documents_info( config_parser, language ):
 def update_documentation( config_parser ):
-def retrieve_vocabularies( config_parser, dv_format ):
+def check_autoupdate( config_parser, dv_format ):
+def retrieve_vocabularies( config_parser, dv_format, check_ts = False ):
 def copy_doc_src2dst():
 def convert_vocabularies2csv( convert_vocabularies ):
 def merge_vocabs( vocab_csv_dir ):
@@ -262,12 +266,12 @@ def read_autoupdate( autoupdate_path ):
 
 
 
-def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "" ):
-    global autoupdate
+def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", check_ts = False ):
     global Nexcept
     
     to_csv = False
-    logging.info( "documents_by_handle() andle_name: %s" % handle_name )
+    logging.info( "documents_by_handle() check_ts: %s" % check_ts )
+    logging.info( "documents_by_handle() handle_name: %s" % handle_name )
     logging.info( "dst_dir: %s, dv_format: %s" % ( dst_dir, dv_format ) )
     
     dv_host     = config_parser.get( "config", "dataverse_root" )
@@ -297,9 +301,10 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "" ):
     logging.debug( "title: %s" % dataverse.title )
     #datasets = dataverse.get_datasets()
     
-    settings = DataFilter( '' )
-    papers = []
+    #settings = DataFilter( '' )
+    #papers = []
     ids = {}
+    
     kwargs_xlsx2csv = { 
         "delimiter" : '|', 
         "lineterminator" : '\n'
@@ -313,25 +318,22 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "" ):
         'line_terminator' : '\n' 
     }
     
+
     tmp_dir = config_parser.get( "config", "tmppath" )
     dv_dir = "dataverse_src"
     download_dir = os.path.join( tmp_dir, dv_dir, dst_dir, handle_name )
     logging.info( "downloading dataverse files to: %s" % download_dir )
-    if os.path.exists( download_dir ):
-        empty_dir( download_dir )           # remove previous files
-    if not os.path.exists( download_dir ):
-        os.makedirs( download_dir )
-    
-    """
-    csv_dir = ""
-    if dst_dir == "xlsx":
-        csv_dir = os.path.join( tmp_dir, dv_dir, "csv-ru", handle_name )
-    elif dst_dir == "vocab/xlsx":
-        csv_dir = os.path.join( tmp_dir, dv_dir, "vocab/csv", handle_name )
-    
-    if os.path.exists( csv_dir ):
-        empty_dir( csv_dir )                    # remove previous files
-    """
+        
+    if check_ts:
+        # a place to save Autoupdate.txt
+        if not os.path.exists( download_dir ):
+            os.makedirs( download_dir )
+    else:
+        # download "normal" files
+        if os.path.exists( download_dir ):
+            empty_dir( download_dir )           # remove previous files
+        if not os.path.exists( download_dir ):
+            os.makedirs( download_dir )
     
     dv_items = dataverse.get_contents()
     nitems = len( dv_items )
@@ -400,91 +402,64 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "" ):
                 paperitem[ 'name' ] = filename
                 ids[ paperitem[ 'id'] ] = filename
                 paperitem[ 'handle' ] = handle
-                paperitem[ 'url' ] = "http://data.sandbox.socialhistoryservices.org/service/download?id=%s" % paperitem[ 'id' ]
+                #paperitem[ 'url' ] = "http://data.sandbox.socialhistoryservices.org/service/download?id=%s" % paperitem[ 'id' ]
+                
                 url  = "https://%s/api/access/datafile/%s" % ( dv_host, paperitem[ 'id' ] )
                 url += "?&key=%s&show_entity_ids=true&q=authorName:*" % str( ristat_key )
                 if not dv_format == "":
                     url += "&format=original"
                 logging.debug( url )
                 
-                filename = paperitem[ 'name' ]
+                #filename = paperitem[ 'name' ]
+                
                 logging.info( "filename: %s" % filename )
-                filepath = "%s/%s" % ( download_dir, filename )
+                
+                filepath = os.path.join( download_dir, filename )
                 logging.debug( "filepath: %s" % filepath )
                 
-                # read dataverse document from url, write contents to filepath
-                resp_in = requests.get( url )
-                with open( filepath, 'wb' ) as fd:
-                    for chunk in resp_in.iter_content( chunk_size = 512 ):
-                        fd.write( chunk )
-                    os.fsync( fd )
-                
-                if filename == "Autoupdate.txt":
-                    if AUTOUPDATE > 1:      # force autoupdate
-                        logging.info( "force autoupdate" )
-                        autoupdate = True
-                    else:
+                if check_ts:    # only check Autoupdate.txt
+                    if filename == "Autoupdate.txt":
+                        resp_in = requests.get( url )
+                        with open( filepath, 'wb' ) as fd:
+                            for chunk in resp_in.iter_content( chunk_size = 512 ):
+                                fd.write( chunk )
+                            os.fsync( fd )
+                        
                         autoupdate = read_autoupdate( filepath )
-                        logging.info( "autoupdate: %s" % autoupdate )
-                        if not autoupdate:
-                            logging.info( "skip autoupdate" )
-                            return ( papers, ids )
+                        return autoupdate
                 
-                """
-                if to_csv:
-                    if not os.path.exists( csv_dir ):
-                        os.makedirs( csv_dir )
+                else:
+                    # read dataverse document from url, write contents to filepath
+                    resp_in = requests.get( url )
+                    with open( filepath, 'wb' ) as fd:
+                        for chunk in resp_in.iter_content( chunk_size = 512 ):
+                            fd.write( chunk )
+                        os.fsync( fd )
                     
-                    root, ext = os.path.splitext( filename )
-                    logging.info( "%s %s" % ( handle_name, root ) )
-                    if dst_dir == "xlsx":                               # ru & en in separate files
-                        csv_path  = "%s/%s-ru.csv" % ( csv_dir, root )  # input csv
-                    elif dst_dir == "vocab/xlsx":                       # both ru & en in same file
-                        csv_path  = "%s/%s.csv" % ( csv_dir, root )     # input csv
-                    logging.debug( "csv_path:  %s" % csv_path )
-                    
-                    #Xlsx2csv( filepath, **kwargs_xlsx2csv ).convert( csv_path )
-                    
-                    # pandas doc: dtype : Type name or dict of column -> type, default None
-                    # Data type for data or columns. E.g. {‘a’: np.float64, ‘b’: np.int32} 
-                    # Use str or object to preserve and not interprete dtype. 
-                    # If converters are specified, they will be applied INSTEAD of dtype conversion.
-                    #converters = { 'DATATYPE': str, 'HISTCLASS1': str }
-                    #data_xls = pd.read_excel( filepath, index_col = False, convert_float = False, dtype = str, converters = converters )
-                    data_xls = pd.read_excel( filepath, index_col = False, convert_float = False, dtype = str )
-                    
-                    data_xls.to_csv( csv_path, encoding = 'utf-8', index = False, **kwargs_pandas )
-                    
-                    if remove_xlsx and ext == ".xlsx":
-                        os.remove( filepath )   # keep the csv, remove the xlsx
-                """
-            
-                # FL-09-Jan-2017 should we not filter before downloading?
-                try:
-                    if 'lang' in settings.datafilter:
-                        varpat = r"(_%s)" % ( settings.datafilter[ 'lang' ] )
-                        pattern = re.compile( varpat, re.IGNORECASE )
-                        found = pattern.findall( paperitem[ 'name' ] )
-                        if found:
-                            papers.append( paperitem )
-                    
-                    if 'topic' in settings.datafilter:
-                        varpat = r"(_%s_.+_\d+_+%s.|class|region)" % ( settings.datafilter[ 'topic' ], settings.datafilter[ 'lang' ] )
-                        pattern = re.compile( varpat, re.IGNORECASE )
-                        found = pattern.findall( paperitem[ 'name' ] )
-                        if found:
-                            papers.append( paperitem )
-                    else:
-                        if 'lang' not in settings.datafilter:
-                            papers.append( paperitem )
-                except:
-                    Nexcept += 1
-                    type_, value, tb = sys.exc_info()
-                    logging.error( "%s" % value )
-                    if 'lang' not in settings.datafilter:
-                        papers.append( paperitem )
-    
-    return ( papers, ids )
+                    """
+                    try:
+                        if 'lang' in settings.datafilter:
+                            varpat = r"(_%s)" % ( settings.datafilter[ 'lang' ] )
+                            pattern = re.compile( varpat, re.IGNORECASE )
+                            found = pattern.findall( paperitem[ 'name' ] )
+                            if found:
+                                papers.append( paperitem )
+                        
+                        if 'topic' in settings.datafilter:
+                            varpat = r"(_%s_.+_\d+_+%s.|class|region)" % ( settings.datafilter[ 'topic' ], settings.datafilter[ 'lang' ] )
+                            pattern = re.compile( varpat, re.IGNORECASE )
+                            found = pattern.findall( paperitem[ 'name' ] )
+                            if found:
+                                papers.append( paperitem )
+                        else:
+                            if 'lang' not in settings.datafilter:
+                                papers.append( paperitem )
+                    except:
+                        Nexcept += 1
+                        type_, value, tb = sys.exc_info()
+                        logging.error( "%s" % value )
+                    """
+    return ids
 
 
 
@@ -627,9 +602,9 @@ def update_documentation( config_parser ):
     logging.info( "retrieving documents from dataverse for handle name %s ..." % handle_name )
     dst_dir = "doc"
     dv_format = ""
-    ( docs, ids ) = documents_by_handle( config_parser, handle_name, dst_dir, dv_format )
+    ids = documents_by_handle( config_parser, handle_name, dst_dir, dv_format )
     
-    ndoc =  len( docs )
+    ndoc =  len( ids )
     logging.info( "%d documents retrieved from dataverse" % ndoc )
     if ndoc == 0:
         logging.info( "no documents, nothing downloaded." )
@@ -639,15 +614,29 @@ def update_documentation( config_parser ):
 
 
 
-def retrieve_vocabularies( config_parser, dv_format ):
+def check_autoupdate( config_parser, dv_format ):
+    logging.info( "%s check_autoupdate()" % __file__ )
+    
+    # Autoupdate.txt in vocab directory
+    check_ts = True     # Read Autoupdate.txt only, no vocabs
+    autoupdate = retrieve_vocabularies( config_parser, dv_format, check_ts )
+    
+    return autoupdate
+
+
+
+def retrieve_vocabularies( config_parser, dv_format, check_ts = False ):
     global autoupdate
     
-    logging.info( "%s retrieve_vocabularies()" % __file__ )
+    logging.info( "%s retrieve_vocabularies() check_ts: %s" % ( __file__, check_ts ) )
     """
-    retrieve_vocabularies():
-    -1- retrieves ERRHS_Vocabulary_*.tab files from dataverse
-    -2- with copy_local = True stores them locally
-    -3- stores the new data in MogoDB db = "vocabulary", collection = 'data'
+    if check_ts:
+        return timestamp in Autoupdate.txt
+    else:
+        retrieve_vocabularies():
+        -1- retrieves ERRHS_Vocabulary_*.tab files from dataverse
+        -2- with copy_local = True stores them locally
+        -3- stores the new data in MogoDB db = "vocabulary", collection = 'data'
     """
     
     # -1- Dataverse
@@ -662,13 +651,13 @@ def retrieve_vocabularies( config_parser, dv_format ):
         dst_dir   = "vocab/tab"
         ascii_dir = dst_dir
     
-    ( dv_docs, dv_ids ) = documents_by_handle( config_parser, handle_name, dst_dir, dv_format )
+    if check_ts: 
+        autoupdate = documents_by_handle( config_parser, handle_name, dst_dir, dv_format, check_ts )
+        return autoupdate
+    else:
+        dv_ids = documents_by_handle( config_parser, handle_name, dst_dir, dv_format )
     
-    if not autoupdate:
-        logging.info( "retrieve_vocabularies() autoupdate cancelled!" )
-        return      # <<<
-    
-    ndoc =  len( dv_docs )
+    ndoc = len( dv_ids )
     logging.info( "%d documents retrieved from dataverse" % ndoc )
     if ndoc == 0:
         logging.info( "no documents, nothing to do." )
@@ -677,10 +666,6 @@ def retrieve_vocabularies( config_parser, dv_format ):
     logging.debug( "keys in ids:" )
     for key in dv_ids:
         logging.debug( "key: %s, value: %s" % ( key, dv_ids[ key ] ) )
-        
-    logging.debug( "dv_docs:" )
-    for doc in dv_docs:
-        logging.debug( doc )
 
     return dv_ids
 
@@ -897,8 +882,8 @@ def retrieve_handle_docs( config_parser, handle_name, dv_format = "" ):
 
     logging.info( "retrieving documents from dataverse for handle name %s ..." % handle_name )
     dst_dir = "xlsx"
-    ( docs, ids ) = documents_by_handle( config_parser, handle_name, dst_dir, dv_format )
-    ndoc =  len( docs )
+    ids = documents_by_handle( config_parser, handle_name, dst_dir, dv_format )
+    ndoc =  len( ids )
     if ndoc == 0:
         logging.info( "no documents retrieved." )
         return
@@ -908,10 +893,6 @@ def retrieve_handle_docs( config_parser, handle_name, dv_format = "" ):
     logging.debug( "keys in ids:" )
     for key in ids:
         logging.debug( "key: %s, value: %s" % ( key, ids[ key ] ) )
-        
-    logging.debug( "docs:" )
-    for doc in docs:
-        logging.debug( doc )
 
 
 
@@ -2935,6 +2916,17 @@ if __name__ == "__main__":
     
     
     # DATAVERSE RETRIEVAL Phase; will exit() on retrieval error
+    if AUTOUPDATE == 1:
+        autoupdate = check_autoupdate( config_parser, dv_format )
+    
+        if autoupdate is False:
+            logging.info( "__main__: autoupdate cancelled!" )
+            
+            # This should be called at application exit,
+            # and no further use of the logging system should be made after this call.
+            logging.shutdown()
+            sys.exit( 0 )
+    
     if DO_RETRIEVE_VOCAB:
         time0_ = time()
         logging.info( '' )
@@ -2942,21 +2934,8 @@ if __name__ == "__main__":
         # Downloaded vocabulary documents are not first stored in postgreSQL, 
         # they are processed on the fly, and directly put in MongoDB vocabulary
         
-        dv_ids_vocab = retrieve_vocabularies( config_parser, dv_format )
+        retrieve_vocabularies( config_parser, dv_format )
         
-        # global autoupdate  parameter set via dataverse Autoupdate.txt in vocabularies dir
-        # AUTOUPDATE > 1 : ignore Autoupdate.txt
-        if AUTOUPDATE == 1 and not autoupdate:
-            logging.info( "__main__: autoupdate cancelled!" )
-            logging.info( "stop: %s" % datetime.now() )
-            str_elapsed = format_secs( time() - time0 )
-            logging.info( "processing took %s" % str_elapsed )
-    
-            # This should be called at application exit,
-            # and no further use of the logging system should be made after this call.
-            logging.shutdown()
-            sys.exit( 0 )
-    
         str_elapsed = format_secs( time() - time0_ )
         logging.info( "VOCAB processing took %s" % str_elapsed )
     
@@ -3077,7 +3056,8 @@ if __name__ == "__main__":
     
         for language in [ "ru" ]:  # test
         #for language in [ "en" ]:  # test
-        #for language in [ "ru", "en" ]:
+        #for language in [ "ru", "en" ]:DELETE FROM links_original.registration_o WHERE id_source = 250 AND registration_maintype = 1;
+
             compile_filecatalogue( config_parser, language, excel_package, pd_engine )  # create filecatalogue xlsx files
     
         str_elapsed = format_secs( time() - time0_ )
