@@ -37,8 +37,7 @@ FL-19-Nov-2019 Separate retrieving documents from processing documents
 FL-03-Dec-2019 Now using tablib for excel processing
 FL-09-Dec-2019 Update territory names in xlsx2csv_tablib_filter()
 FL-09-Dec-2019 Eliminate now redundant filtereing before postgres insert
-FL-17-Dec-2019 AUTOUPDATE bug
-FL-18-Dec-2019 
+FL-18-Dec-2019 AUTOUPDATE bug
 
 TODO
 - Use pyDataverse from PyPI
@@ -234,32 +233,33 @@ def read_autoupdate( autoupdate_path ):
         
         try:
             dt_dv = dateutil.parser.parse( text )       # e.g. 02-Jul-2019 in dataverse
-            dt_au = datetime.now()                      # autoupdate
-            if dt_dv > dt_au:
-                logging.warn( "ignoring future date string" )
-                return False
+            logging.debug( "dt_dv: %s" % str( dt_dv ) )
         except:
             logging.warn( "ignoring invalid date string" )
             return False
         
-        logging.debug( "dt_dv: %s" % str( dt_dv ) )
+        dt_au = datetime.now()                      # autoupdate
         logging.debug( "dt_au: %s" % str( dt_au ) )
         
         secs_dv = mktime( dt_dv.timetuple() )
         secs_au = mktime( dt_au.timetuple() )
-        seconds = secs_au - secs_dv
         
-        seconds_per_day = 24 * 60 * 60
+        seconds_diff = abs( secs_au - secs_dv )
+        
+        seconds_per_hday = 12 * 60 * 60
         
         logging.debug( "secs_dv: %d" % secs_dv )
         logging.debug( "secs_au: %d" % secs_au )
-        logging.info( "seconds: %d" % seconds )
-        logging.info( "seconds_per_day: %d" % seconds_per_day )
         
-        if seconds < seconds_per_day:
+        logging.info( "seconds_diff: %d" % seconds_diff )
+        logging.info( "seconds_per_hday: %d" % seconds_per_hday )
+        
+        # if the abs difference is less-or-equal than half-a-day, we accept the given date+time
+        if seconds_diff <= seconds_per_hday:
             update = True
         else:
-            logging.warn( "ignoring expired date string" )
+            logging.warn( "ignoring outbound date string" )
+            update = False
     
     logging.info( "read_autoupdate() %s" % update )
     return update
