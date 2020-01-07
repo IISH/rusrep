@@ -38,6 +38,7 @@ FL-03-Dec-2019 Now using tablib for excel processing
 FL-09-Dec-2019 Update territory names in xlsx2csv_tablib_filter()
 FL-09-Dec-2019 Eliminate now redundant filtereing before postgres insert
 FL-18-Dec-2019 AUTOUPDATE bug
+FL-07-Jan-2020 
 
 TODO
 - Use pyDataverse from PyPI
@@ -3054,9 +3055,9 @@ if __name__ == "__main__":
         #pd_engine = "openpyxl"      # only for pandas
         pd_engine = "xlsxwriter"    # only for pandas
     
-        for language in [ "ru" ]:  # test
+        #for language in [ "ru" ]:  # test
         #for language in [ "en" ]:  # test
-        #for language in [ "ru", "en" ]:DELETE FROM links_original.registration_o WHERE id_source = 250 AND registration_maintype = 1;
+        for language in [ "ru", "en" ]:
 
             compile_filecatalogue( config_parser, language, excel_package, pd_engine )  # create filecatalogue xlsx files
     
