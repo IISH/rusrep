@@ -81,6 +81,7 @@ def preprocessor( use_gridfs, datafilter ):
         else:
             logging.debug( "key %s: value type: %s" % ( key, type( value ) ) )
     
+    base_year = '0'
     nkeys = 0
     params = cache_data.get( "params" )
     if params:
@@ -88,12 +89,13 @@ def preprocessor( use_gridfs, datafilter ):
         logging.debug( "# of keys in params: %d" % nkeys )
         for key, value in params.iteritems():
             logging.debug( "key %s: value: %s" % ( key, value ) )
+            if key == "base_year":
+                base_year = value
     else:
         logging.error( "No params in data cache" )
     
     data = cache_data.get( "data" )
     
-    base_year = '0'
     ter_codes = []      # actually used region codes
     dataset   = []
     
