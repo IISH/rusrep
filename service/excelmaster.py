@@ -6,7 +6,7 @@
 # FL-24-Apr-2018 GridFS
 # FL-29-Jan-2019 aggregate_dataset: fields (old) & records (new) versions
 # FL-09-Apr-2019 adapt aggregate_dataset_records for changed data structure
-# FL-20-May-2019 
+# FL-13-Jan-2020 
 
 import gridfs
 import json

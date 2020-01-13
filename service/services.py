@@ -31,7 +31,7 @@ FL-19-Feb-2019 main query split by subclasses, other 2 by indicator length
 FL-30-Apr-2019 downloads adapted
 FL-13-May-2019 cleanup, reorganize
 FL-14-May-2019 filecatalogue download Excel conversion spurious '.0'
-FL-06-Jun-2019 latest change
+FL-13-Jan-2020 VALUE_NA_EN & _RU / VALUE_NONE_EN & _RU
 
 def loadjson( json_dataurl ):                                   # called by documentation()
 def topic_counts( language, datatype ):                         # called by topics()
@@ -122,8 +122,11 @@ use_gridfs = True
 
 vocab_debug = False
 
-#do_translate = True
-#do_translate = False   # read from English db for language = "en"
+VALUE_NA_EN = "missing in source"        # used to be: "na"
+VALUE_NA_RU = "пропущена в источнике"    # used to be: "нет данных"
+
+VALUE_NONE_EN = "cannot aggregate at this level"
+VALUE_NONE_RU = "агрегация на этом уровне невозможна"
 
 
 def loadjson( json_dataurl ):
@@ -1104,11 +1107,11 @@ def collect_records( records_dict, sql_prefix, path_dict, params, sql_names, sql
     value_na   = ""
     value_none = ""
     if language.upper() == "EN":
-        value_na   = "na"
-        value_none = "cannot aggregate at this level"
+        value_na   = VALUE_NA_EN
+        value_none = VALUE_NONE_EN
     elif language.upper() == "RU":
-        value_na   = "нет данных"
-        value_none = "агрегация на этом уровне невозможна"
+        value_na   = VALUE_NA_RU
+        value_none = VALUE_NONE_RU
     
     class_prefix = "class"
     if classification == "historical":
@@ -1195,11 +1198,10 @@ def add_missing_valstr( records_dict, params ):
     # add value strings for empty fields
     language = params.get( "language" )
     value_na   = ""
-    value_none = ""
     if language.upper() == "EN":
-        value_na = "na"
+        value_na = VALUE_NA_EN
     elif language.upper() == "RU":
-        value_na = "нет данных"
+        value_na = VALUE_NA_RU
 
     ter_codes_req = params.get( "ter_codes" )      # requested ter_codes (only historical)
 
