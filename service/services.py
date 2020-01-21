@@ -31,7 +31,8 @@ FL-19-Feb-2019 main query split by subclasses, other 2 by indicator length
 FL-30-Apr-2019 downloads adapted
 FL-13-May-2019 cleanup, reorganize
 FL-14-May-2019 filecatalogue download Excel conversion spurious '.0'
-FL-13-Jan-2020 VALUE_NA_EN & _RU / VALUE_NONE_EN & _RU
+FL-21-Jan-2020 VALUE_NA, VALUE_DOT, VALUE_NONE
+
 
 def loadjson( json_dataurl ):                                   # called by documentation()
 def topic_counts( language, datatype ):                         # called by topics()
@@ -122,8 +123,11 @@ use_gridfs = True
 
 vocab_debug = False
 
-VALUE_NA_EN = "missing in source"        # used to be: "na"
-VALUE_NA_RU = "пропущена в источнике"    # used to be: "нет данных"
+VALUE_NA_EN = "na"
+VALUE_NA_RU = "нет данных"
+
+VALUE_DOT_EN = "missing in source"
+VALUE_DOT_RU = "пропущена в источнике"
 
 VALUE_NONE_EN = "cannot aggregate at this level"
 VALUE_NONE_RU = "агрегация на этом уровне невозможна"
@@ -1108,9 +1112,11 @@ def collect_records( records_dict, sql_prefix, path_dict, params, sql_names, sql
     value_none = ""
     if language.upper() == "EN":
         value_na   = VALUE_NA_EN
+        value_dot  = VALUE_DOT_EN
         value_none = VALUE_NONE_EN
     elif language.upper() == "RU":
         value_na   = VALUE_NA_RU
+        value_dot  = VALUE_DOT_RU
         value_none = VALUE_NONE_RU
     
     class_prefix = "class"
@@ -1151,13 +1157,17 @@ def collect_records( records_dict, sql_prefix, path_dict, params, sql_names, sql
         # historical: only add requested ter_codes
         # modern: add all ter_codes
         if( classification == "historical" and ter_code in ter_codes_req ) or classification == "modern":
-            logging.debug( "ter_code %s" % ter_code )
             total = rec_dict.get( "total" )
-            
+            logging.debug( "ter_code: %s, total: %s" % ( ter_code, total ) )
             try:
                 total = float( total )
             except:
-                total = value_na
+                if total is None: 
+                    total = value_none
+                elif total == '.':
+                    total = value_dot
+                else:
+                    total = value_na
             
             try:
                 old_val = ter_code_dict[ ter_code ]
@@ -1169,12 +1179,12 @@ def collect_records( records_dict, sql_prefix, path_dict, params, sql_names, sql
             if dup:             # combine values
                 try:
                     float( old_val )
-                    if total in [ value_na, value_none ]:
+                    if total in [ value_dot, value_none ]:
                         ter_code_dict[ ter_code ] = value_none
                     else:
                         ter_code_dict[ ter_code ] = old_val + total
                 except:     # not both float
-                    if total == value_na:
+                    if total == value_dot:
                         ter_code_dict[ ter_code ] = value_na
                     else:
                         ter_code_dict[ ter_code ] = value_none
