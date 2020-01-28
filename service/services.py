@@ -1158,9 +1158,12 @@ def collect_records( records_dict, sql_prefix, path_dict, params, sql_names, sql
         # modern: add all ter_codes
         if( classification == "historical" and ter_code in ter_codes_req ) or classification == "modern":
             total = rec_dict.get( "total" )
-            logging.debug( "ter_code: %s, total: %s" % ( ter_code, total ) )
+            logging.debug( "new ter_code: %s, total: %s" % ( ter_code, total ) )
+            
+            new_isfloat = False
             try:
-                total = float( total )
+                new_float = float( total )
+                new_isfloat = True
             except:
                 if total is None: 
                     total = value_none
@@ -1170,24 +1173,37 @@ def collect_records( records_dict, sql_prefix, path_dict, params, sql_names, sql
                     total = value_na
             
             try:
-                old_val = ter_code_dict[ ter_code ]
-                dup = True      # existing ter_code
-            except:
-                ter_code_dict[ ter_code ] = total
-                dup = False     # new ter_code
-            
-            if dup:             # combine values
+                old_total = ter_code_dict[ ter_code ]
+                old_isfloat = False
                 try:
-                    float( old_val )
-                    if total in [ value_dot, value_none ]:
-                        ter_code_dict[ ter_code ] = value_none
-                    else:
-                        ter_code_dict[ ter_code ] = old_val + total
-                except:     # not both float
-                    if total == value_dot:
-                        ter_code_dict[ ter_code ] = value_na
-                    else:
-                        ter_code_dict[ ter_code ] = value_none
+                    old_float = float( old_total )
+                    old_isfloat = True
+                    logging.debug( "old_total: %s" % old_total )
+                except:
+                    pass
+                
+                combined = ""
+                if old_isfloat and new_isfloat:
+                    combined = old_float + new_float
+                elif old_isfloat and total == value_none:
+                    combined = old_float
+                elif new_isfloat and old_total == value_none:
+                    ter_code_dict[ ter_code ] = new_float
+                elif old_total == value_dot and new_total == value_dot:
+                    combined = value_dot
+                elif old_total == value_node and new_total == value_node:
+                    combined = value_none
+                else:
+                    combined = value_na
+                
+                ter_code_dict[ ter_code ] = combined
+                logging.debug( "combined ter_code: %s, total: %s" % ( ter_code, combined ) )
+            except:
+                # (only) new ter_code
+                if new_isfloat:
+                    ter_code_dict[ ter_code ] = new_float
+                else:
+                    ter_code_dict[ ter_code ] = total
     
     nrecords = len( records_dict.keys() )
     logging.debug( "paths in records_dict %d" % nrecords )
@@ -1207,11 +1223,14 @@ def add_missing_valstr( records_dict, params ):
 
     # add value strings for empty fields
     language = params.get( "language" )
-    value_na   = ""
+    value_na = ""
+    value_dot = ""
     if language.upper() == "EN":
         value_na = VALUE_NA_EN
+        value_dot = VALUE_DOT_EN
     elif language.upper() == "RU":
         value_na = VALUE_NA_RU
+        value_dot = VALUE_DOT_RU
 
     ter_codes_req = params.get( "ter_codes" )      # requested ter_codes (only historical)
 
