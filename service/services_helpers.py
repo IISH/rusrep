@@ -4,6 +4,7 @@
 Functions needed by services.py and/or services_obs.py
 FL-06-May-2019 Created
 FL-20-May-2019 make_query() ' .' suppression for modern adapted
+FL-31-Jan-2020 non-numerical query: now only "." & ". " in order to mark them afterwards in result
 
 def get_configparser():
 def get_connection():
@@ -156,7 +157,8 @@ def make_query( prefix, params, subclasses, value_total, value_numerical ):
         # plus an optional single . for floating point values, and plus an optional leading sign
         query += " AND value ~ '^[-+]?\d*\.?\d*$'"
     else:
-        query += " AND (value = '' OR value = ' ' OR value = '.' OR value = '. ' OR value = NULL)"
+        #query += " AND (value = '' OR value = ' ' OR value = '.' OR value = '. ' OR value = NULL)"
+        query += " AND (value = '.' OR value = '. ')"
     
     # AND path_dicts
     query += " AND ("

@@ -32,7 +32,7 @@ FL-30-Apr-2019 downloads adapted
 FL-13-May-2019 cleanup, reorganize
 FL-14-May-2019 filecatalogue download Excel conversion spurious '.0'
 FL-21-Jan-2020 VALUE_NA, VALUE_DOT, VALUE_NONE
-
+FL-31-Jan-2020 Separate handling for VALUE_DOT; VALUE_NONE => VALUE_MIX
 
 def loadjson( json_dataurl ):                                   # called by documentation()
 def topic_counts( language, datatype ):                         # called by topics()
@@ -129,8 +129,8 @@ VALUE_NA_RU = "нет данных"
 VALUE_DOT_EN = "missing in source"
 VALUE_DOT_RU = "пропущена в источнике"
 
-VALUE_NONE_EN = "cannot aggregate at this level"
-VALUE_NONE_RU = "агрегация на этом уровне невозможна"
+VALUE_MIX_EN = "cannot aggregate at this level"
+VALUE_MIX_RU = "агрегация на этом уровне невозможна"
 
 
 def loadjson( json_dataurl ):
@@ -1108,16 +1108,17 @@ def collect_records( records_dict, sql_prefix, path_dict, params, sql_names, sql
     logging.debug( "collect_records() requested ter_codes: %s" % str( ter_codes_req ) )
     
     # value strings for empty and combined ter_code values
-    value_na   = ""
-    value_none = ""
+    value_na  = ""
+    value_dot = ""
+    value_mix = ""
     if language.upper() == "EN":
-        value_na   = VALUE_NA_EN
-        value_dot  = VALUE_DOT_EN
-        value_none = VALUE_NONE_EN
+        value_na  = VALUE_NA_EN
+        value_dot = VALUE_DOT_EN
+        value_mix = VALUE_MIX_EN
     elif language.upper() == "RU":
-        value_na   = VALUE_NA_RU
-        value_dot  = VALUE_DOT_RU
-        value_none = VALUE_NONE_RU
+        value_na  = VALUE_NA_RU
+        value_dot = VALUE_DOT_RU
+        value_mix = VALUE_MIX_RU
     
     class_prefix = "class"
     if classification == "historical":
@@ -1160,55 +1161,59 @@ def collect_records( records_dict, sql_prefix, path_dict, params, sql_names, sql
             total = rec_dict.get( "total" )
             logging.debug( "new ter_code: %s, total: %s" % ( ter_code, total ) )
             
+            new_float = None
             new_isfloat = False
-            try:
-                new_float = float( total )
-                new_isfloat = True
-            except:
-                if total is None: 
-                    total = value_none
-                elif total == '.':
-                    total = value_dot
-                else:
-                    total = value_na
+            if sql_prefix == "num":
+                try:
+                    new_float = float( total )
+                    new_isfloat = True
+                except:
+                    pass
             
-            try:
+            elif sql_prefix == "none":
+                total = value_dot
+            else:
+                total = value_na
+            
+            if ter_code not in ter_code_dict.keys():
+                # (only) new ter_code
+                if new_isfloat:
+                    ter_code_dict[ ter_code ] = new_float
+                else:
+                    ter_code_dict[ ter_code ] = total
+            else:   # combine old & new
                 old_total = ter_code_dict[ ter_code ]
                 old_isfloat = False
                 try:
                     old_float = float( old_total )
                     old_isfloat = True
-                    logging.debug( "old_total: %s" % old_total )
+                    logging.debug( "old_total: %f" % old_total )
                 except:
                     pass
                 
                 combined = ""
                 if old_isfloat and new_isfloat:
                     combined = old_float + new_float
-                elif old_isfloat and total == value_none:
-                    combined = old_float
-                elif new_isfloat and old_total == value_none:
-                    ter_code_dict[ ter_code ] = new_float
                 elif old_total == value_dot and new_total == value_dot:
                     combined = value_dot
-                elif old_total == value_node and new_total == value_node:
-                    combined = value_none
+                elif old_total == value_mix and new_total == value_mix:
+                    combined = value_mix
+                
+                elif old_isfloat and total == value_mix:
+                    combined = old_float
+                elif new_isfloat and old_total == value_mix:
+                    ter_code_dict[ ter_code ] = new_float
                 else:
-                    combined = value_na
+                    combined = value_mix
                 
                 ter_code_dict[ ter_code ] = combined
                 logging.debug( "combined ter_code: %s, total: %s" % ( ter_code, combined ) )
-            except:
-                # (only) new ter_code
-                if new_isfloat:
-                    ter_code_dict[ ter_code ] = new_float
-                else:
-                    ter_code_dict[ ter_code ] = total
+
     
     nrecords = len( records_dict.keys() )
     logging.debug( "paths in records_dict %d" % nrecords )
     
-    #show_record_dict( sql_prefix, records_dict )
+    show_record_dict( sql_prefix, records_dict )
     
     str_elapsed = format_secs( time() - time0 )
     logging.info( "collect_records() took %s" % str_elapsed )
