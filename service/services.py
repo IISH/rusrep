@@ -32,7 +32,7 @@ FL-30-Apr-2019 downloads adapted
 FL-13-May-2019 cleanup, reorganize
 FL-14-May-2019 filecatalogue download Excel conversion spurious '.0'
 FL-21-Jan-2020 VALUE_NA, VALUE_DOT, VALUE_NONE
-FL-31-Jan-2020 Separate handling for VALUE_DOT; VALUE_NONE => VALUE_MIX
+FL-13-Feb-2020 Separate handling for VALUE_DOT; VALUE_NONE => VALUE_MIX
 
 def loadjson( json_dataurl ):                                   # called by documentation()
 def topic_counts( language, datatype ):                         # called by topics()
@@ -669,7 +669,7 @@ def aggregate_modern_items( params ):
     # modern classification does not provide a base_year; 
     # loop over base_years, and accumulate results.
     base_years = [ "1795", "1858", "1897", "1959", "2002" ]
-    #base_years = [ "1897" ]    # test single year
+    #base_years = [ "1795" ]    # test single year
     
     """
     prefix = num    default query with explicit ter_code specification; 
@@ -1163,7 +1163,7 @@ def collect_records( records_dict, sql_prefix, path_dict, params, sql_names, sql
             
             new_float = None
             new_isfloat = False
-            if sql_prefix == "num":
+            if sql_prefix in [ "num", "ntc" ]:
                 try:
                     new_float = float( total )
                     new_isfloat = True
