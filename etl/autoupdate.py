@@ -38,7 +38,7 @@ FL-03-Dec-2019 Now using tablib for excel processing
 FL-09-Dec-2019 Update territory names in xlsx2csv_tablib_filter()
 FL-09-Dec-2019 Eliminate now redundant filtereing before postgres insert
 FL-18-Dec-2019 AUTOUPDATE bug
-FL-07-Jan-2020 
+FL-03-Mar-2020 Use (also) yaml config
 
 TODO
 - Use pyDataverse from PyPI
@@ -106,6 +106,7 @@ import simplejson
 import sys
 import shutil
 import tablib
+import yaml
 
 from backports import csv
 from bidict import bidict
@@ -2848,22 +2849,6 @@ def format_secs( seconds ):
 
 
 if __name__ == "__main__":
-    DO_RETRIEVE_VOCAB    = True   # -01- vocabulary: dataverse => local_disk
-    DO_RETRIEVE_DOC      = True   # -02- documentation: dataverse  => local_disk
-    DO_RETRIEVE_ERRHS    = True   # -03- ERRHS data: dataverse => local_disk
-    
-    DO_DOC_COPY          = True   # -04- local_disk doc srx dir => doc dst dir
-    DO_CONVERT_VOCAB2CSV = True   # -05- convert vocab xlsx files [ru + en] to vocab csv files [ru + en]
-    DO_CONVERT_EXCEL2CSV = True   # -06- convert Russian ERRHS xlsx files to Russian ERRHS csv files
-    DO_TRANSLATE_CSV     = True   # -07- translate Russian csv files to English csv files
-    
-    DO_POSTGRES_DB       = True   # -08- ERRHS data: local_disk => postgresql, csv -> table
-    DO_MONGO_DB          = True   # -09- ERRHS data: postgresql => mongodb
-    DO_FILE_CATALOGUE    = True   # -10- ERRHS data: csv -> filecatalogue xlsx
-    
-    #dv_format = ""
-    dv_format = "original"  # does not work for ter_code (regions) vocab translations
-    
     log_file = True
     
     #log_level = logging.DEBUG
@@ -2917,6 +2902,58 @@ if __name__ == "__main__":
     
     
     # DATAVERSE RETRIEVAL Phase; will exit() on retrieval error
+    # default DO_* settings: 
+    DO_RETRIEVE_VOCAB    = True   # -01- vocabulary: dataverse => local_disk
+    DO_RETRIEVE_DOC      = True   # -02- documentation: dataverse  => local_disk
+    DO_RETRIEVE_ERRHS    = True   # -03- ERRHS data: dataverse => local_disk
+    
+    DO_DOC_COPY          = True   # -04- local_disk doc srx dir => doc dst dir
+    DO_CONVERT_VOCAB2CSV = True   # -05- convert vocab xlsx files [ru + en] to vocab csv files [ru + en]
+    DO_CONVERT_EXCEL2CSV = True   # -06- convert Russian ERRHS xlsx files to Russian ERRHS csv files
+    DO_TRANSLATE_CSV     = True   # -07- translate Russian csv files to English csv files
+    
+    DO_POSTGRES_DB       = True   # -08- ERRHS data: local_disk => postgresql, csv -> table
+    DO_MONGO_DB          = True   # -09- ERRHS data: postgresql => mongodb
+    DO_FILE_CATALOGUE    = True   # -10- ERRHS data: csv -> filecatalogue xlsx
+    
+    # DO_* can be overruled by yaml config
+    yaml_config_path = os.path.join( os.getcwd(), "autoupdate.yaml" )
+    logging.info( "YAML config file: %s" % yaml_config_path )
+    
+    try:
+        yaml_config = yaml.safe_load( open( yaml_config_path ) )
+        
+        DO_RETRIEVE_VOCAB    = yaml_config.get( "DO_RETRIEVE_VOCAB" )
+        DO_RETRIEVE_DOC      = yaml_config.get( "DO_RETRIEVE_DOC" )
+        DO_RETRIEVE_ERRHS    = yaml_config.get( "DO_RETRIEVE_ERRHS" )
+        
+        DO_DOC_COPY          = yaml_config.get( "DO_DOC_COPY" )
+        DO_CONVERT_VOCAB2CSV = yaml_config.get( "DO_CONVERT_VOCAB2CSV" )
+        DO_CONVERT_EXCEL2CSV = yaml_config.get( "DO_CONVERT_EXCEL2CSV" )
+        DO_TRANSLATE_CSV     = yaml_config.get( "DO_TRANSLATE_CSV" )
+        
+        DO_POSTGRES_DB       = yaml_config.get( "DO_POSTGRES_DB" )
+        DO_MONGO_DB          = yaml_config.get( "DO_MONGO_DB" )
+        DO_FILE_CATALOGUE    = yaml_config.get( "DO_FILE_CATALOGUE" )
+    except:
+        logging.info( "YAML config file %s not found" % yaml_config_path )
+    
+    logging.info( "DO_RETRIEVE_VOCAB:    %s" % DO_RETRIEVE_VOCAB )
+    logging.info( "DO_RETRIEVE_DOC:      %s" % DO_RETRIEVE_DOC )
+    logging.info( "DO_RETRIEVE_ERRHS:    %s" % DO_RETRIEVE_ERRHS )
+    
+    logging.info( "DO_DOC_COPY:          %s" % DO_DOC_COPY )
+    logging.info( "DO_CONVERT_VOCAB2CSV: %s" % DO_CONVERT_VOCAB2CSV )
+    logging.info( "DO_CONVERT_EXCEL2CSV: %s" % DO_CONVERT_EXCEL2CSV )
+    logging.info( "DO_TRANSLATE_CSV:     %s" % DO_TRANSLATE_CSV )
+    
+    logging.info( "DO_POSTGRES_DB:       %s" % DO_POSTGRES_DB )
+    logging.info( "DO_MONGO_DB:          %s" % DO_MONGO_DB )
+    logging.info( "DO_FILE_CATALOGUE:    %s" % DO_FILE_CATALOGUE )
+    
+    #dv_format = ""
+    dv_format = "original"  # does not work for ter_code (regions) vocab translations
+    
     if AUTOUPDATE == 1:
         autoupdate = check_autoupdate( config_parser, dv_format )
     
