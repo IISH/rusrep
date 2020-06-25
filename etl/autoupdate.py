@@ -39,6 +39,7 @@ FL-09-Dec-2019 Update territory names in xlsx2csv_tablib_filter()
 FL-09-Dec-2019 Eliminate now redundant filtereing before postgres insert
 FL-18-Dec-2019 AUTOUPDATE bug
 FL-03-Mar-2020 Use (also) yaml config
+FL-25-Jun-2020 yaml config ordering changed (db's at the end)
 
 TODO
 - Use pyDataverse from PyPI
@@ -3046,12 +3047,32 @@ if __name__ == "__main__":
         str_elapsed = format_secs( time() - time0_ )
         logging.info( "TRANSLATE_CSV processing took %s" % str_elapsed )
     
+    if DO_FILE_CATALOGUE:
+        time0_ = time()
+        logging.info( '' )
+        logging.info( "-08- DO_FILE_CATALOGUE" )
+        
+        #excel_package = "pandas"        # too slow (due to post-read coorections)
+        excel_package = "tablib"        # from Kenneth Reitz (requests)
+        
+        #pd_engine = "openpyxl"      # only for pandas
+        pd_engine = "xlsxwriter"    # only for pandas
+    
+        #for language in [ "ru" ]:  # test
+        #for language in [ "en" ]:  # test
+        for language in [ "ru", "en" ]:
+
+            compile_filecatalogue( config_parser, language, excel_package, pd_engine )  # create filecatalogue xlsx files
+    
+        str_elapsed = format_secs( time() - time0_ )
+        logging.info( "FILE_CATALOGUE processing took %s" % str_elapsed )
+    
     if DO_POSTGRES_DB:
         # TODO do retrieve again
         # TODO rewrite filter_csv
         time0_ = time()
         logging.info( '' )
-        logging.info( "-8- DO_POSTGRES_DB" )    # read russian csv files
+        logging.info( "-9- DO_POSTGRES_DB" )    # read russian csv files
         logging.StreamHandler().flush()
         for language in [ "ru", "en" ]:
             row_count( config_parser, language )
@@ -3072,7 +3093,7 @@ if __name__ == "__main__":
     if DO_MONGO_DB:
         time0_ = time()
         logging.info( '' )
-        logging.info( "-9- DO_MONGO_DB" )
+        logging.info( "-10- DO_MONGO_DB" )
         mongo_store_vocabularies()
         
         for language in [ "ru", "en" ]:
@@ -3080,27 +3101,6 @@ if __name__ == "__main__":
         
         str_elapsed = format_secs( time() - time0_ )
         logging.info( "MONGO_DB processing took %s" % str_elapsed )
-    
-    if DO_FILE_CATALOGUE:
-        time0_ = time()
-        logging.info( '' )
-        logging.info( "-10- DO_FILE_CATALOGUE" )
-        
-        #excel_package = "pandas"        # too slow (due to post-read coorections)
-        excel_package = "tablib"        # from Kenneth Reitz (requests)
-        
-        #pd_engine = "openpyxl"      # only for pandas
-        pd_engine = "xlsxwriter"    # only for pandas
-    
-        #for language in [ "ru" ]:  # test
-        #for language in [ "en" ]:  # test
-        for language in [ "ru", "en" ]:
-
-            compile_filecatalogue( config_parser, language, excel_package, pd_engine )  # create filecatalogue xlsx files
-    
-        str_elapsed = format_secs( time() - time0_ )
-        logging.info( "FILE_CATALOGUE processing took %s" % str_elapsed )
-    
     
     logging.info( '' )
     logging.info( "total number of exceptions: %d" % Nexcept )

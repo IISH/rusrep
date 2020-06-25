@@ -1,0 +1,19 @@
+# FL-03-Mar-2020 Created
+# FL-25-Jun-2020 Created
+
+# Autoupdate: what to update?
+    DO_RETRIEVE_VOCAB    : True   # -01- vocabulary: dataverse => local_disk
+    DO_RETRIEVE_DOC      : True   # -02- documentation: dataverse  => local_disk
+    DO_RETRIEVE_ERRHS    : True   # -03- ERRHS data: dataverse => local_disk
+    
+    DO_DOC_COPY          : True   # -04- local_disk doc srx dir => doc dst dir
+    DO_CONVERT_VOCAB2CSV : True   # -05- convert vocab xlsx files [ru + en] to vocab csv files [ru + en]
+    DO_CONVERT_EXCEL2CSV : True   # -06- convert Russian ERRHS xlsx files to Russian ERRHS csv files
+    DO_TRANSLATE_CSV     : True   # -07- translate Russian csv files to English csv files
+    
+    DO_FILE_CATALOGUE    : True   # -08- ERRHS data: csv -> filecatalogue xlsx
+    
+    DO_POSTGRES_DB       : True   # -09- ERRHS data: local_disk => postgresql, csv -> table
+    DO_MONGO_DB          : True   # -10- ERRHS data: postgresql => mongodb
+    
+# [eof]

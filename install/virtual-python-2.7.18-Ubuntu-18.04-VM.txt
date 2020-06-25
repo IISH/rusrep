@@ -1,0 +1,102 @@
+FL-24-Jun-2020
+
+Create a virtualenv Python-2.7.18 for RiStat
+
+On n-195-169-89-101.diginfra.net (195.169.89.101) 
+with Ubuntu-18.04 bionic VM
+
+System Python:
+$ python -V
+Python 2.7.17
+
+Install python dependencies in order to build python from source: 
+https://devguide.python.org/setup/
+1.4. Install dependencies
+On Debian, Ubuntu, and other apt based systems, try to get the dependencies for 
+the Python you’re working on by using the apt command.
+First, make sure you have enabled the source packages in the sources list. 
+You can do this by adding the location of the source packages, including URL, 
+distribution name and component name, to /etc/apt/sources.list. 
+Take Ubuntu Bionic for example:
+	deb-src http://archive.ubuntu.com/ubuntu/ bionic main
+
+Then you should update the packages index:
+	# apt-get update
+
+Now you can install the build dependencies via apt:
+	# apt-get build-dep python2.7
+	0 upgraded, 161 newly installed, 0 to remove and 0 not upgraded.
+	Need to get 93.0 MB of archives.
+	After this operation, 587 MB of additional disk space will be used.
+
+-2- Create a normal Python-2.7.18 from its source. 
+	Get Python-2.7.18 from https://www.python.org/downloads/release/python-2718/
+		$ tar -zxf Python-2.7.18.tgz
+		$ cd Python-2.7.18
+	
+	Installation directory will be: /data/opt/Python/python-2.7.18
+		$ export PYTHON_LOCAL=/data/opt/Python/python-2.7.18
+	
+	Build without optimizations (for optimizations add --enable-optimizations):
+		$ ./configure --enable-unicode=ucs4 --prefix=$PYTHON_LOCAL --with-ensurepip=yes
+		...
+		creating Makefile
+		
+		$ make
+		...
+		Python build finished, but the necessary bits to build these modules were not found:
+			bsddb185			# "Berkeley db 1.85": really old version, so forget it.
+			dl					# "SGI-specific modules", so forget it.
+			imageop				# "These don't work for 64-bit platforms", so forget it.
+			sunaudiodev			# "SunOS specific", so forget it.
+		
+		$ make altinstall		# alt: do not [try to] replace /usr/bin/python
+		...
+		Collecting setuptools
+		Collecting pip
+		Installing collected packages: setuptools, pip
+		Successfully installed pip-19.2.3 setuptools-41.2.0
+
+	Get a copy of the shell script python2718, which is part of this package. 
+	Adapt the contents if necessary, and put it in: 
+	/home/ristat/bin/python2718
+	activate this python
+		$ source /home/ristat/bin/python2718
+	check: 
+		$ python -V
+
+-3- setuptools & pip
+	already installed, see --with-ensurepip=yes above, 
+	but notice that they are 'versioned' in $PYTHON_LOCAL/python-2.7.17/bin
+		easy_install-2.7 pip2.7 python2.7
+
+-4- Add virtualenv
+		$ pip2.7 install virtualenv
+		Successfully installed appdirs-1.4.4 configparser-4.0.2 contextlib2-0.6.0.post1 distlib-0.3.0 
+		filelock-3.0.12 importlib-metadata-1.6.1 importlib-resources-2.0.1 pathlib2-2.3.5 
+		scandir-1.10.0 singledispatch-3.4.0.3 six-1.15.0 typing-3.7.4.1 virtualenv-20.0.25 zipp-1.2.0
+	
+	WARNING: You are using pip version 19.2.3, however version 20.1.1 is available.
+	You should consider upgrading via the 'pip install --upgrade pip' command.
+		$ pip2.7 install --upgrade pip
+	
+	This python-2.7.18 is the 'base' python from which we can derive multiple 
+	virtualenv pythons to be used in separate projects. 
+	
+-5- Create a virtualenv python for RiStat, say in PROJECT, e.g. /data/ristat
+		$ cd $PROJECT
+	use the created 'base' python
+		$ source /home/ristat/bin/python2718
+	create a virtualenv python; its top-level directory will be python2718
+		$ virtualenv python2718
+		created virtual environment CPython2.7.18.final.0-64
+
+	use it
+		$ source $PROJECT/python2718/bin/activate
+	notice that your shell prompt is now prefixed with '(python2718)'
+
+
+-6- Add packages with pip to the virtual python2718 for RiStat: 
+	See the RiStat file rusrep/install/requirements_py2.7.18.txt
+
+[eof]

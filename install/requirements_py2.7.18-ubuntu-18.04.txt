@@ -1,0 +1,58 @@
+# FL-23-Jun-2020 Created
+# FL-25-Jun-2020 Changed
+
+# TODO check for package updates that are still compatible with Python-2.7.*
+
+# pip requirements file for RiStat/RusRep on Ubuntu-18.04 with a Python-2.7.18
+# setuptools, pip, and virtualenv should already be present in the (virtual) python2.7
+
+# install the packages below from a terminal, using the ristat virtual python: 
+# $ pip install -r requirements_py2.7.18-ubuntu-18.04.txt
+
+# Newer versions may (or may not) work; we used the versions below 
+# Notice: 
+# - the version of pymongo to be used depends on he MongoDB version
+# - psycopg2 needs the linux packages (here specified for CentOS-7.7): 
+#   yum install postgresql
+#   yum install python-psycopg2
+#   yum install libpq-dev
+
+# Package requirements below for autoupdate; 
+# Web GUI not tested on MacBook
+
+future == 0.18.2
+six == 1.14.0
+
+simplejson == 3.17.0
+
+jsonmerge				# Successfully installed attrs-19.3.0 configparser-4.0.2 contextlib2-0.6.0.post1 functools32-3.2.3.post2 importlib-metadata-1.6.1 jsonmerge-1.7.0 jsonschema-3.2.0 pathlib2-2.3.5 pyrsistent-0.16.0 scandir-1.10.0 zipp-1.2.0
+
+python-ldap == 3.2.0	# also installed pyasn1 pyasn1-modules; needed by rusrep/service/configutils.py
+
+Flask == 1.1.1			# also installed Jinja2 MarkupSafe Werkzeug click itsdangerous
+
+psycopg2 == 2.8.4		# apt-get install postgresql 
+
+pymongo == 3.10.1
+
+# Excel tools
+pandas == 0.24.2		# also installed numpy python-dateutil pytz
+openpyxl == 2.6.4		# also installed et-xmlfile jdcal
+backports.csv == 1.0.7
+xlsxwriter == 1.2.6
+tablib == 0.14.0		# newer versions only Python-3; also installed defusedxml markuppy odfpy pyyaml xlrd xlwt
+
+PyICU					# installed PyICU-2.5
+						# dependency: apt-get install libicu-dev; also installs many other packages
+bidict == 0.18.3
+requests == 2.24.0		# also installed certifi chardet idna urllib3
+
+
+# Start using the newer pyDataverse 0.2.1 from PyPI (notice: different API !)
+# pyDataverse-0.2.1
+
+# dataverse-client-python not yet in PyPI, fetch dataverse-0.1.2 from github
+# pip install -e git+https://github.com/IQSS/dataverse-client-python.git#egg=dataverse
+# Successfully installed bleach-3.1.5 dataverse lxml-4.5.1 packaging-20.4 pyparsing-2.4.7 webencodings-0.5.1
+
+# [eof]
