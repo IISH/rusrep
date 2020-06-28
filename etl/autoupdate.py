@@ -40,6 +40,7 @@ FL-09-Dec-2019 Eliminate now redundant filtereing before postgres insert
 FL-18-Dec-2019 AUTOUPDATE bug
 FL-03-Mar-2020 Use (also) yaml config
 FL-25-Jun-2020 yaml config ordering changed (db's at the end)
+FL-28-Jun-2020 api_root from proxy or root
 
 TODO
 - Use pyDataverse from PyPI
@@ -322,9 +323,9 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", ch
     }
     
 
-    tmp_dir = config_parser.get( "config", "tmppath" )
-    dv_dir = "dataverse_src"
-    download_dir = os.path.join( tmp_dir, dv_dir, dst_dir, handle_name )
+    dv_dir = config_parser.get( "config", "dv_dir" )
+    dv_dir_src = "dataverse_src"
+    download_dir = os.path.join( dv_dir, dv_dir_src, dst_dir, handle_name )
     logging.info( "downloading dataverse files to: %s" % download_dir )
         
     if check_ts:
@@ -469,10 +470,10 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", ch
 def documents_info( config_parser, language ):
     logging.debug( "documents_info()" )
     
-    tmp_dir     = config_parser.get( "config", "tmppath" )
+    dv_dir      = config_parser.get( "config", "dv_dir" )
     dv_host     = config_parser.get( "config", "dataverse_root" )
     dv_version  = config_parser.get( "config", "dv_version" )
-    api_root    = config_parser.get( "config", "api_root" )
+    root        = config_parser.get( "config", "root" )
     ristat_key  = config_parser.get( "config", "ristatkey" )
     ristat_name = config_parser.get( "config", "ristatname" )
     ristatdocs  = config_parser.get( "config", "hdl_documentation" )
@@ -481,7 +482,20 @@ def documents_info( config_parser, language ):
     logging.debug( "ristat_key: %s" % ristat_key )
     logging.info( "ristat_name: %s" % ristat_name )
     
-    download_dir = os.path.join( tmp_dir, "dataverse_src/doc" )
+    scheme   = "http"
+    use_root = root
+    try:
+        proxy = config_parser.get( "config", "proxy" )
+        if proxy:       # not empty?
+            scheme   = "https"
+            use_root = proxy
+    except:
+        pass
+    
+    api_root = "%s://%s" % ( scheme, use_root )
+    logging.info( "api_root: %s" % api_root )
+    
+    download_dir = os.path.join( dv_dir, "dataverse_src/doc" )
     download_fname = "doclist-" + language + ".json"
     download_path = os.path.join( download_dir, download_fname )
     
@@ -677,14 +691,14 @@ def retrieve_vocabularies( config_parser, dv_format, check_ts = False ):
 def copy_doc_src2dst():
     logging.info( "%s copy_doc_src2dst()" % __file__ )
     # Copy documentation from source (dataverse download) to destination directory (work dir)
-    tmp_dir = config_parser.get( "config", "tmppath" )
+    dv_dir = config_parser.get( "config", "dv_dir" )
     dv_dir_src = "dataverse_src"
     dv_dir_dst = "dataverse_dst"
     doc_dir = "doc"
     handle_name = "hdl_documentation"
     
-    src_dir = os.path.join( tmp_dir, dv_dir_src, doc_dir, handle_name )
-    dst_dir = os.path.join( tmp_dir, dv_dir_dst, doc_dir, handle_name )
+    src_dir = os.path.join( dv_dir, dv_dir_src, doc_dir, handle_name )
+    dst_dir = os.path.join( dv_dir, dv_dir_dst, doc_dir, handle_name )
     logging.info( "copying dataverse doc files from: %s" % src_dir )
     logging.info( "copying dataverse doc files to:   %s" % dst_dir )
 
@@ -706,8 +720,8 @@ def copy_doc_src2dst():
     logging.info( "%d files copied" % len( dir_list ) )
 
     # copy ru & en listing files
-    src_dir = os.path.join( tmp_dir, dv_dir_src, doc_dir )
-    dst_dir = os.path.join( tmp_dir, dv_dir_dst, doc_dir )
+    src_dir = os.path.join( dv_dir, dv_dir_src, doc_dir )
+    dst_dir = os.path.join( dv_dir, dv_dir_dst, doc_dir )
     
     for filename in [ "doclist-en.json", "doclist-ru.json" ]:
         path_in  = os.path.join( src_dir, filename )
@@ -719,12 +733,12 @@ def copy_doc_src2dst():
 def convert_vocabularies2csv( excel_package ):
     logging.info( "%s convert_vocabularies2csv()" % __file__ )
     
-    tmp_dir = config_parser.get( "config", "tmppath" )
+    dv_dir = config_parser.get( "config", "dv_dir" )
     vocab_dir = "vocab"
     handle_name = "hdl_vocabularies"
     
-    xlsx_dir  = os.path.join( tmp_dir, "dataverse_src", vocab_dir, "xlsx", handle_name )
-    csv_dir   = os.path.join( tmp_dir, "dataverse_dst", vocab_dir, "csv", handle_name )
+    xlsx_dir  = os.path.join( dv_dir, "dataverse_src", vocab_dir, "xlsx", handle_name )
+    csv_dir   = os.path.join( dv_dir, "dataverse_dst", vocab_dir, "csv", handle_name )
     logging.info( "vocabulary  input: %s" % xlsx_dir )
     logging.info( "vocabulary output: %s" % csv_dir )
     
@@ -838,9 +852,9 @@ def mongo_store_vocabularies():
     logging.debug( "dbname: %s" % dbname )
     
     vocab_json = [ {} ]
-    tmp_dir = config_parser.get( "config", "tmppath" )
+    dv_dir = config_parser.get( "config", "dv_dir" )
     handle_name = "hdl_vocabularies"
-    abs_ascii_dir = os.path.join( tmp_dir, "dataverse_dst", "vocab/csv", handle_name )
+    abs_ascii_dir = os.path.join( dv_dir, "dataverse_dst", "vocab/csv", handle_name )
     
     # do not read again from dataverse
     big_vocabulary = merge_vocabs( abs_ascii_dir  )
@@ -973,7 +987,7 @@ def clear_postgres_table( config_parser, language ):
     password = config_parser.get( "config", "dbpassword" )
     
     connection_string = "host = '%s' dbname = '%s' user = '%s' password = '%s'" % ( dbhost, dbname, user, password )
-    logging.info( "connection_string: %s" % connection_string )
+    logging.debug( "connection_string: %s" % connection_string )
 
     try:
         pg_connection = psycopg2.connect( connection_string )
@@ -998,9 +1012,9 @@ def store_handle_docs( config_parser, handle_name, language ):
     logging.info( "" )
     logging.info( "store_handle_docs() %s" % handle_name )
     
-    tmp_dir = config_parser.get( "config", "tmppath" )
+    dv_dir = config_parser.get( "config", "dv_dir" )
     csv_dir_l = "csv-" + language
-    csv_dir  = os.path.join( tmp_dir, "dataverse_dst", csv_dir_l, handle_name )
+    csv_dir  = os.path.join( dv_dir, "dataverse_dst", csv_dir_l, handle_name )
     dir_list = []
     if os.path.isdir( csv_dir ):
         dir_list = os.listdir( csv_dir )
@@ -1027,7 +1041,7 @@ def store_handle_docs( config_parser, handle_name, language ):
     password = config_parser.get( "config", "dbpassword" )
     
     connection_string = "host = '%s' dbname = '%s' user = '%s' password = '%s'" % ( dbhost, dbname, user, password )
-    logging.info( "connection_string: %s" % connection_string )
+    logging.debug( "connection_string: %s" % connection_string )
 
     try:
         pg_connection = psycopg2.connect( connection_string )
@@ -1582,7 +1596,7 @@ def topic_counts( config_parser, langage ):
     password = config_parser.get( "config", "dbpassword" )
     
     connection_string = "host = '%s' dbname = '%s' user = '%s' password = '%s'" % ( dbhost, dbname, user, password )
-    logging.info( "connection_string: %s" % connection_string )
+    logging.debug( "connection_string: %s" % connection_string )
 
     try:
         pg_connection = psycopg2.connect( connection_string )
@@ -1635,8 +1649,8 @@ def load_vocab( config_parser, vocab_fname, vocab, pos_rus, pos_eng ):
     logging.info( "load_vocab() vocab_fname: %s" % vocab_fname )
     # if pos_extar is not None, it is needed to make the keys and/or values unique
     handle_name = "hdl_vocabularies"
-    tmp_dir = config_parser.get( "config", "tmppath" )
-    vocab_dir = os.path.join( tmp_dir, "dataverse_dst", "vocab/csv", handle_name )
+    dv_dir = config_parser.get( "config", "dv_dir" )
+    vocab_dir = os.path.join( dv_dir, "dataverse_dst", "vocab/csv", handle_name )
     vocab_path = os.path.join( vocab_dir, vocab_fname )
     logging.debug( "vocab_dir: %s" % vocab_dir )
     logging.debug( "vocab_path: %s" % vocab_path )
@@ -1758,7 +1772,7 @@ def convert_excel2csv( config_parser, excel_package ):
     
     logging.info( "convert_excel2csv() excel_package: %s" % excel_package )
     
-    tmp_dir = config_parser.get( "config", "tmppath" )
+    dv_dir = config_parser.get( "config", "dv_dir" )
     
     xlsx_subdir = "xlsx"
     csv_subdir  = "csv-ru"
@@ -1767,7 +1781,7 @@ def convert_excel2csv( config_parser, excel_package ):
     # dataverse xlsx has no -ru or -en, but we want to be explicit
     extra = "-ru"   # for output csv file
     
-    xlsx_basedir = os.path.join( tmp_dir, "dataverse_src", xlsx_subdir )
+    xlsx_basedir = os.path.join( dv_dir, "dataverse_src", xlsx_subdir )
     
     # read regions vocab, to correct territory names via ter_code
     vocab_regions = dict()      # special, not bidict() !
@@ -1796,8 +1810,8 @@ def convert_excel2csv( config_parser, excel_package ):
         
         logging.info( "handle_name:  %s" % handle_name )
         
-        xlsx_dir = os.path.join( tmp_dir, "dataverse_src", xlsx_subdir, handle_name )
-        csv_dir  = os.path.join( tmp_dir, "dataverse_dst", csv_subdir,  handle_name )
+        xlsx_dir = os.path.join( dv_dir, "dataverse_src", xlsx_subdir, handle_name )
+        csv_dir  = os.path.join( dv_dir, "dataverse_dst", csv_subdir,  handle_name )
        
         logging.info( "xlsx_dir: %s" % xlsx_dir )
         logging.info( "csv_dir:  %s" % csv_dir )
@@ -2307,15 +2321,15 @@ def translate_csv( config_parser, handle_name, vocab_units, vocab_regions, vocab
     logging.info( "translate_csv()" )
     logging.info( "translating csv documents for handle name %s ..." % handle_name )
     
-    tmp_dir = config_parser.get( "config", "tmppath" )
-    csv_dir = os.path.join( tmp_dir, "dataverse_dst", "csv-ru", handle_name )
+    dv_dir = config_parser.get( "config", "dv_dir" )
+    csv_dir = os.path.join( dv_dir, "dataverse_dst", "csv-ru", handle_name )
     if os.path.exists( csv_dir ):
         logging.debug( "csv_dir: %s" % csv_dir )
     else:
         logging.debug( "not found, skip: csv_dir: %s" % csv_dir )
         return
     
-    eng_dir = os.path.join( tmp_dir, "dataverse_dst", "csv-en", handle_name )
+    eng_dir = os.path.join( dv_dir, "dataverse_dst", "csv-en", handle_name )
     logging.debug( "eng_dir: %s" % eng_dir )
     
     if os.path.exists( eng_dir ):
@@ -2515,12 +2529,12 @@ def compile_filecatalogue( config_parser, language, excel_package, pd_engine ):
         logging.info( key )
     """
     
-    tmp_dir = config_parser.get( "config", "tmppath" )
+    dv_dir = config_parser.get( "config", "dv_dir" )
     
     csv_subdir  = "csv-"  + language
     fcat_subdir = "fcat-" + language
     
-    csv_basedir = os.path.join( tmp_dir, "dataverse_dst", csv_subdir )
+    csv_basedir = os.path.join( dv_dir, "dataverse_dst", csv_subdir )
     
     dir_list = os.listdir( csv_basedir )
     dir_list.sort()
@@ -2534,8 +2548,8 @@ def compile_filecatalogue( config_parser, language, excel_package, pd_engine ):
         
         logging.info( "handle_name:  %s" % handle_name )
         
-        csv_dir  = os.path.join( tmp_dir, "dataverse_dst", csv_subdir, handle_name )
-        xlsx_dir = os.path.join( tmp_dir, "dataverse_dst", fcat_subdir, handle_name )   # _dst because not from dataverse retrieval
+        csv_dir  = os.path.join( dv_dir, "dataverse_dst", csv_subdir, handle_name )
+        xlsx_dir = os.path.join( dv_dir, "dataverse_dst", fcat_subdir, handle_name )   # _dst because not from dataverse retrieval
         
         logging.info( "csv_dir:  %s" % csv_dir )
         logging.info( "xlsx_dir: %s" % xlsx_dir )

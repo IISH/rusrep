@@ -33,6 +33,8 @@ FL-13-May-2019 cleanup, reorganize
 FL-14-May-2019 filecatalogue download Excel conversion spurious '.0'
 FL-21-Jan-2020 VALUE_NA, VALUE_DOT, VALUE_NONE
 FL-13-Feb-2020 Separate handling for VALUE_DOT; VALUE_NONE => VALUE_MIX
+FL-26-Jun-2020 Separate directories for dataverse and downloads for frontend
+FL-28-Jun-2020 use backend proxy name if present, else backend root name
 
 def loadjson( json_dataurl ):                                   # called by documentation()
 def topic_counts( language, datatype ):                         # called by topics()
@@ -100,6 +102,7 @@ import urllib
 import urllib2
 import zipfile                          # downloads
 
+from backports import configparser
 from configutils import DataFilter
 from copy import deepcopy
 from datetime import date, datetime
@@ -373,8 +376,9 @@ def load_vocab( config_parser, vocab_fname, vocab, pos_rus, pos_eng ):
     logging.info( "load_vocab() vocab_fname: %s" % vocab_fname )
     # if pos_extar is not None, it is needed to make the keys and/or values unique
     handle_name = "hdl_vocabularies"
-    tmp_dir = config_parser.get( "config", "tmppath" )
-    vocab_dir = os.path.join( tmp_dir, "dataverse_dst", "vocab/csv", handle_name )
+    dv_dir = config_parser.get( "config", "dv_dir" )
+    
+    vocab_dir = os.path.join( dv_dir, "dataverse_dst", "vocab/csv", handle_name )
     logging.info( "vocab_dir: %s" % vocab_dir )
     vocab_path = os.path.join( vocab_dir, vocab_fname )
     logging.info( "vocab_path: %s" % vocab_path )
@@ -891,8 +895,8 @@ def json_cache_items( entry_list, params, download_key ):
     logging.debug( "json_cache_items() # entries in entry_list: %d" %  len( entry_list ) )
     logging.debug( "json_cache_items() params: %s" % str( params ) )
     
-    configparser = get_configparser()
-    root = configparser.get( "config", "root" )
+    config_parser = get_configparser()
+    root = config_parser.get( "config", "root" )
     
     json_hash = {}
     json_hash[ "language" ] = params[ "language" ]
@@ -995,10 +999,10 @@ def collect_docs( qinput, download_dir, download_key ):
     
     logging.debug( "datatype0: %s, datatype_: %s" % ( datatype0, datatype_ ) )
     
-    configparser = get_configparser()
-    tmp_dir = configparser.get( "config", "tmppath" )
+    config_parser = get_configparser()
+    dv_dir = config_parser.get( "config", "dv_dir" )
     
-    doc_dir = os.path.join( tmp_dir, "dataverse_dst", "doc", "hdl_documentation" )
+    doc_dir = os.path.join( dv_dir, "dataverse_dst", "doc", "hdl_documentation" )
     doc_list = os.listdir( doc_dir )
     doc_list.sort()
     
@@ -1550,9 +1554,9 @@ def documentation():
     logging.debug( "language: %s" % language )
 
     config_parser = get_configparser()
-    tmp_dir       = config_parser.get( "config", "tmppath" )
+    dv_dir = config_parser.get( "config", "dv_dir" )
 
-    download_dir = os.path.join( tmp_dir, "dataverse_dst/doc" )
+    download_dir = os.path.join( dv_dir, "dataverse_dst/doc" )
     download_fname = "doclist-" + language + ".json"
     download_path = os.path.join( download_dir, download_fname )
     
@@ -1560,7 +1564,7 @@ def documentation():
     logging.debug( "download_fname: %s" % download_fname )
     logging.debug( "download_path: %s" % download_path )
     
-    file_json = codecs.open(download_path, 'r', "utf-8" )
+    file_json = codecs.open( download_path, 'r', "utf-8" )
     docs_json = file_json.read()
     file_json.close()
 
@@ -1590,17 +1594,29 @@ def documentation_dv():
     logging.debug( "datatype: %s, type: %s" % ( datatype, type( datatype ) ) )
     logging.debug( "datafilter: %s" % str( datafilter ) )
 
-    configparser   = get_configparser()
-    dv_host        = configparser.get( "config", "dataverse_root" )
-    api_root       = configparser.get( "config", "api_root" )
-    #ristat_key     = configparser.get( "config", "ristatkey" )
-    ristat_key     = configparser.get( "config", "ristatkey_expired" )
-    ristat_name    = configparser.get( "config", "ristatname" )
-    ristatdocs     = configparser.get( "config", "hdl_documentation" )
+    config_parser = get_configparser()
+    dv_host       = config_parser.get( "config", "dataverse_root" )
+    root          = config_parser.get( "config", "root" )
+    ristat_key    = config_parser.get( "config", "ristatkey" )
+    ristat_name   = config_parser.get( "config", "ristatname" )
+    ristatdocs    = config_parser.get( "config", "hdl_documentation" )
     
     logging.info( "dv_host: %s" % dv_host )
     logging.debug( "ristat_key: %s" % ristat_key )
     logging.info( "ristat_name: %s" % ristat_name )
+    
+    scheme   = "http"
+    use_root = root
+    try:
+        proxy = config_parser.get( "config", "proxy" )
+        if proxy:       # not empty?
+            scheme   = "https"
+            use_root = proxy
+    except:
+        pass
+    
+    api_root = "%s://%s" % ( scheme, use_root )
+    logging.info( "api_root: %s" % api_root )
     
     papers = []
     
@@ -1987,8 +2003,8 @@ def aggregation():
         logging.debug( "aggregated json_string: \n%s" % json_string )
     
     # download dir
-    configparser = get_configparser()
-    tmp_dir = configparser.get( "config", "tmppath" )
+    config_parser = get_configparser()
+    tmp_dir = config_parser.get( "config", "tmppath" )
     download_dir = os.path.join( tmp_dir, "download", download_key )
     if not os.path.exists( download_dir ):
         os.makedirs( download_dir )
@@ -2050,15 +2066,34 @@ def filecatalogdata():
         "hdl_errhs_land"            # ERRHS_7    2 files
     ]
     
-    configparser = get_configparser()
+    config_parser = get_configparser()
     try:
-        config_fname = configparser.config.get( "config_fname" )
+        config_fname = config_parser.config.get( "config_fname" )
         logging.debug( "config_fname: %s" % config_fname )
     except:
-        logging.debug( "configparser: %s" % str( configparser ) )
+        type_, value, tb = sys.exc_info()
+        msg = "%s: %s %s" % ( type_, filecatalogdata, value )
+        logging.error( msg )
+        #sys.stderr.write( "%s\n" % msg )
     
-    tmp_dir    = configparser.get( "config", "tmppath" )
-    time_limit = int( configparser.get( "config", "time_limit" ) )
+    root       = config_parser.get( "config", "root" )
+    dv_dir     = config_parser.get( "config", "dv_dir" )
+    tmp_dir    = config_parser.get( "config", "tmppath" )
+    time_limit = int( config_parser.get( "config", "time_limit" ) )
+    
+    scheme   = "http"
+    use_root = root
+    try:
+        proxy = config_parser.get( "config", "proxy" )
+        if proxy:       # not empty?
+            logging.info( "proxy: %s" % proxy )
+            scheme   = "https"
+            use_root = proxy
+    except:
+        pass
+    
+    api_root = "%s://%s" % ( scheme, use_root )
+    logging.info( "api_root: %s" % api_root )
     
     top_download_dir = os.path.join( tmp_dir, "download" )
     logging.debug( "top_download_dir: %s" % top_download_dir )
@@ -2107,14 +2142,14 @@ def filecatalogdata():
         xlsx_filename = "ERRHS_%s_data_%s%s.xlsx" % ( datatype, base_year, extra )
         logging.debug( "xlsx_filename: %s" % xlsx_filename )
         fcat_subdir = "fcat-" + language
-        xlsx_dir = os.path.join( tmp_dir, "dataverse_dst", fcat_subdir, handle_name )
+        xlsx_dir = os.path.join( dv_dir, "dataverse_dst", fcat_subdir, handle_name )
         xlsx_pathname = os.path.join( xlsx_dir, xlsx_filename )
         
         if os.path.isfile( xlsx_pathname ):
             logging.debug( "copy existing filecat xlsx: %s" % xlsx_pathname )
             shutil.copy2( xlsx_pathname, download_dir )
         else:
-            csv_dir = os.path.join( tmp_dir, "dataverse_dst", csv_subdir, handle_name )
+            csv_dir = os.path.join( dv_dir, "dataverse_dst", csv_subdir, handle_name )
             csv_filename = "ERRHS_%s_data_%s%s.csv" % ( datatype, base_year, extra )
             logging.debug( "csv_filename: %s" % csv_filename )
             
@@ -2136,8 +2171,8 @@ def filecatalogdata():
     logging.debug( "zip_dirname: %s" % zip_dirname )
     shutil.make_archive( zip_dirname, "zip", zip_dirname )
     
-    hostname = gethostname()
-    json_hash = { "url_zip" : hostname + "/service/filecatalogget?zip=" + zip_filename }
+    #hostname = gethostname()
+    json_hash = { "url_zip" : api_root + "/service/filecatalogget?zip=" + zip_filename }
     json_string = json.dumps( json_hash, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
     
     logging.debug( json_string )
@@ -2152,10 +2187,18 @@ def filecatalogget():
     logging.debug( "/filecatalogget" )
     logging.debug( "request.args: %s" % str( request.args ) )
     zip_filename = request.args.get( "zip" )
+    
+    if zip_filename is None:
+        json_hash = { "zip_filename" : "undefined" }
+        json_string = json.dumps( json_hash, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
+        logging.debug( json_string )
+        logging.debug( "/filecatalogget before Response()" )
+        return Response( json_string, mimetype = "application/json; charset=utf-8" )
+        
     logging.debug( "zip_filename: %s" % zip_filename )
 
-    configparser = get_configparser()
-    tmp_dir = configparser.get( "config", "tmppath" )
+    config_parser = get_configparser()
+    tmp_dir = config_parser.get( "config", "tmppath" )
     top_download_dir = os.path.join( tmp_dir, "download" )
     zip_pathname = os.path.join( top_download_dir, zip_filename )
     logging.debug( "zip_pathname: %s" % zip_pathname )
@@ -2170,9 +2213,9 @@ def download():
     time0 = time()      # seconds since the epoch
     logging.debug( "download start: %s" % datetime.now() )
     
-    configparser = get_configparser()
-    dv_host    = configparser.get( "config", "dataverse_root" )
-    ristat_key = configparser.get( "config", "ristatkey" )
+    config_parser = get_configparser()
+    dv_host       = config_parser.get( "config", "dataverse_root" )
+    ristat_key    = config_parser.get( "config", "ristatkey" )
     
     logging.debug( "dv_host: %s" % dv_host )
     logging.debug( "ristat_key: %s" % ristat_key )
@@ -2202,8 +2245,8 @@ def download():
     zipping = True
     logging.debug( "download() zip: %s" % zipping )
     
-    tmp_dir    = configparser.get( "config", "tmppath" )
-    time_limit = int( configparser.get( "config", "time_limit" ) )
+    tmp_dir    = config_parser.get( "config", "tmppath" )
+    time_limit = int( config_parser.get( "config", "time_limit" ) )
     top_download_dir = os.path.join( tmp_dir, "download" )
     logging.debug( "top_download_dir: %s" % top_download_dir )
     cleanup_downloads( top_download_dir, time_limit )       # remove too old downloads
@@ -2318,8 +2361,8 @@ def download():
 def getupdatelog():
     logging.debug( "/logfile" )
     
-    configparser = get_configparser()
-    etl_dir = configparser.get( "config", "etlpath" )
+    config_parser = get_configparser()
+    etl_dir = config_parser.get( "config", "etlpath" )
     
     log_filename = "autoupdate.log"
     log_pathname = os.path.join( etl_dir, log_filename )
