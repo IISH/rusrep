@@ -2188,23 +2188,30 @@ def filecatalogget():
     logging.debug( "/filecatalogget" )
     logging.debug( "request.args: %s" % str( request.args ) )
     zip_filename = request.args.get( "zip" )
+    logging.debug( "zip_filename: %s" % zip_filename )
     
     # check a bit sanity, want .zip, only basename and prevent hacking system files
     if zip_filename is None or zip_filename.startswith( "/" ) or not zip_filename.endswith( ".zip" ):
         json_hash = { "zip_filename" : "?" }
         json_string = json.dumps( json_hash, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
         logging.debug( json_string )
-        logging.debug( "/filecatalogget before Response()" )
+        logging.debug( "/filecatalogget before (invalid 1) Response()" )
         return Response( json_string, mimetype = "application/json; charset=utf-8" )
-        
-    logging.debug( "zip_filename: %s" % zip_filename )
 
     config_parser = get_configparser()
     tmp_dir = config_parser.get( "config", "tmppath" )
     top_download_dir = os.path.join( tmp_dir, "download" )
     zip_pathname = os.path.join( top_download_dir, zip_filename )
     logging.debug( "zip_pathname: %s" % zip_pathname )
-
+    
+    if not os.path.isfile( zip_pathname ):
+        json_hash = { "zip_filename" : "??" }
+        json_string = json.dumps( json_hash, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
+        logging.debug( json_string )
+        logging.debug( "/filecatalogget before (invalid 2) Response()" )
+        return Response( json_string, mimetype = "application/json; charset=utf-8" )
+    
+    logging.debug( "/filecatalogget before Response()" )
     return send_file( zip_pathname, attachment_filename = zip_filename, as_attachment = True )
 # /filecatalogget filecatalogget()
 
