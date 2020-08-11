@@ -35,6 +35,7 @@ FL-21-Jan-2020 VALUE_NA, VALUE_DOT, VALUE_NONE
 FL-13-Feb-2020 Separate handling for VALUE_DOT; VALUE_NONE => VALUE_MIX
 FL-26-Jun-2020 Separate directories for dataverse and downloads for frontend
 FL-28-Jun-2020 use backend proxy name if present, else backend root name
+FL-11-Aug-2020 filecatalogget: check zip filename; prevent hacking
 
 def loadjson( json_dataurl ):                                   # called by documentation()
 def topic_counts( language, datatype ):                         # called by topics()
@@ -2188,8 +2189,9 @@ def filecatalogget():
     logging.debug( "request.args: %s" % str( request.args ) )
     zip_filename = request.args.get( "zip" )
     
-    if zip_filename is None:
-        json_hash = { "zip_filename" : "undefined" }
+    # check a bit sanity, want .zip, only basename and prevent hacking system files
+    if zip_filename is None or zip_filename.startswith( "/" ) or not zip_filename.endswith( ".zip" ):
+        json_hash = { "zip_filename" : "?" }
         json_string = json.dumps( json_hash, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
         logging.debug( json_string )
         logging.debug( "/filecatalogget before Response()" )
