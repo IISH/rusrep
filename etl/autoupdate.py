@@ -40,7 +40,7 @@ FL-09-Dec-2019 Eliminate now redundant filtereing before postgres insert
 FL-18-Dec-2019 AUTOUPDATE bug
 FL-03-Mar-2020 Use (also) yaml config
 FL-25-Jun-2020 yaml config ordering changed (db's at the end)
-FL-28-Jun-2020 api_root from proxy or root
+FL-28-Aug-2020 download urls from proxy and/or root
 
 TODO
 - Use pyDataverse from PyPI
@@ -50,7 +50,7 @@ TODO
 def empty_dir( dst_dir ):
 def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", check_ts = False ):
 def loadjson( json_dataurl ):
-def documents_info( config_parser, language ):
+def documents_info( config_parser, language, url_start, download_fname ):
 def update_documentation( config_parser ):
 def check_autoupdate( config_parser, dv_format ):
 def retrieve_vocabularies( config_parser, dv_format, check_ts = False ):
@@ -467,13 +467,12 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", ch
 
 
 
-def documents_info( config_parser, language ):
+def documents_info( config_parser, language, url_start, download_fname ):
     logging.debug( "documents_info()" )
     
     dv_dir      = config_parser.get( "config", "dv_dir" )
     dv_host     = config_parser.get( "config", "dataverse_root" )
     dv_version  = config_parser.get( "config", "dv_version" )
-    root        = config_parser.get( "config", "root" )
     ristat_key  = config_parser.get( "config", "ristatkey" )
     ristat_name = config_parser.get( "config", "ristatname" )
     ristatdocs  = config_parser.get( "config", "hdl_documentation" )
@@ -482,21 +481,7 @@ def documents_info( config_parser, language ):
     logging.debug( "ristat_key: %s" % ristat_key )
     logging.info( "ristat_name: %s" % ristat_name )
     
-    scheme   = "http"
-    use_root = root
-    try:
-        proxy = config_parser.get( "config", "proxy" )
-        if proxy:       # not empty?
-            scheme   = "https"
-            use_root = proxy
-    except:
-        pass
-    
-    api_root = "%s://%s" % ( scheme, use_root )
-    logging.info( "api_root: %s" % api_root )
-    
     download_dir = os.path.join( dv_dir, "dataverse_src/doc" )
-    download_fname = "doclist-" + language + ".json"
     download_path = os.path.join( download_dir, download_fname )
     
     logging.debug( "download_dir: %s" % download_dir )
@@ -555,7 +540,7 @@ def documents_info( config_parser, language ):
                 
                 paperitem[ "id" ] = str( dataFile[ "id" ] )
                 paperitem[ "name" ] = filename
-                paperitem[ "url" ] = "%s/service/download?id=%s" % ( api_root, paperitem[ "id" ] )
+                paperitem[ "url" ] = "%s/service/download?id=%s" % ( url_start, paperitem[ "id" ] )
                 logging.debug( "paperitem: %s" % paperitem )
                 
                 if datatype != "":      # use datatype to limit the returned documents
@@ -626,8 +611,39 @@ def update_documentation( config_parser ):
     if ndoc == 0:
         logging.info( "no documents, nothing downloaded." )
     
-    for language in [ "ru", "en" ]:
-        documents_info( config_parser, language )
+    # downloads directly from backend
+    host_dict = {
+        "server" : "local",
+        "scheme" : "http",
+        "fqdn"   : config_parser.get( "config", "root" ) # Fully Qualified Domain Name
+    }
+    host_dicts = [ host_dict ]
+    
+    # downloads via proxy
+    try:
+        proxy = config_parser.get( "config", "proxy" )
+        if proxy:       # not empty?
+            proxy_dict = {
+                "server" : "proxy",
+                "scheme" : "https",
+                "fqdn"   : proxy
+            }
+            host_dicts.append( proxy_dict )
+    except:
+        pass
+    
+    for host_dict in host_dicts:
+        server = host_dict[ "server" ]
+        scheme = host_dict[ "scheme" ]
+        fqdn   = host_dict[ "fqdn" ]
+        url_start = "%s://%s" % ( scheme, fqdn )
+        logging.info( "url_start: %s" % url_start )
+        
+        for language in [ "ru", "en" ]:
+            download_fname = "doclist-%s-%s.json" % ( language, server )
+            logging.info( "download_fname: %s" % download_fname )
+            
+            documents_info( config_parser, language, url_start, download_fname )
 
 
 
@@ -2932,6 +2948,7 @@ if __name__ == "__main__":
     DO_FILE_CATALOGUE    = True   # -10- ERRHS data: csv -> filecatalogue xlsx
     
     # DO_* can be overruled by yaml config
+    #yaml_config_path = os.path.join( os.getcwd(), "autoupdate_do1.yaml" )
     yaml_config_path = os.path.join( os.getcwd(), "autoupdate.yaml" )
     logging.info( "YAML config file: %s" % yaml_config_path )
     
