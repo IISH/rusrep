@@ -36,6 +36,7 @@ FL-13-Feb-2020 Separate handling for VALUE_DOT; VALUE_NONE => VALUE_MIX
 FL-26-Jun-2020 Separate directories for dataverse and downloads for frontend
 FL-28-Jun-2020 use backend proxy name if present, else backend root name
 FL-11-Aug-2020 filecatalogget: check zip filename; prevent hacking
+FL-31-Aug-2020 switch between local and proxy return URLs (unfinished)
 
 def loadjson( json_dataurl ):                                   # called by documentation()
 def topic_counts( language, datatype ):                         # called by topics()
@@ -1557,8 +1558,10 @@ def documentation():
     config_parser = get_configparser()
     dv_dir = config_parser.get( "config", "dv_dir" )
 
+    # TODO: switch between local and proxy doclist!
+    # TODO: switch between local and proxy return URLs elsewhere !
     download_dir = os.path.join( dv_dir, "dataverse_dst/doc" )
-    download_fname = "doclist-" + language + ".json"
+    download_fname = "doclist-%s-proxy.json" % language
     download_path = os.path.join( download_dir, download_fname )
     
     logging.debug( "download_dir: %s" % download_dir )

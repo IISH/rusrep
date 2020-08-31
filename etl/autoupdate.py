@@ -40,7 +40,7 @@ FL-09-Dec-2019 Eliminate now redundant filtereing before postgres insert
 FL-18-Dec-2019 AUTOUPDATE bug
 FL-03-Mar-2020 Use (also) yaml config
 FL-25-Jun-2020 yaml config ordering changed (db's at the end)
-FL-28-Aug-2020 download urls from proxy and/or root
+FL-31-Aug-2020 download urls from proxy and/or root
 
 TODO
 - Use pyDataverse from PyPI
@@ -600,6 +600,17 @@ def documents_info( config_parser, language, url_start, download_fname ):
 def update_documentation( config_parser ):
     logging.info( "%s update_documentation()" % __file__ )
     
+    dv_dir = config_parser.get( "config", "dv_dir" )
+    dv_dir_src = "dataverse_src"
+    doc_sub_dir = "doc"
+    doc_dir = os.path.join( dv_dir, dv_dir_src, doc_sub_dir )
+    
+    # clear/create top-level doc dir
+    if os.path.exists( doc_dir ):
+        empty_dir( doc_dir )        # remove previous files
+    if not os.path.exists( doc_dir ):
+        os.makedirs( doc_dir )
+    
     handle_name = "hdl_documentation"
     logging.info( "retrieving documents from dataverse for handle name %s ..." % handle_name )
     dst_dir = "doc"
@@ -707,17 +718,38 @@ def retrieve_vocabularies( config_parser, dv_format, check_ts = False ):
 def copy_doc_src2dst():
     logging.info( "%s copy_doc_src2dst()" % __file__ )
     # Copy documentation from source (dataverse download) to destination directory (work dir)
+    
     dv_dir = config_parser.get( "config", "dv_dir" )
     dv_dir_src = "dataverse_src"
     dv_dir_dst = "dataverse_dst"
-    doc_dir = "doc"
+    doc_sub_dir = "doc"
+    
+    # clear/create top-level doc dir
+    doc_dir = os.path.join( dv_dir, dv_dir_dst, doc_sub_dir )
+    if os.path.exists( doc_dir ):
+        empty_dir( doc_dir )        # remove previous files
+    if not os.path.exists( doc_dir ):
+        os.makedirs( doc_dir )
+    
+    # copy ru & en json listing files
+    src_dir = os.path.join( dv_dir, dv_dir_src, doc_sub_dir )
+    dst_dir = os.path.join( dv_dir, dv_dir_dst, doc_sub_dir )
+    
+    for filename in [ "doclist-en-local.json", "doclist-ru-local.json", "doclist-en-proxy.json", "doclist-ru-proxy.json" ]:
+        path_in  = os.path.join( src_dir, filename )
+        if os.path.exists( path_in ):
+            path_out = os.path.join( dst_dir, filename )
+            copy2( path_in, path_out )
+    
+    # copy ru & en doc files
     handle_name = "hdl_documentation"
     
-    src_dir = os.path.join( dv_dir, dv_dir_src, doc_dir, handle_name )
-    dst_dir = os.path.join( dv_dir, dv_dir_dst, doc_dir, handle_name )
+    src_dir = os.path.join( dv_dir, dv_dir_src, doc_sub_dir, handle_name )
+    dst_dir = os.path.join( dv_dir, dv_dir_dst, doc_sub_dir, handle_name )
     logging.info( "copying dataverse doc files from: %s" % src_dir )
     logging.info( "copying dataverse doc files to:   %s" % dst_dir )
-
+    
+    # clear/create doc dst_dir
     if os.path.exists( dst_dir ):
         empty_dir( dst_dir )        # remove previous files
     if not os.path.exists( dst_dir ):
@@ -734,15 +766,6 @@ def copy_doc_src2dst():
         copy2( path_in, path_out )
 
     logging.info( "%d files copied" % len( dir_list ) )
-
-    # copy ru & en listing files
-    src_dir = os.path.join( dv_dir, dv_dir_src, doc_dir )
-    dst_dir = os.path.join( dv_dir, dv_dir_dst, doc_dir )
-    
-    for filename in [ "doclist-en.json", "doclist-ru.json" ]:
-        path_in  = os.path.join( src_dir, filename )
-        path_out = os.path.join( dst_dir, filename )
-        copy2( path_in, path_out )
 
 
 
