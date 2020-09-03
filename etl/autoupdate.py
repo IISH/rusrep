@@ -40,7 +40,7 @@ FL-09-Dec-2019 Eliminate now redundant filtereing before postgres insert
 FL-18-Dec-2019 AUTOUPDATE bug
 FL-03-Mar-2020 Use (also) yaml config
 FL-25-Jun-2020 yaml config ordering changed (db's at the end)
-FL-31-Aug-2020 download urls from proxy and/or root
+FL-01-Sep-2020 download urls from proxy and/or root
 
 TODO
 - Use pyDataverse from PyPI
@@ -626,13 +626,13 @@ def update_documentation( config_parser ):
     host_dict = {
         "server" : "local",
         "scheme" : "http",
-        "fqdn"   : config_parser.get( "config", "root" ) # Fully Qualified Domain Name
+        "fqdn"   : config_parser.get( "config", "host_fqdn" )
     }
     host_dicts = [ host_dict ]
     
     # downloads via proxy
     try:
-        proxy = config_parser.get( "config", "proxy" )
+        proxy = config_parser.get( "config", "proxy_fqdn" )
         if proxy:       # not empty?
             proxy_dict = {
                 "server" : "proxy",

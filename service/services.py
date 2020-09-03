@@ -36,7 +36,7 @@ FL-13-Feb-2020 Separate handling for VALUE_DOT; VALUE_NONE => VALUE_MIX
 FL-26-Jun-2020 Separate directories for dataverse and downloads for frontend
 FL-28-Jun-2020 use backend proxy name if present, else backend root name
 FL-11-Aug-2020 filecatalogget: check zip filename; prevent hacking
-FL-31-Aug-2020 switch between local and proxy return URLs (unfinished)
+FL-03-Sep-2020 switch between local and proxy return URLs
 
 def loadjson( json_dataurl ):                                   # called by documentation()
 def topic_counts( language, datatype ):                         # called by topics()
@@ -50,7 +50,7 @@ def aggregate_historic_items( params )                          # called by aggr
 def aggregate_modern_items( params )                            # called by aggregation()
 def strip_subclasses( path ):                                   # called by aggregation()
 def group_levels( path_list ):                                  # called by aggregation()
-def json_cache_items( entry_list, params, download_key ):       # called by aggregation() and indicators()
+def json_cache_items( entry_list, params, download_root, download_key ):    # called by aggregation() and indicators()
 def collect_docs( params, download_dir, download_key ):         # called by aggregation() and filecatalogdata()
 def show_record_dict( dict_name, record_dict, sort = False ):   # called by collect_records()
 def collect_records( record_dict_total, prefix, path_dict, params, eng_data, sql_names, sql_resp ): # called by aggregate_*_items()
@@ -58,6 +58,8 @@ def add_missing_valstr( record_dict_total, params ):            # called by aggr
 def sort_records( record_dict_total, base_year = None ):        # called by aggregate_*_items()
 def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):  # called by filecatalogdata()
 def cleanup_downloads( download_dir, time_limit ):              # called by download()
+def get_api_root():
+def get_download_root( headers ):
 
 @app.route( '/' )                                               def test():
 @app.route( "/documentation" )                                  def documentation():
@@ -888,7 +890,7 @@ def group_levels( path_list ):
 # group_levels()
 
 
-def json_cache_items( entry_list, params, download_key ):
+def json_cache_items( entry_list, params, download_root, download_key ):
     # cache entry_list in mongodb with download_key as key
     
     time0 = time()      # seconds since the epoch
@@ -896,9 +898,6 @@ def json_cache_items( entry_list, params, download_key ):
     
     logging.debug( "json_cache_items() # entries in entry_list: %d" %  len( entry_list ) )
     logging.debug( "json_cache_items() params: %s" % str( params ) )
-    
-    config_parser = get_configparser()
-    root = config_parser.get( "config", "root" )
     
     json_hash = {}
     json_hash[ "language" ] = params[ "language" ]
@@ -910,7 +909,7 @@ def json_cache_items( entry_list, params, download_key ):
         json_hash[ "datatype" ]       = params[ "datatype" ]
         json_hash[ "base_year" ]      = params[ "base_year" ]
     
-    json_hash[ "url" ] = "%s/service/download?key=%s" % ( root, download_key )
+    json_hash[ "url" ] = "%s/service/download?key=%s" % ( download_root, download_key )
     logging.debug( "json_hash: %s" % json_hash )
     
     json_string = json.dumps( json_hash, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
@@ -1528,6 +1527,43 @@ def cleanup_downloads( download_dir, time_limit ):
         logging.info( "# of download dirs deleted: %d" % d_deleted )
 # cleanup_downloads()
 
+
+def get_api_root():
+    # default local host, but proxy if present
+    scheme = "http"
+    config_parser = get_configparser()
+    server = config_parser.get( "config", "host_fqdn" )
+    
+    try:
+        proxy = config_parser.get( "config", "proxy_fqdn" )
+        if proxy:
+            scheme = "https"
+            server = proxy
+    except:
+        pass
+    
+    api_root = "%s://%s" % ( scheme, server )
+    logging.info( "api_root: %s" % api_root )
+    
+    return api_root
+
+
+def get_download_root( headers ):
+    # same as request host, https if proxy
+    config_parser = get_configparser()
+    proxy_fqdn    = config_parser.get( "config", "proxy_fqdn" )
+    request_host  = headers.get( "Host" )
+    
+    scheme = "http"
+    if request_host == proxy_fqdn:
+        scheme = "https"
+    
+    download_root = "%s://%s" % ( scheme, request_host )
+    logging.info( "download_root: %s" % download_root )
+    
+    return download_root
+
+
 # ==============================================================================
 app = Flask( __name__ )
 #app.config[ "DEBUG" ] = True
@@ -1540,7 +1576,6 @@ logging.debug( __file__ )
 @app.route( '/' )
 def test():
     logging.debug( "test()" )
-    #description = 'Russian Repository API Service v.0.1<br>/service/regions<br>/service/topics<br>/service/data<br>/service/histclasses<br>/service/years<br>/service/maps (reserved)<br>'
     description = "Russian Repository API Service v.1.0<br>"
     return description
 # / test()
@@ -1551,17 +1586,22 @@ def test():
 def documentation():
     logging.debug( "/documentation" )
     logging.debug( "request.args: %s" % request.args )
+    logging.info( "request.headers: %s" % request.headers )
 
     language = request.args.get( "lang", "en" )
     logging.debug( "language: %s" % language )
 
     config_parser = get_configparser()
     dv_dir = config_parser.get( "config", "dv_dir" )
-
-    # TODO: switch between local and proxy doclist!
-    # TODO: switch between local and proxy return URLs elsewhere !
+    proxy_fqdn = config_parser.get( "config", "proxy_fqdn" )
+    
+    server = "local"        # Assume returning local URLs
+    request_host = request.headers.get( "Host" )
+    if request_host == proxy_fqdn:
+        server = "proxy"    # No, return proxy URLs
+    
     download_dir = os.path.join( dv_dir, "dataverse_dst/doc" )
-    download_fname = "doclist-%s-proxy.json" % language
+    download_fname = "doclist-%s-%s.json" % ( language, server )
     download_path = os.path.join( download_dir, download_fname )
     
     logging.debug( "download_dir: %s" % download_dir )
@@ -1575,140 +1615,6 @@ def documentation():
     logging.debug( docs_json )
     return Response( docs_json, mimetype = "application/json; charset=utf-8" )
 # /documentation documentation()
-
-
-
-def documentation_dv():
-    logging.debug( "/documentation_dv" )
-    #logging.debug( "Python version: %s" % sys.version )
-
-    settings = DataFilter( request.args )
-    
-    logging.debug( "request.args: %s" % request.args )
-    logging.debug( "settings: %s" % settings )
-    
-    datatype = ""
-    try:
-        datatype = int( request.args.get( "datatype" ) )
-    except:
-        pass
-    
-    datafilter = settings.datafilter
-    
-    logging.debug( "datatype: %s, type: %s" % ( datatype, type( datatype ) ) )
-    logging.debug( "datafilter: %s" % str( datafilter ) )
-
-    config_parser = get_configparser()
-    dv_host       = config_parser.get( "config", "dataverse_root" )
-    root          = config_parser.get( "config", "root" )
-    ristat_key    = config_parser.get( "config", "ristatkey" )
-    ristat_name   = config_parser.get( "config", "ristatname" )
-    ristatdocs    = config_parser.get( "config", "hdl_documentation" )
-    
-    logging.info( "dv_host: %s" % dv_host )
-    logging.debug( "ristat_key: %s" % ristat_key )
-    logging.info( "ristat_name: %s" % ristat_name )
-    
-    scheme   = "http"
-    use_root = root
-    try:
-        proxy = config_parser.get( "config", "proxy" )
-        if proxy:       # not empty?
-            scheme   = "https"
-            use_root = proxy
-    except:
-        pass
-    
-    api_root = "%s://%s" % ( scheme, use_root )
-    logging.info( "api_root: %s" % api_root )
-    
-    papers = []
-    
-    try:
-        connection = Connection( dv_host, ristat_key )
-        logging.debug( "connection succeeded" )
-    except:
-        logging.error( "connection failed" )
-        #type_, value, tb = sys.exc_info()
-        #logging.error( "%s" % value )
-        etype = sys.exc_info()[ 0:1 ]
-        value = sys.exc_info()[ 1:2 ]
-        logging.error( "etype: %s, value: %s" % ( etype, value ) )
-        return Response( json.dumps( papers ), mimetype = "application/json; charset=utf-8" )
-    
-    dataverse = connection.get_dataverse( ristat_name )
-    if not dataverse:
-        logging.info( "ristat_key: %s" % ristat_key )
-        logging.error( "COULD NOT GET A DATAVERSE CONNECTION" )
-        return Response( json.dumps( papers ), mimetype = "application/json; charset=utf-8" )
-    
-    logging.debug( "get_dataverse succeeded" )
-    logging.debug( "title: %s" % dataverse.title )
-    
-    name_start = "ERRHS_" + str( datatype ) + "_"
-    logging.debug( "name_start: %s" % name_start )
-    
-    for item in dataverse.get_contents():
-        handle = str( item[ "protocol" ] ) + ':' + str( item[ "authority" ] ) + '/' + str( item[ "identifier" ] )
-        if handle == ristatdocs:
-            datasetid = item[ "id" ]
-            url = "http://" + dv_host + "/api/datasets/" + str( datasetid ) + "/?&key=" + str( ristat_key )
-            logging.debug( "url: %s" % url )
-            dataframe = loadjson( url )
-            for files in dataframe[ "data" ][ "latestVersion" ][ "files" ]:
-                paperitem = {}
-                paperitem[ "id" ] = str( files[ "datafile" ][ "id" ] )
-                paperitem[ "name" ] = str( files[ "datafile" ][ "name" ] )
-                paperitem[ "url" ] = "%s/service/download?id=%s" % ( api_root, paperitem[ "id" ] )
-                logging.debug( "paperitem: %s" % paperitem )
-                
-                name = str( files[ "datafile" ][ "name" ] )
-                
-                if datatype != "":      # use datatype to limit the returned documents
-                    # find substring between the first two underscores
-                    sub_name = ""
-                    p1 = name.find( "_" )
-                    if p1 != -1:
-                        p2 = name.find( "_", p1+1 )
-                        if p2 != -1:
-                            sub_name = name[ p1+1:p2 ]
-                            logging.debug( "sub_name: %s" % sub_name )
-                            try:
-                                sub_digits = int( sub_name )
-                                if sub_digits != datatype:
-                                    continue    # datatype does not match: skip
-                            except:
-                                pass            # allow
-                
-                try:
-                    if "lang" in settings.datafilter:
-                        varpat = r"(_%s)" % ( settings.datafilter[ "lang" ] )
-                        pattern = re.compile( varpat, re.IGNORECASE )
-                        found = pattern.findall( paperitem[ "name" ] )
-                        if found:
-                            papers.append( paperitem )
-                    else:   # paperitem without language specified: add
-                        papers.append( paperitem )
-                    
-                    if "topic" in settings.datafilter:
-                        varpat = r"(_%s_.+_\d+_+%s.|class|region)" % ( settings.datafilter[ "topic" ], settings.datafilter[ "lang" ] )
-                        pattern = re.compile( varpat, re.IGNORECASE )
-                        found = pattern.findall( paperitem[ "name" ] )
-                        if found:
-                            papers.append( paperitem )
-                    else:
-                        if "lang" not in settings.datafilter: 
-                            papers.append( paperitem )
-                except:
-                    if "lang" not in settings.datafilter:
-                        papers.append( paperitem )
-    
-    logging.debug( "papers in response:" )
-    for paper in papers:
-        logging.debug( paper )
-    
-    return Response( json.dumps( papers ), mimetype = "application/json; charset=utf-8" )
-# /documentation documentation_dv()
 
 
 # Topics - Get topics and process them as terms for GUI
@@ -1829,8 +1735,11 @@ def histclasses():
     logging.debug( "histclasses() request.args: %s" % str( request.args ) )
     
     language  = request.args.get( "language" )
-    datatype  = request.args.get( "datatype" )
-    base_year = request.args.get( "base_year" )
+    datatype  = request.args.get( "datatype", "" )
+    base_year = request.args.get( "base_year", "1795" )
+    
+    if not language in [ "en", "ru" ]:
+        language = "en"
     
     vocab_type = "historical"
     data = load_vocabulary( vocab_type, language, datatype, base_year )
@@ -1847,8 +1756,11 @@ def classes():
     logging.debug( "classes() request.args: %s" % str( request.args ) )
     
     language  = request.args.get( "language" )
-    datatype  = request.args.get( "datatype" )
-    base_year = request.args.get( "base_year" )
+    datatype  = request.args.get( "datatype", "" )
+    base_year = request.args.get( "base_year", "1795" )
+    
+    if not language in [ "en", "ru" ]:
+        language = "en"
     
     vocab_type = "modern"
     data = load_vocabulary( vocab_type, language, datatype, base_year )
@@ -1988,6 +1900,8 @@ def aggregation():
             entry_list_sorted = aggregate_modern_items( params )
     # end classification
     
+    download_root = get_download_root( request.headers )
+    
     # download key
     uuid4 = str( uuid.uuid4() )
     logging.debug( "uuid4: %s" % uuid4 )
@@ -1995,9 +1909,7 @@ def aggregation():
     #download_key = "%s-%s-%s-%s=%s" % ( language, classification[ 0 ], datatype, base_year, uuid4 )
     logging.debug( "download_key: %s" % download_key )
     
-    #json_string = str( "{}" )
-    #cache_except = None
-    json_string, cache_except = json_cache_items( entry_list_sorted, params, download_key )
+    json_string, cache_except = json_cache_items( entry_list_sorted, params, download_root, download_key )
     #json_string, cache_except = json_cache_records( entry_list_sorted, params, download_key )  # TODO
     
     if cache_except is not None:
@@ -2054,10 +1966,7 @@ def filecatalogdata():
         if key.startswith( "subtopics" ):
             subtopics.append( value )
     
-    language = args.get( "lang" )
-    if language is None:
-        language = "en"
-    
+    language = args.get( "lang", "en" )
     logging.debug( "language: %s" % language )
     
     handle_names = [                # per 2019.05.13
@@ -2080,24 +1989,9 @@ def filecatalogdata():
         logging.error( msg )
         #sys.stderr.write( "%s\n" % msg )
     
-    root       = config_parser.get( "config", "root" )
     dv_dir     = config_parser.get( "config", "dv_dir" )
     tmp_dir    = config_parser.get( "config", "tmppath" )
     time_limit = int( config_parser.get( "config", "time_limit" ) )
-    
-    scheme   = "http"
-    use_root = root
-    try:
-        proxy = config_parser.get( "config", "proxy" )
-        if proxy:       # not empty?
-            logging.info( "proxy: %s" % proxy )
-            scheme   = "https"
-            use_root = proxy
-    except:
-        pass
-    
-    api_root = "%s://%s" % ( scheme, use_root )
-    logging.info( "api_root: %s" % api_root )
     
     top_download_dir = os.path.join( tmp_dir, "download" )
     logging.debug( "top_download_dir: %s" % top_download_dir )
@@ -2175,8 +2069,9 @@ def filecatalogdata():
     logging.debug( "zip_dirname: %s" % zip_dirname )
     shutil.make_archive( zip_dirname, "zip", zip_dirname )
     
-    #hostname = gethostname()
-    json_hash = { "url_zip" : api_root + "/service/filecatalogget?zip=" + zip_filename }
+    download_root = get_download_root( request.headers )
+    
+    json_hash = { "url_zip" : download_root + "/service/filecatalogget?zip=" + zip_filename }
     json_string = json.dumps( json_hash, encoding = "utf8", ensure_ascii = False, sort_keys = True, indent = 4 )
     
     logging.debug( json_string )
