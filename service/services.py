@@ -37,6 +37,7 @@ FL-26-Jun-2020 Separate directories for dataverse and downloads for frontend
 FL-28-Jun-2020 use backend proxy name if present, else backend root name
 FL-11-Aug-2020 filecatalogget: check zip filename; prevent hacking
 FL-03-Sep-2020 switch between local and proxy return URLs
+FL-30-Sep-2020 No default base_year in /classes!
 
 def loadjson( json_dataurl ):                                   # called by documentation()
 def topic_counts( language, datatype ):                         # called by topics()
@@ -222,48 +223,22 @@ def load_vocabulary( vocab_type, language, datatype, base_year ):
     logging.debug( "load_vocabulary() vocab_type: %s, language: %s, datatype: %s, base_year: %s" % 
         ( vocab_type, language, datatype, base_year ) )
     
-    vocab_filter = {}
-    
     if vocab_type == "topics":
         vocab_name = "ERRHS_Vocabulary_topics"
     
     elif vocab_type == "regions":
         vocab_name = "ERRHS_Vocabulary_regions"
-        if base_year:
-            vocab_filter[ "basisyear" ] = base_year
     
     elif vocab_type == "historical":
         vocab_name = "ERRHS_Vocabulary_histclasses"
-        if datatype:
-            vocab_filter[ "DATATYPE" ] = datatype
-        if base_year:
-            vocab_filter[ "YEAR" ] = base_year
     
     elif vocab_type == "modern":
         vocab_name = "ERRHS_Vocabulary_modclasses"
-        if datatype:
-            vocab_filter[ "DATATYPE" ] = "MOD_" + datatype
     
     logging.debug( "vocab_name: %s" % vocab_name )
-    logging.debug( "vocab_filter: %s" % vocab_filter )
     
     eng_data = {}
     
-    """
-    if do_translate and language == "en":
-    #if language == "en":
-        eng_data = translate_vocabulary( vocab_filter )
-        logging.debug( "translate_vocabulary eng_data items: %d" % len( eng_data ) )
-        logging.debug( "eng_data: %s" % eng_data )
-        
-        units = translate_vocabulary( { "vocabulary": "ERRHS_Vocabulary_units" } )
-        logging.debug( "translate_vocabulary units items: %d" % len( units ) )
-        logging.debug( "units: %s" % units )
-        
-        for item in units:
-            eng_data[ item ] = units[ item ]
-            #logging.debug( "%s => %s" % ( item, units[ item ] ) )
-    """
     
     params = {}
     if vocab_type == "topics":
@@ -1757,7 +1732,7 @@ def classes():
     
     language  = request.args.get( "language" )
     datatype  = request.args.get( "datatype", "" )
-    base_year = request.args.get( "base_year", "1795" )
+    base_year = request.args.get( "base_year", "" )     # NO default base_year, leave empty
     
     if not language in [ "en", "ru" ]:
         language = "en"
