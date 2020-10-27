@@ -41,6 +41,7 @@ FL-18-Dec-2019 AUTOUPDATE bug
 FL-03-Mar-2020 Use (also) yaml config
 FL-25-Jun-2020 yaml config ordering changed (db's at the end)
 FL-01-Sep-2020 download urls from proxy and/or root
+FL-27-Oct-2020 Dataverse retrieve: skip dv_format for non-tabular data
 
 TODO
 - Use pyDataverse from PyPI
@@ -393,8 +394,8 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", ch
                 
                 paperitem = {}
                 paperitem[ 'id' ]   = str( dataFile[ 'id' ] )
-                originalFormatLabel = str( dataFile.get( 'originalFormatLabel', "" ) )
-                # originalFormatLabel is no longer returned with new dataverse. 
+                originalFormatLabel = dataFile.get( 'originalFormatLabel', "" )
+                contentType         = dataFile.get( "contentType", "" )
                 
                 basename, ext = os.path.splitext( filename )
                 
@@ -410,8 +411,14 @@ def documents_by_handle( config_parser, handle_name, dst_dir, dv_format = "", ch
                 
                 url  = "https://%s/api/access/datafile/%s" % ( dv_host, paperitem[ 'id' ] )
                 url += "?&key=%s&show_entity_ids=true&q=authorName:*" % str( ristat_key )
-                if not dv_format == "":
+                
+                # FL-27-Oct-2020
+                # https://github.com/IQSS/dataverse/issues/6408
+                # "The API guides already specify that the format query parameter is only available for tabular data"
+                # => skip format= for non-tabular data; we now get an error if we don't skip.
+                if ext == ".tab" and contentType == "text/tab-separated-values":
                     url += "&format=original"
+                
                 logging.debug( url )
                 
                 #filename = paperitem[ 'name' ]
