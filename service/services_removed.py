@@ -22,6 +22,7 @@ def filecat_subtopic( qinput, cursor, datatype, base_year ):
 def translate_classes( cursor, classinfo ):
 def load_data( cursor, year, datatype, region, debug ):
 def rdf_convertor( url ):
+def documentation_dv():
 
 @app.route( "/export" )                                         def export():
 @app.route( "/filecatalog", methods = [ 'POST', 'GET' ] )       def filecatalog():
@@ -1333,5 +1334,138 @@ def maps():
     
     return Response( json_response, mimetype = "application/json; charset=utf-8" )
 
+
+
+def documentation_dv():
+    logging.debug( "documentation_dv()" )
+
+    settings = DataFilter( request.args )
+    
+    logging.debug( "request.args: %s" % request.args )
+    logging.debug( "settings: %s" % settings )
+    
+    datatype = ""
+    try:
+        datatype = int( request.args.get( "datatype" ) )
+    except:
+        pass
+    
+    datafilter = settings.datafilter
+    
+    logging.debug( "datatype: %s, type: %s" % ( datatype, type( datatype ) ) )
+    logging.debug( "datafilter: %s" % str( datafilter ) )
+
+    config_parser = get_configparser()
+    dv_host       = config_parser.get( "config", "dataverse_root" )
+    host_fqdn     = config_parser.get( "config", "host_fqdn" )
+    proxy_fqdn    = config_parser.get( "config", "proxy_fqdn" )
+    ristat_key    = config_parser.get( "config", "ristatkey" )
+    ristat_name   = config_parser.get( "config", "ristatname" )
+    ristatdocs    = config_parser.get( "config", "hdl_documentation" )
+    
+    logging.info( "dv_host: %s" % dv_host )
+    logging.debug( "ristat_key: %s" % ristat_key )
+    logging.info( "ristat_name: %s" % ristat_name )
+    
+    # default host_fqdn, but proxy_fqdn if present
+    scheme = "http"
+    server = host_fqdn
+    try:
+        if proxy_fqdn:       # not empty?
+            scheme = "https"
+            server = proxy_fqdn
+    except:
+        pass
+    
+    api_root = "%s://%s" % ( scheme, server )
+    logging.info( "api_root: %s" % api_root )
+    
+    papers = []
+    
+    try:
+        connection = Connection( dv_host, ristat_key )
+        logging.debug( "connection succeeded" )
+    except:
+        logging.error( "connection failed" )
+        #type_, value, tb = sys.exc_info()
+        #logging.error( "%s" % value )
+        etype = sys.exc_info()[ 0:1 ]
+        value = sys.exc_info()[ 1:2 ]
+        logging.error( "etype: %s, value: %s" % ( etype, value ) )
+        return Response( json.dumps( papers ), mimetype = "application/json; charset=utf-8" )
+    
+    dataverse = connection.get_dataverse( ristat_name )
+    if not dataverse:
+        logging.info( "ristat_key: %s" % ristat_key )
+        logging.error( "COULD NOT GET A DATAVERSE CONNECTION" )
+        return Response( json.dumps( papers ), mimetype = "application/json; charset=utf-8" )
+    
+    logging.debug( "get_dataverse succeeded" )
+    logging.debug( "title: %s" % dataverse.title )
+    
+    name_start = "ERRHS_" + str( datatype ) + "_"
+    logging.debug( "name_start: %s" % name_start )
+    
+    for item in dataverse.get_contents():
+        handle = str( item[ "protocol" ] ) + ':' + str( item[ "authority" ] ) + '/' + str( item[ "identifier" ] )
+        if handle == ristatdocs:
+            datasetid = item[ "id" ]
+            url = "http://" + dv_host + "/api/datasets/" + str( datasetid ) + "/?&key=" + str( ristat_key )
+            logging.debug( "url: %s" % url )
+            dataframe = loadjson( url )
+            for files in dataframe[ "data" ][ "latestVersion" ][ "files" ]:
+                paperitem = {}
+                paperitem[ "id" ] = str( files[ "datafile" ][ "id" ] )
+                paperitem[ "name" ] = str( files[ "datafile" ][ "name" ] )
+                paperitem[ "url" ] = "%s/service/download?id=%s" % ( api_root, paperitem[ "id" ] )
+                logging.debug( "paperitem: %s" % paperitem )
+                
+                name = str( files[ "datafile" ][ "name" ] )
+                
+                if datatype != "":      # use datatype to limit the returned documents
+                    # find substring between the first two underscores
+                    sub_name = ""
+                    p1 = name.find( "_" )
+                    if p1 != -1:
+                        p2 = name.find( "_", p1+1 )
+                        if p2 != -1:
+                            sub_name = name[ p1+1:p2 ]
+                            logging.debug( "sub_name: %s" % sub_name )
+                            try:
+                                sub_digits = int( sub_name )
+                                if sub_digits != datatype:
+                                    continue    # datatype does not match: skip
+                            except:
+                                pass            # allow
+                
+                try:
+                    if "lang" in settings.datafilter:
+                        varpat = r"(_%s)" % ( settings.datafilter[ "lang" ] )
+                        pattern = re.compile( varpat, re.IGNORECASE )
+                        found = pattern.findall( paperitem[ "name" ] )
+                        if found:
+                            papers.append( paperitem )
+                    else:   # paperitem without language specified: add
+                        papers.append( paperitem )
+                    
+                    if "topic" in settings.datafilter:
+                        varpat = r"(_%s_.+_\d+_+%s.|class|region)" % ( settings.datafilter[ "topic" ], settings.datafilter[ "lang" ] )
+                        pattern = re.compile( varpat, re.IGNORECASE )
+                        found = pattern.findall( paperitem[ "name" ] )
+                        if found:
+                            papers.append( paperitem )
+                    else:
+                        if "lang" not in settings.datafilter: 
+                            papers.append( paperitem )
+                except:
+                    if "lang" not in settings.datafilter:
+                        papers.append( paperitem )
+    
+    logging.debug( "papers in response:" )
+    for paper in papers:
+        logging.debug( paper )
+    
+    return Response( json.dumps( papers ), mimetype = "application/json; charset=utf-8" )
+# documentation_dv()
 
 # [eof]
