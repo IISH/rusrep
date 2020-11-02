@@ -1,12 +1,19 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-# VT-07-Jul-2016 Latest change by VT
-# FL-18-Apr-2018 handle None cursor
-# FL-24-Apr-2018 GridFS
-# FL-29-Jan-2019 aggregate_dataset: fields (old) & records (new) versions
-# FL-09-Apr-2019 adapt aggregate_dataset_records for changed data structure
-# FL-13-Jan-2020 
+"""
+VT-07-Jul-2016 Latest change by VT
+FL-18-Apr-2018 Handle None cursor
+FL-24-Apr-2018 GridFS
+FL-29-Jan-2019 aggregate_dataset: fields (old) & records (new) versions
+FL-09-Apr-2019 Adapt aggregate_dataset_records for changed data structure
+FL-02-Nov-2020 New copyright sheet tab (edit aggregate_dataset_fields and aggregate_dataset_records!)
+
+def preprocessor( use_gridfs, datafilter ):
+def aggregate_dataset_fields( key, download_dir, xlsx_name, params, topic_name, sheet_header, lex_lands, vocab_regs_terms ):
+def aggregate_dataset_records( key, download_dir, xlsx_name, params, topic_name, sheet_header, lex_lands, vocab_regs_terms ):
+def pandas_sort( xlsx_pathname_in, nlevels, params ):
+"""
 
 import gridfs
 import json
@@ -238,7 +245,7 @@ def preprocessor( use_gridfs, datafilter ):
     logging.debug( "preprocessor (%d) vocab_regs_terms: %s" % ( len( vocab_regs_terms ), str( vocab_regs_terms ) ) )
     
     return params, topic_name, sheet_header, lex_lands, vocab_regs_terms
-
+#preprocessor()
 
 
 def aggregate_dataset_fields( key, download_dir, xlsx_name, params, topic_name, sheet_header, lex_lands, vocab_regs_terms ):
@@ -743,19 +750,21 @@ def aggregate_dataset_fields( key, download_dir, xlsx_name, params, topic_name, 
     else:
         ws_cr = wb.create_sheet( "Copyrights", 5 )
     
+    copyright_sheet( ws_cr, language, topic_name, base_year )
+    
+    """
     column = 1
     cell = ws_cr.cell( row = 1, column = column )
     cell.value = "_"
     cell = ws_cr.cell( row = 2, column = column )
     cell.value = "Electronic Repository of Russian Historical Statistics / Электронный архив Российской исторической статистики"
     cell = ws_cr.cell( row = 3, column = column )
-    cell.value = "2014-%d" % date.today().year
+    cell.value = "2020"
     cell = ws_cr.cell( row = 4, column = column )
     cell.value = "_"
     
     if language == "en":
         cell = ws_cr.cell( row = 5, column = column )
-        #cell.alignment = Alignment( horizontal = "left" ) 
         cell.value = "Creative Commons License"
         cell = ws_cr.cell( row = 6, column = column )
         cell.value = "This work is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License."
@@ -764,9 +773,13 @@ def aggregate_dataset_fields( key, download_dir, xlsx_name, params, topic_name, 
         cell = ws_cr.cell( row = 8, column = column )
         cell.value = "_"
         cell = ws_cr.cell( row = 9, column = column )
-        cell.value = "By downloading and using data from the Electronic Repository of Russian Historical Statistics the user agrees to the terms of this license. Providing a correct reference to the resource is a formal requirement of the license: "
+        #cell.value = "By downloading and using data from the Electronic Repository of Russian Historical Statistics the user agrees to the terms of this license. Providing a correct reference to the resource is a formal requirement of the license: "
+        cell.value = "By downloading and using data from the Electronic Repository of Russian Historical Statistics the user agrees to the terms of this license. Providing a correct reference to the resource is a formal requirement of the license, in the following format (cf. documentation for version number and year): "
         cell = ws_cr.cell( row = 10, column = column )
-        cell.value = "Kessler, Gijs and Andrei Markevich (%d), Electronic Repository of Russian Historical Statistics, 18th - 21st centuries, http://ristat.org/" % date.today().year
+        #cell.value = "Kessler, Gijs and Andrei Markevich (%d), Electronic Repository of Russian Historical Statistics, 18th - 21st centuries, http://ristat.org/" % date.today().year
+        ### [Version number and year] [Datatype number and name] [benchmark-year].
+        cell.value = "Kessler, Gijs and Andrei Markevich, Electronic Repository of Russian Historical Statistics, 18th - 21st centuries, https://ristat.org/, %s %d, topic %s, benchmark-year %s." % ( "version ?", date.today().year, topic_name, base_year )
+        
     elif language == "ru":
         cell = ws_cr.cell( row = 5, column = column )
         cell.value = "Лицензия Creative Commons"
@@ -777,10 +790,14 @@ def aggregate_dataset_fields( key, download_dir, xlsx_name, params, topic_name, 
         cell = ws_cr.cell( row = 8, column = column )
         cell.value = "_"
         cell = ws_cr.cell( row = 9, column = column )
-        cell.value = "Скачивая и начиная использовать данные пользователь автоматически соглашается с этой лицензией. Наличие корректно оформленной ссылки является обязательным требованием лицензии:"
+        #cell.value = "Скачивая и начиная использовать данные пользователь автоматически соглашается с этой лицензией. Наличие корректно оформленной ссылки является обязательным требованием лицензии:"
+        cell.value = "Скачивая и начиная использовать данные пользователь автоматически соглашается с этой лицензией. Наличие корректно оформленной ссылки является обязательным требованием лицензии (для номера версии и год выпуска, см. документацию):"
         cell = ws_cr.cell( row = 10, column = column )
-        cell.value = "Кесслер Хайс и Маркевич Андрей (%d), Электронный архив Российской исторической статистики, XVIII – XXI вв., [Электронный ресурс] : [сайт]. — Режим доступа: http://ristat.org/" % date.today().year
-
+        #cell.value = "Кесслер Хайс и Маркевич Андрей (%d), Электронный архив Российской исторической статистики, XVIII – XXI вв., [Электронный ресурс] : [сайт]. — Режим доступа: http://ristat.org/" % date.today().year
+        ### [Номер версии и год выпуска]: [Номер и название темы] [Временной срез].
+        cell.value = "Кесслер Хайс и Маркевич Андрей, Электронный архив Российской исторической статистики, XVIII – XXI вв., [Электронный ресурс] : [сайт]. — Режим доступа: https://ristat.org/, %s %d, topic %s, benchmark-year %s." % ( "Номер ?", date.today().year, topic_name, base_year )
+    """
+    
     try:
         wb.save( xlsx_pathname )
         msg = None
@@ -801,7 +818,54 @@ def aggregate_dataset_fields( key, download_dir, xlsx_name, params, topic_name, 
     #pandas_sort( xlsx_pathname, nlevels, params )
     
     return xlsx_pathname, msg
+# aggregate_dataset_fields()
 
+
+def copyright_sheet( ws_cr, language, topic_name, base_year ):
+    column = 1
+    cell = ws_cr.cell( row = 1, column = column )
+    cell.value = "_"
+    cell = ws_cr.cell( row = 2, column = column )
+    cell.value = "Electronic Repository of Russian Historical Statistics / Электронный архив Российской исторической статистики"
+    cell = ws_cr.cell( row = 3, column = column )
+    cell.value = "2020"
+    cell = ws_cr.cell( row = 4, column = column )
+    cell.value = "_"
+    
+    if language == "en":
+        cell = ws_cr.cell( row = 5, column = column )
+        cell.value = "Creative Commons License"
+        cell = ws_cr.cell( row = 6, column = column )
+        cell.value = "This work is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License."
+        cell = ws_cr.cell( row = 7, column = column )
+        cell.value = "http://creativecommons.org/licenses/by-nc-sa/4.0/"
+        cell = ws_cr.cell( row = 8, column = column )
+        cell.value = "_"
+        cell = ws_cr.cell( row = 9, column = column )
+        #cell.value = "By downloading and using data from the Electronic Repository of Russian Historical Statistics the user agrees to the terms of this license. Providing a correct reference to the resource is a formal requirement of the license: "
+        cell.value = "By downloading and using data from the Electronic Repository of Russian Historical Statistics the user agrees to the terms of this license. Providing a correct reference to the resource is a formal requirement of the license, in the following format (cf. documentation for version number and year): "
+        cell = ws_cr.cell( row = 10, column = column )
+        #cell.value = "Kessler, Gijs and Andrei Markevich (%d), Electronic Repository of Russian Historical Statistics, 18th - 21st centuries, http://ristat.org/" % date.today().year
+        ### [Version number and year] [Datatype number and name] [benchmark-year].
+        cell.value = "Kessler, Gijs and Andrei Markevich, Electronic Repository of Russian Historical Statistics, 18th - 21st centuries, https://ristat.org/, %s %d, topic %s, benchmark-year %s." % ( "version ?", date.today().year, topic_name, base_year )
+        
+    elif language == "ru":
+        cell = ws_cr.cell( row = 5, column = column )
+        cell.value = "Лицензия Creative Commons"
+        cell = ws_cr.cell( row = 6, column = column )
+        cell.value = "Это произведение доступно по лицензии Creative Commons «Attribution-NonCommercial-ShareAlike» («Атрибуция — Некоммерческое использование — На тех же условиях») 4.0 Всемирная."
+        cell = ws_cr.cell( row = 7, column = column )
+        cell.value = "http://creativecommons.org/licenses/by-nc-sa/4.0/deed.ru"
+        cell = ws_cr.cell( row = 8, column = column )
+        cell.value = "_"
+        cell = ws_cr.cell( row = 9, column = column )
+        #cell.value = "Скачивая и начиная использовать данные пользователь автоматически соглашается с этой лицензией. Наличие корректно оформленной ссылки является обязательным требованием лицензии:"
+        cell.value = "Скачивая и начиная использовать данные пользователь автоматически соглашается с этой лицензией. Наличие корректно оформленной ссылки является обязательным требованием лицензии (для номера версии и год выпуска, см. документацию):"
+        cell = ws_cr.cell( row = 10, column = column )
+        #cell.value = "Кесслер Хайс и Маркевич Андрей (%d), Электронный архив Российской исторической статистики, XVIII – XXI вв., [Электронный ресурс] : [сайт]. — Режим доступа: http://ristat.org/" % date.today().year
+        ### [Номер версии и год выпуска]: [Номер и название темы] [Временной срез].
+        cell.value = "Кесслер Хайс и Маркевич Андрей, Электронный архив Российской исторической статистики, XVIII – XXI вв., [Электронный ресурс] : [сайт]. — Режим доступа: https://ristat.org/, %s %d, topic %s, benchmark-year %s." % ( "Номер ?", date.today().year, topic_name, base_year )
+# copyright_sheet()
 
 
 def aggregate_dataset_records( key, download_dir, xlsx_name, params, topic_name, sheet_header, lex_lands, vocab_regs_terms ):
@@ -1325,13 +1389,16 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, params, topic_name,
     else:
         ws_cr = wb.create_sheet( "Copyrights", 5 )
     
+    copyright_sheet( ws_cr, language, topic_name, base_year )
+    
+    """
     column = 1
     cell = ws_cr.cell( row = 1, column = column )
     cell.value = "_"
     cell = ws_cr.cell( row = 2, column = column )
     cell.value = "Electronic Repository of Russian Historical Statistics / Электронный архив Российской исторической статистики"
     cell = ws_cr.cell( row = 3, column = column )
-    cell.value = "2014-%d" % date.today().year
+    cell.value = "2020"
     cell = ws_cr.cell( row = 4, column = column )
     cell.value = "_"
     
@@ -1346,9 +1413,13 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, params, topic_name,
         cell = ws_cr.cell( row = 8, column = column )
         cell.value = "_"
         cell = ws_cr.cell( row = 9, column = column )
-        cell.value = "By downloading and using data from the Electronic Repository of Russian Historical Statistics the user agrees to the terms of this license. Providing a correct reference to the resource is a formal requirement of the license: "
+        #cell.value = "By downloading and using data from the Electronic Repository of Russian Historical Statistics the user agrees to the terms of this license. Providing a correct reference to the resource is a formal requirement of the license: "
+        cell.value = "By downloading and using data from the Electronic Repository of Russian Historical Statistics the user agrees to the terms of this license. Providing a correct reference to the resource is a formal requirement of the license, in the following format (cf. documentation for version number and year): "
         cell = ws_cr.cell( row = 10, column = column )
-        cell.value = "Kessler, Gijs and Andrei Markevich (%d), Electronic Repository of Russian Historical Statistics, 18th - 21st centuries, http://ristat.org/" % date.today().year
+        #cell.value = "Kessler, Gijs and Andrei Markevich (%d), Electronic Repository of Russian Historical Statistics, 18th - 21st centuries, http://ristat.org/" % date.today().year
+        ### [Version number and year] [Datatype number and name] [benchmark-year].
+        cell.value = "Kessler, Gijs and Andrei Markevich, Electronic Repository of Russian Historical Statistics, 18th - 21st centuries, https://ristat.org/, %s %d, topic %s, benchmark-year %s." % ( "version ?", date.today().year, topic_name, base_year )
+        
     elif language == "ru":
         cell = ws_cr.cell( row = 5, column = column )
         cell.value = "Лицензия Creative Commons"
@@ -1359,10 +1430,14 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, params, topic_name,
         cell = ws_cr.cell( row = 8, column = column )
         cell.value = "_"
         cell = ws_cr.cell( row = 9, column = column )
-        cell.value = "Скачивая и начиная использовать данные пользователь автоматически соглашается с этой лицензией. Наличие корректно оформленной ссылки является обязательным требованием лицензии:"
+        #cell.value = "Скачивая и начиная использовать данные пользователь автоматически соглашается с этой лицензией. Наличие корректно оформленной ссылки является обязательным требованием лицензии:"
+        cell.value = "Скачивая и начиная использовать данные пользователь автоматически соглашается с этой лицензией. Наличие корректно оформленной ссылки является обязательным требованием лицензии (для номера версии и год выпуска, см. документацию):"
         cell = ws_cr.cell( row = 10, column = column )
-        cell.value = "Кесслер Хайс и Маркевич Андрей (%d), Электронный архив Российской исторической статистики, XVIII – XXI вв., [Электронный ресурс] : [сайт]. — Режим доступа: http://ristat.org/" % date.today().year
-
+        #cell.value = "Кесслер Хайс и Маркевич Андрей (%d), Электронный архив Российской исторической статистики, XVIII – XXI вв., [Электронный ресурс] : [сайт]. — Режим доступа: http://ristat.org/" % date.today().year
+        ### [Номер версии и год выпуска]: [Номер и название темы] [Временной срез].
+        cell.value = "Кесслер Хайс и Маркевич Андрей, Электронный архив Российской исторической статистики, XVIII – XXI вв., [Электронный ресурс] : [сайт]. — Режим доступа: https://ristat.org/, %s %d, topic %s, benchmark-year %s." % ( "Номер ?", date.today().year, topic_name, base_year )
+    """
+    
     try:
         wb.save( xlsx_pathname )
         msg = None
@@ -1383,7 +1458,7 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, params, topic_name,
     #pandas_sort( xlsx_pathname, nlevels, params )
     
     return xlsx_pathname, msg
-
+#aggregate_dataset_records()
 
 
 def pandas_sort( xlsx_pathname_in, nlevels, params ):
@@ -1491,5 +1566,6 @@ def pandas_sort( xlsx_pathname_in, nlevels, params ):
             df.to_excel( writer, sheet_name = sheet_name, index = False )
         
     writer.save()
+#pandas_sort()
 
 # [eof]
