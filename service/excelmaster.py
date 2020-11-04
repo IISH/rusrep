@@ -7,12 +7,12 @@ FL-18-Apr-2018 Handle None cursor
 FL-24-Apr-2018 GridFS
 FL-29-Jan-2019 aggregate_dataset: fields (old) & records (new) versions
 FL-09-Apr-2019 Adapt aggregate_dataset_records for changed data structure
-FL-03-Nov-2020 New copyright sheet tab
+FL-04-Nov-2020 New copyright sheet tab
 
 def preprocessor( use_gridfs, datafilter ):
 def aggregate_dataset_fields( key, download_dir, xlsx_name, params, topic_name, sheet_header, lex_lands, vocab_regs_terms ):
 def aggregate_dataset_records( key, download_dir, xlsx_name, params, topic_name, sheet_header, lex_lands, vocab_regs_terms ):
-def pandas_sort( xlsx_pathname_in, nlevels, params ):
+#def pandas_sort( xlsx_pathname_in, nlevels, params ):
 """
 
 import gridfs
@@ -339,8 +339,11 @@ def aggregate_dataset_fields( key, download_dir, xlsx_name, params, topic_name, 
     if hist_mod == 'h':
         nsheets = 1
         base_years = [ base_year ]
+        title_str  = "Dataset"
+        if lang == "ru":
+            title_str = unicode( "Данные" )
         ws_0 = wb.get_active_sheet()
-        ws_0.title = "Dataset"
+        ws_0.title = title_str
 
     elif hist_mod == 'm':
         nsheets = 5
@@ -745,10 +748,14 @@ def aggregate_dataset_fields( key, download_dir, xlsx_name, params, topic_name, 
     language = comps2[ 0 ]
     logging.debug( "language: %s" % language )
     
+    copyright_str = "Copyright"
+    if language == "ru":
+        copyright_str = unicode( "Лицензия" )
+    
     if hist_mod == 'h':
-        ws_cr = wb.create_sheet( "Copyrights", 1 )
+        ws_cr = wb.create_sheet( copyright_str, 1 )
     else:
-        ws_cr = wb.create_sheet( "Copyrights", 5 )
+        ws_cr = wb.create_sheet( copyright_str, 5 )
     
     copyright_sheet( ws_cr, language, topic_name, base_year )
     
@@ -769,7 +776,7 @@ def aggregate_dataset_fields( key, download_dir, xlsx_name, params, topic_name, 
         "base_year"  : base_year
     }
     
-    #pandas_sort( xlsx_pathname, nlevels, params )
+    pandas_sort( xlsx_pathname, nlevels, params )
     """
     
     return xlsx_pathname, msg
@@ -914,8 +921,11 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, params, topic_name,
     if hist_mod == 'h':
         nsheets = 1
         base_years = [ base_year ]
+        title_str  = "Dataset"
+        if lang == "ru":
+            title_str = unicode( "Данные" )
         ws_0 = wb.get_active_sheet()
-        ws_0.title = "Dataset"
+        ws_0.title = title_str
 
     elif hist_mod == 'm':
         nsheets = 5
@@ -1337,10 +1347,14 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, params, topic_name,
     language = comps2[ 0 ]
     logging.debug( "language: %s" % language )
     
+    copyright_str = "Copyright"
+    if language == "ru":
+        copyright_str = unicode( "Лицензия" )
+    
     if hist_mod == 'h':
-        ws_cr = wb.create_sheet( "Copyrights", 1 )
+        ws_cr = wb.create_sheet( copyright_str, 1 )
     else:
-        ws_cr = wb.create_sheet( "Copyrights", 5 )
+        ws_cr = wb.create_sheet( copyright_str, 5 )
     
     copyright_sheet( ws_cr, language, topic_name, base_year )
     
@@ -1368,6 +1382,7 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, params, topic_name,
 #aggregate_dataset_records()
 
 
+"""
 def pandas_sort( xlsx_pathname_in, nlevels, params ):
     logging.info( "pandas_sort()" )
     
@@ -1401,7 +1416,7 @@ def pandas_sort( xlsx_pathname_in, nlevels, params ):
         logging.info( "sheet: %s" % sheet_name )
         
         # index = False: no row numbers in output (but they did show the sorting effect)
-        if sheet_name == "Copyrights":
+        if sheet_name == "Copyright":
             nskiprows = 0
             df = EF.parse( sheet_name )
             df.to_excel( writer, sheet_name = sheet_name, index = False )
@@ -1474,5 +1489,6 @@ def pandas_sort( xlsx_pathname_in, nlevels, params ):
         
     writer.save()
 #pandas_sort()
+"""
 
 # [eof]
