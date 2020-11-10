@@ -7,7 +7,7 @@ FL-18-Apr-2018 Handle None cursor
 FL-24-Apr-2018 GridFS
 FL-29-Jan-2019 aggregate_dataset: fields (old) & records (new) versions
 FL-09-Apr-2019 Adapt aggregate_dataset_records for changed data structure
-FL-04-Nov-2020 New copyright sheet tab
+FL-10-Nov-2020 New copyright sheet tab
 
 def preprocessor( use_gridfs, datafilter ):
 def aggregate_dataset_fields( key, download_dir, xlsx_name, params, topic_name, sheet_header, lex_lands, vocab_regs_terms ):
@@ -37,6 +37,9 @@ from sys import exc_info
 
 def preprocessor( use_gridfs, datafilter ):
     logging.info( "preprocessor() datafilter: %s" % datafilter )
+    
+    # datafilter is a dictionary with a single key: 'key',
+    # its value is used to retrieve the cached data.
     
     lex_lands        = {}
     vocab_regs_terms = {}           # regions and terms
@@ -237,7 +240,7 @@ def preprocessor( use_gridfs, datafilter ):
     
     logging.debug( "preprocessor (%d) dataset: %s"          % ( len( dataset ),          str( dataset ) ) )
     logging.debug( "preprocessor (%d) ter_codes: %s"        % ( len( ter_codes ),        str( ter_codes ) ) )
-
+    
     logging.debug( "preprocessor (%d) params: %s"           % ( len( params ),           str( params ) ) )
     logging.debug( "preprocessor (%d) topic_name: %s"       % ( len( topic_name ),       str( topic_name ) ) )
     logging.debug( "preprocessor (%d) sheet_header: %s"     % ( len( sheet_header ),     str( sheet_header ) ) )
@@ -362,10 +365,6 @@ def aggregate_dataset_fields( key, download_dir, xlsx_name, params, topic_name, 
             logging.debug( "region: %s" % str( region ) )
             ter_code_list.append( region[ "ID" ] )
     
-    # initialise base_year counts
-    byear_counts = { "1795" : 0, "1858" : 0, "1897" : 0, "1959" : 0, "2002" : 0 }
-    
-    #skip_list = [ "count" ]
     skip_list = []
     
     # loop over the data sheets, and select the correct year data
@@ -593,14 +592,10 @@ def aggregate_dataset_fields( key, download_dir, xlsx_name, params, topic_name, 
                 base_year_chain = '0'
             
             if int( base_year ) != int( base_year_chain ):
-                logging.warn( "base_year %s not equal to base_year_chain %s" % ( base_year, base_year_chain ) )
-                #byear_counts[ str( base_year ) ] = 1 + byear_counts[ str( base_year ) ]
+                # For each of the 5 sheet tabs, we loop over all record chains
+                # TODO split the record chains per base_year, for more efficiency
+                logging.debug( "skipping base_year_chain %s that belongs to different sheet tab" % base_year_chain )
                 continue
-            #else:
-            #    byear_counts[ str( base_year ) ] = 1 + byear_counts[ str( base_year ) ]
-            
-            #ter_data = lex_lands[ itemchain ]
-            #lex_key = json.dumps( chain )       # this way the keys were made in preprocessor()
             
             # lex_key as stringyfied ordered dict
             keys = sorted( chain.iterkeys() )                    # sorted keys
@@ -711,8 +706,6 @@ def aggregate_dataset_fields( key, download_dir, xlsx_name, params, topic_name, 
                 ndatarows += 1
                 
         nrecords.append( ndatarows )   # number of data records for current sheet
-    
-    logging.debug( "byear_counts: %s" % str( byear_counts ) )
     
     #logging.debug( "# of lines in sheet_header: %d" % len( sheet_header ) )
     if hist_mod == 'h':
@@ -944,10 +937,6 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, params, topic_name,
             logging.debug( "region: %s" % str( region ) )
             ter_code_list.append( region[ "ID" ] )
     
-    # initialise base_year counts
-    byear_counts = { "1795" : 0, "1858" : 0, "1897" : 0, "1959" : 0, "2002" : 0 }
-    
-    #skip_list = [ "count" ]
     skip_list = []
     
     # loop over the data sheets, and select the correct year data
@@ -1051,6 +1040,7 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, params, topic_name,
         #max_columns = 2 + len( header_chain )       # +2: for unit + count columns
         add_counts = True      # ToDo
         
+        logging.info( "# of items in lex_lands_list: %d" % len( lex_lands_list ) )
         logging.debug( "# of names in header_chain: %d" % len( header_chain ) )
         logging.debug( "header names in chain: %s" % str( header_chain ) )
         logging.debug( "# of names in class_chain: %d" % len( class_chain ) )
@@ -1073,7 +1063,6 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, params, topic_name,
         classes.sort()
         logging.debug( "class names in list: %s" % str( classes ) )
         
-        logging.debug( "# of items in lex_lands_list: %d" % len( lex_lands_list ) )
         try:
             # *classes: unpack classes list as individual variables, to be used as sort keys
             lex_lands_sorted = sorted( lex_lands_list, key = itemgetter( *classes ) )
@@ -1082,12 +1071,13 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, params, topic_name,
             logging.error( "%s" % exc_value )
             lex_lands_sorted = []
         
-        ndatarows = 0
+        ndatarows  = 0
         nitemchain = 0
+        
         for l, chain in enumerate( lex_lands_sorted ):
             #logging.debug( "itemchain %d: %s, %s" % ( nitemchain, itemchain, type( itemchain ) ) )
             nitemchain += 1
-            logging.debug( "%d: chain: %s" %  ( l, str( chain ) ) )
+            logging.debug( "record chain %d-of-%d: %s" %  ( l+1, len( lex_lands_list ), str( chain ) ) )
             
             column = 1
             # sheet_header
@@ -1187,15 +1177,14 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, params, topic_name,
             logging.debug( "base_year: %s" % base_year )
             
             # hack
-            if base_year_chain is None:
+            if base_year_chain is None or base_year_chain == '0':
                 base_year_chain = base_year
             
             if int( base_year ) != int( base_year_chain ):
-                logging.warn( "base_year %s not equal to base_year_chain %s" % ( base_year, base_year_chain ) )
-                #byear_counts[ str( base_year ) ] = 1 + byear_counts[ str( base_year ) ]
+                # For each of the 5 sheet tabs, we loop over all record chains
+                # TODO split the record chains per base_year, for more efficiency
+                logging.debug( "skipping base_year_chain %s that belongs to different sheet tab" % base_year_chain )
                 continue
-            #else:
-            #    byear_counts[ str( base_year ) ] = 1 + byear_counts[ str( base_year ) ]
 
             # FL-08-Apr-2019 fill first 2 columns for non-redundant data records
             name = "base_year"
@@ -1307,11 +1296,10 @@ def aggregate_dataset_records( key, download_dir, xlsx_name, params, topic_name,
             row += 1
             if row > legend_offset:
                 ndatarows += 1
-                
+        
         nrecords.append( ndatarows )   # number of data records for current sheet
     
-    logging.debug( "byear_counts: %s" % str( byear_counts ) )
-    
+    logging.debug( "SHEET HEADER" )
     #logging.debug( "# of lines in sheet_header: %d" % len( sheet_header ) )
     if hist_mod == 'h':
         for l, line in enumerate( sheet_header ):
