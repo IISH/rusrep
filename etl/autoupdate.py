@@ -42,6 +42,7 @@ FL-03-Mar-2020 Use (also) yaml config
 FL-25-Jun-2020 yaml config ordering changed (db's at the end)
 FL-01-Sep-2020 download urls from proxy and/or root
 FL-27-Oct-2020 Dataverse retrieve: skip dv_format for non-tabular data
+FL-17-Nov-2020 Copyright tab added to filecatalog files
 
 TODO
 - Use pyDataverse from PyPI
@@ -119,9 +120,9 @@ from shutil import copy2
 from sys import exc_info
 from time import ctime, mktime, time
 
-sys.path.insert( 0, os.path.abspath( os.path.join(os.path.dirname( "__file__" ), './' ) ) )
-sys.path.insert( 0, os.path.abspath( os.path.join(os.path.dirname( "__file__" ), '../' ) ) )
-sys.path.insert( 0, os.path.abspath( os.path.join(os.path.dirname( "__file__" ), '../service' ) ) )
+sys.path.insert( 0, os.path.abspath( os.path.join( os.path.dirname( "__file__" ), './' ) ) )
+sys.path.insert( 0, os.path.abspath( os.path.join( os.path.dirname( "__file__" ), '../' ) ) )
+sys.path.insert( 0, os.path.abspath( os.path.join( os.path.dirname( "__file__" ), '../service' ) ) )
 #print( sys.path )
 #print( "pwd:", os.getcwd() )
 
@@ -2609,7 +2610,6 @@ def compile_filecatalogue( config_parser, language, excel_package, pd_engine ):
         dir_list.sort()
         for csv_filename in dir_list:
             # convert csv -> xlsx and save
-            
             if excel_package == "pandas":
                 csv2xlsx_pandas( language, vocab_units, csv_dir, csv_filename, xlsx_dir, pd_engine )
             elif excel_package == "tablib":
@@ -2877,19 +2877,43 @@ def csv2xlsx_tablib( language, vocab_units, csv_dir, csv_filename, xlsx_dir ):
     delimiter = '|'
     newline   = '\n'        # not a parameter of data.load()
     
+    title_str  = "Dataset"
+    copyright_str = "Copyright"
+    copyright_filename = "Copyright_%s.xlsx" % "en"
+    
+    if language == "ru":
+        title_str = unicode( "Данные" )
+        copyright_str = unicode( "Лицензия" )
+        copyright_filename = "Copyright_%s.xlsx" % "ru"
+    
+    copyright_dir = os.path.abspath( os.path.dirname( "__file__"  ) )
+    copyright_pathname = os.path.join( copyright_dir, copyright_filename )
+    
     with io.open( xlsx_pathname, "wb" ) as xlsx_file:
         with io.open( csv_pathname, "r" ) as csv_file:
-            data = tablib.Dataset()
-            try:
-                data.load( csv_file.read(), format = "csv", delimiter = delimiter )
-                xlsx_file.write( data.export( "xlsx" ) )
-            except:
-                logging.error( "csv2xlsx_tablib() load failed: %s" % csv_filename )
-                type_, value, tb = sys.exc_info()
-                msg = "%s: %s %s" % ( type_, xlsx_filename, value )
-                logging.error( msg )
-                logging.warn( csv_file.readline() )
-                sys.exit( 1 )
+            with io.open( copyright_pathname, "rb" ) as copyright_file:
+                dataset1 = tablib.Dataset( title = title_str )
+                dataset2 = tablib.Dataset( title = copyright_str )
+                # The copyright_str is overwritten by the xlsx read() below. 
+                # To prevent that, convert the xlsx to csv for reading. 
+                # We here assume that the xlsx has the correct copyright_str. 
+                
+                try:
+                    dataset1.load( csv_file.read(), format = "csv", delimiter = delimiter )
+                    dataset2.load( copyright_file.read(), format = "xlsx" )
+                    
+                    databook = tablib.Databook()
+                    databook.add_sheet( dataset1 )
+                    databook.add_sheet( dataset2 )
+                    
+                    xlsx_file.write( databook.export( "xlsx" ) )
+                except:
+                    logging.error( "csv2xlsx_tablib() load failed: %s" % csv_filename )
+                    type_, value, tb = sys.exc_info()
+                    msg = "%s: %s %s" % ( type_, xlsx_filename, value )
+                    logging.error( msg )
+                    logging.warn( csv_file.readline() )
+                    sys.exit( 1 )
 
 
 
@@ -3122,7 +3146,6 @@ if __name__ == "__main__":
         #for language in [ "ru" ]:  # test
         #for language in [ "en" ]:  # test
         for language in [ "ru", "en" ]:
-
             compile_filecatalogue( config_parser, language, excel_package, pd_engine )  # create filecatalogue xlsx files
     
         str_elapsed = format_secs( time() - time0_ )
