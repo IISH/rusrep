@@ -38,6 +38,7 @@ FL-28-Jun-2020 use backend proxy name if present, else backend root name
 FL-11-Aug-2020 filecatalogget: check zip filename; prevent hacking
 FL-03-Sep-2020 switch between local and proxy return URLs
 FL-30-Sep-2020 No default base_year in /classes!
+FL-05-Feb-2021 download() mimetype in response from dataverse request header
 
 def loadjson( json_dataurl ):                                   # called by documentation()
 def topic_counts( language, datatype ):                         # called by topics()
@@ -1541,6 +1542,7 @@ def get_download_root( headers ):
 
 # ==============================================================================
 app = Flask( __name__ )
+
 #app.config[ "DEBUG" ] = True
 #app.config[ "PROPAGATE_EXCEPTIONS" ] = True
 #app.debug = True
@@ -2106,18 +2108,28 @@ def download():
     if id_:
         logging.debug( "id_: %s" % id_ )
         url = "https://%s/api/access/datafile/%s?key=%s&show_entity_ids=true&q=authorName:*" % ( dv_host, id_, ristat_key )
-        
         logging.debug( "url: %s" % url )
         
         f = urllib2.urlopen( url )
         data = f.read()
-        filetype = "application/pdf"
         
-        if request.args.get( "filetype" ) == "excel":
-            filetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        info = f.info()
+        filetype = info.get( "Content-Type" )
+        filename = info.get( "name" )
         
         logging.debug( "filetype: %s" % filetype )
+        logging.debug( "filename: %s" % filename )
+        
+        
         return Response( data, mimetype = filetype )
+        
+        #resp = Response( data, mimetype = filetype )
+        #resp.headers[ "Content-Disposition" ] = "attachment; filename=%s" % filename
+        #resp.headers[ "x-suggested-filename" ] = filename
+        #return resp
+        
+        #return send_file( data, as_attachment = True, mimetype = filetype, attachment_filename = filename )
+    
     
     key = request.args.get( "key" )
     if not key:
