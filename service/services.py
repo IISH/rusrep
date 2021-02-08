@@ -1510,6 +1510,7 @@ def locate_doc( id_ ):
     logging.debug( "locate_doc() id = %s" % id_ )
     
     filename = ""
+    filedir  = ""
     filepath = ""
     filetype = ""
     
@@ -1548,9 +1549,9 @@ def locate_doc( id_ ):
                 logging.debug( filepath )
                 logging.debug( filetype )
                 
-                return filename, filepath, filetype
+                return filename, filedir, filepath, filetype
     
-    return filename, filepath, filetype
+    return filename, filedir, filepath, filetype
 # locate_doc()
 
 
@@ -2160,10 +2161,13 @@ def download():
     id_ = request.args.get( "id" )
     if id_:
         # document request, find he file locally
-        filename, filepath, filetype = locate_doc( id_ )
+        filename, filedir, filepath, filetype = locate_doc( id_ )
         if filename:    # 1st return location
-            return send_file( filepath, as_attachment = True, mimetype = filetype, attachment_filename = filename )
-        
+            as_attach = False
+            if filename.endswith( ".xlsx" ):
+                as_attach = True
+            
+            return send_from_directory( filedir, filename, mimetype = filetype, as_attachment = as_attach, add_etags = True ) 
         
         # doc not found locally, get directly from dataverse
         logging.debug( "id_: %s" % id_ )
