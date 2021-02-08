@@ -38,7 +38,7 @@ FL-28-Jun-2020 use backend proxy name if present, else backend root name
 FL-11-Aug-2020 filecatalogget: check zip filename; prevent hacking
 FL-03-Sep-2020 switch between local and proxy return URLs
 FL-30-Sep-2020 No default base_year in /classes!
-FL-05-Feb-2021 download() mimetype in response from dataverse request header
+FL-08-Feb-2021 download() doc requests from local copy
 
 def loadjson( json_dataurl ):                                   # called by documentation()
 def topic_counts( language, datatype ):                         # called by topics()
@@ -60,6 +60,7 @@ def add_missing_valstr( record_dict_total, params ):            # called by aggr
 def sort_records( record_dict_total, base_year = None ):        # called by aggregate_*_items()
 def process_csv( csv_dir, csv_filename, download_dir, language, to_xlsx ):  # called by filecatalogdata()
 def cleanup_downloads( download_dir, time_limit ):              # called by download()
+def locate_doc( id_ ):                                          # called by download()
 def get_api_root():
 def get_download_root( headers ):
 
@@ -1504,6 +1505,55 @@ def cleanup_downloads( download_dir, time_limit ):
 # cleanup_downloads()
 
 
+def locate_doc( id_ ):
+    # find doc file on disk by id in "en" & "ru" doclist
+    logging.debug( "locate_doc() id = %s" % id_ )
+    
+    filename = ""
+    filepath = ""
+    filetype = ""
+    
+    config_parser = get_configparser()
+    dv_dir = config_parser.get( "config", "dv_dir" )
+    
+    server = "local"        # local/proxy distinction irrelevant here (do not return an url)
+    
+    for language in [ "en", "ru" ]:
+        download_dir = os.path.join( dv_dir, "dataverse_dst/doc" )
+        download_fname = "doclist-%s-%s.json" % ( language, server )
+        download_path = os.path.join( download_dir, download_fname )
+        
+        logging.debug( "download_dir: %s" % download_dir )
+        logging.debug( "download_fname: %s" % download_fname )
+        logging.debug( "download_path: %s" % download_path )
+        
+        file_json = codecs.open( download_path, 'r', "utf-8" )
+        docs_json = file_json.read()
+        file_json.close()
+        
+        docs_list = json.loads( docs_json )
+        #logging.debug( docs_list )
+        for doc_dict in docs_list:
+            if id_ == doc_dict.get( "id" ):     # found what we want
+                filename = doc_dict.get( "name" )
+                filedir  = os.path.join( dv_dir, "dataverse_dst/doc/hdl_documentation" )
+                filepath = os.path.join( filedir, filename )
+                
+                if filename.endswith( ".pdf" ):
+                    filetype = "application/pdf"
+                elif filename.endswith( ".xlsx" ):
+                    filetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                
+                logging.debug( filename )
+                logging.debug( filepath )
+                logging.debug( filetype )
+                
+                return filename, filepath, filetype
+    
+    return filename, filepath, filetype
+# locate_doc()
+
+
 def get_api_root():
     # default local host, but proxy if present
     scheme = "http"
@@ -2091,9 +2141,12 @@ def filecatalogget():
 # /filecatalogget filecatalogget()
 
 
+
 @app.route( "/download" )
 def download():
+    # this function has 6 return options
     logging.info( "/download %s" % request.args )
+    
     time0 = time()      # seconds since the epoch
     logging.debug( "download start: %s" % datetime.now() )
     
@@ -2106,34 +2159,35 @@ def download():
     
     id_ = request.args.get( "id" )
     if id_:
+        # document request, find he file locally
+        filename, filepath, filetype = locate_doc( id_ )
+        if filename:    # 1st return location
+            return send_file( filepath, as_attachment = True, mimetype = filetype, attachment_filename = filename )
+        
+        
+        # doc not found locally, get directly from dataverse
         logging.debug( "id_: %s" % id_ )
         url = "https://%s/api/access/datafile/%s?key=%s&show_entity_ids=true&q=authorName:*" % ( dv_host, id_, ristat_key )
         logging.debug( "url: %s" % url )
         
         f = urllib2.urlopen( url )
+        info = f.info()
+        #logging.debug( info )
+        
         data = f.read()
         
-        info = f.info()
         filetype = info.get( "Content-Type" )
         filename = info.get( "name" )
+        #logging.debug( "filetype: %s" % filetype )
+        #logging.debug( "filename: %s" % filename )
         
-        logging.debug( "filetype: %s" % filetype )
-        logging.debug( "filename: %s" % filename )
-        
-        
-        return Response( data, mimetype = filetype )
-        
-        #resp = Response( data, mimetype = filetype )
-        #resp.headers[ "Content-Disposition" ] = "attachment; filename=%s" % filename
-        #resp.headers[ "x-suggested-filename" ] = filename
-        #return resp
-        
-        #return send_file( data, as_attachment = True, mimetype = filetype, attachment_filename = filename )
+        return Response( data, mimetype = filetype )    # 2nd return location
     
     
     key = request.args.get( "key" )
     if not key:
-        return str( { "msg" : "Argument 'key' not found" } )
+        return str( { "msg" : "Argument 'key' not found" } )    # 3rd return location
+    
     
     logging.info( "download() key: %s" % key )
     zipping = True
@@ -2162,14 +2216,14 @@ def download():
     if os.path.isfile( pathname ):
         logging.debug( "pathname: %s" % pathname )
     else:
-        return str( { "msg": "%s" % msg } )
+        return str( { "msg": "%s" % msg } )     # 4th return location
     
     with open( pathname, "rb" ) as f:
         datacontents = f.read()
     
     if not zipping:
         filetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        return Response( datacontents, mimetype = filetype )
+        return Response( datacontents, mimetype = filetype )    # 5th return location
     
     else:
         """
@@ -2246,6 +2300,7 @@ def download():
         str_elapsed = format_secs( time() - time0 )
         logging.info( "creating download took %s" % str_elapsed )
         
+        # 6th return location
         return send_file( memory_file, attachment_filename = zip_filename, as_attachment = True )
 # /download_dir download()
 
