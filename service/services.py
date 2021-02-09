@@ -38,7 +38,7 @@ FL-28-Jun-2020 use backend proxy name if present, else backend root name
 FL-11-Aug-2020 filecatalogget: check zip filename; prevent hacking
 FL-03-Sep-2020 switch between local and proxy return URLs
 FL-30-Sep-2020 No default base_year in /classes!
-FL-08-Feb-2021 download() doc requests from local copy
+FL-09-Feb-2021 download() doc requests from local copy
 
 def loadjson( json_dataurl ):                                   # called by documentation()
 def topic_counts( language, datatype ):                         # called by topics()
@@ -2163,11 +2163,8 @@ def download():
         # document request, find he file locally
         filename, filedir, filepath, filetype = locate_doc( id_ )
         if filename:    # 1st return location
-            as_attach = False
-            if filename.endswith( ".xlsx" ):
-                as_attach = True
-            
-            return send_from_directory( filedir, filename, mimetype = filetype, as_attachment = as_attach, add_etags = True ) 
+            as_attach = True
+            return send_from_directory( filedir, filename, mimetype = filetype, as_attachment = as_attach ) 
         
         # doc not found locally, get directly from dataverse
         logging.debug( "id_: %s" % id_ )
